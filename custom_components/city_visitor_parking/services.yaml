@@ -1,0 +1,179 @@
+start_reservation:
+  name: Start reservation
+  description: Start a visitor parking reservation for a permit.
+  fields:
+    device_id:
+      name: Device
+      description: The visitor parking device to target.
+      required: true
+      selector:
+        device:
+          integration: city_visitor_parking
+    start_time:
+      name: Start time
+      description: The UTC start time for the reservation.
+      required: true
+      selector:
+        datetime: {}
+    end_time:
+      name: End time
+      description: The UTC end time for the reservation.
+      required: true
+      selector:
+        datetime: {}
+    license_plate:
+      name: License plate
+      description: The vehicle license plate.
+      required: true
+      selector:
+        text: {}
+
+update_reservation:
+  name: Update reservation
+  description: Update reservation details for a permit.
+  fields:
+    device_id:
+      name: Device
+      description: The visitor parking device to target.
+      required: true
+      selector:
+        device:
+          integration: city_visitor_parking
+    reservation_id:
+      name: Reservation ID
+      description: The reservation identifier to update.
+      required: true
+      selector:
+        text: {}
+    start_time:
+      name: Start time
+      description: New UTC start time for the reservation.
+      required: false
+      selector:
+        datetime: {}
+    end_time:
+      name: End time
+      description: New UTC end time for the reservation.
+      required: false
+      selector:
+        datetime: {}
+    license_plate:
+      name: License plate
+      description: New license plate for the reservation.
+      required: false
+      selector:
+        text: {}
+
+end_reservation:
+  name: End reservation
+  description: End an active reservation.
+  fields:
+    device_id:
+      name: Device
+      description: The visitor parking device to target.
+      required: true
+      selector:
+        device:
+          integration: city_visitor_parking
+    reservation_id:
+      name: Reservation ID
+      description: The reservation identifier to end.
+      required: true
+      selector:
+        text: {}
+
+add_favorite:
+  name: Add favorite
+  description: Add a favorite license plate.
+  fields:
+    device_id:
+      name: Device
+      description: The visitor parking device to target.
+      required: true
+      selector:
+        device:
+          integration: city_visitor_parking
+    license_plate:
+      name: License plate
+      description: The license plate to add as a favorite.
+      required: true
+      selector:
+        text: {}
+    name:
+      name: Name
+      description: Optional name for the favorite.
+      required: false
+      selector:
+        text: {}
+
+update_favorite:
+  name: Update favorite
+  description: Update a favorite license plate.
+  fields:
+    device_id:
+      name: Device
+      description: The visitor parking device to target.
+      required: true
+      selector:
+        device:
+          integration: city_visitor_parking
+    favorite_id:
+      name: Favorite ID
+      description: The favorite identifier to update.
+      required: true
+      selector:
+        text: {}
+    license_plate:
+      name: License plate
+      description: The new license plate for the favorite.
+      required: false
+      selector:
+        text: {}
+    name:
+      name: Name
+      description: The new name for the favorite.
+      required: false
+      selector:
+        text: {}
+
+remove_favorite:
+  name: Remove favorite
+  description: Remove a favorite license plate.
+  fields:
+    device_id:
+      name: Device
+      description: The visitor parking device to target.
+      required: true
+      selector:
+        device:
+          integration: city_visitor_parking
+    favorite_id:
+      name: Favorite ID
+      description: The favorite identifier to remove.
+      required: true
+      selector:
+        text: {}
+
+list_active_reservations:
+  name: List active reservations
+  description: Return active reservations for a permit, including license plate and favorite info when available.
+  fields:
+    device_id:
+      name: Device
+      description: The visitor parking device to target.
+      required: true
+      selector:
+        device:
+          integration: city_visitor_parking
+
+list_favorites:
+  name: List favorites
+  description: Return favorites for a permit (returns raw license plates).
+  fields:
+    device_id:
+      name: Device
+      description: The visitor parking device to target.
+      required: true
+      selector:
+        device:
+          integration: city_visitor_parking

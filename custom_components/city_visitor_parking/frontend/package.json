@@ -1,0 +1,11 @@
+{
+  "name": "city-visitor-parking-frontend",
+  "private": true,
+  "scripts": {
+    "build": "esbuild src/city-visitor-parking-card.ts src/city-visitor-parking-card-editor.ts src/city-visitor-parking-active-card.ts src/city-visitor-parking-active-card-editor.ts --bundle --format=esm --target=es2020 --outdir=dist",
+    "watch": "npm run build -- --watch"
+  },
+  "devDependencies": {
+    "esbuild": "^0.27.2"
+  }
+}

@@ -1,0 +1,209 @@
+apeldoorn:
+  municipality_name: Apeldoorn
+  provider_id: dvsportal
+  base_url: "https://parkeren.apeldoorn.nl"
+  api_url: "/DVSWebAPI/api"
+
+bloemendaal:
+  municipality_name: Bloemendaal
+  provider_id: dvsportal
+  base_url: "https://parkeren.bloemendaal.nl"
+  api_url: "/DVSWebAPI/api"
+
+delft:
+  municipality_name: Delft
+  provider_id: dvsportal
+  base_url: "https://vergunningen.parkerendelft.com"
+  api_url: "/DVSWebAPI/api"
+
+den_haag:
+  municipality_name: Den Haag
+  provider_id: the_hague
+  base_url: "https://parkerendenhaag.denhaag.nl"
+  api_url: "api"
+
+s_hertogenbosch:
+  municipality_name: "'s-Hertogenbosch"
+  provider_id: dvsportal
+  base_url: "https://parkeren.s-hertogenbosch.nl"
+  api_url: "/DVSWebAPI/api"
+
+doetinchem_buha:
+  municipality_name: "Doetinchem (via Buha)"
+  provider_id: dvsportal
+  base_url: "https://parkeren.buha.nl"
+  api_url: "/DVSWebAPI/api"
+
+groningen:
+  municipality_name: Groningen
+  provider_id: dvsportal
+  base_url: "https://aanvraagparkeren.groningen.nl"
+  api_url: "/DVSWebAPI/api"
+
+haarlem:
+  municipality_name: Haarlem
+  provider_id: dvsportal
+  base_url: "https://parkeren.haarlem.nl"
+  api_url: "/DVSWebAPI/api"
+
+harlingen:
+  municipality_name: Harlingen
+  provider_id: dvsportal
+  base_url: "https://parkeervergunningen.harlingen.nl"
+  api_url: "/DVSWebAPI/api"
+
+heemstede:
+  municipality_name: Heemstede
+  provider_id: dvsportal
+  base_url: "https://parkeren.heemstede.nl"
+  api_url: "/DVSWebAPI/api"
+
+heerenveen:
+  municipality_name: Heerenveen
+  provider_id: dvsportal
+  base_url: "https://parkeren.heerenveen.nl"
+  api_url: "/DVSWebAPI/api"
+
+heerlen:
+  municipality_name: Heerlen
+  provider_id: dvsportal
+  base_url: "https://parkeren.heerlen.nl"
+  api_url: "/DVSWebAPI/api"
+
+hengelo:
+  municipality_name: Hengelo
+  provider_id: dvsportal
+  base_url: "https://parkeren.hengelo.nl"
+  api_url: "/DVSWebAPI/api"
+
+katwijk:
+  municipality_name: Katwijk
+  provider_id: dvsportal
+  base_url: "https://parkeren.katwijk.nl"
+  api_url: "/DVSWebAPI/api"
+
+leiden:
+  municipality_name: Leiden
+  provider_id: dvsportal
+  base_url: "https://parkeren.leiden.nl"
+  api_url: "/DVSWebAPI/api"
+
+leidschendam_voorburg:
+  municipality_name: Leidschendam-Voorburg
+  provider_id: dvsportal
+  base_url: "https://parkeren.lv.nl"
+  api_url: "/DVSWebAPI/api"
+
+middelburg:
+  municipality_name: Middelburg
+  provider_id: dvsportal
+  base_url: "https://parkeren.middelburg.nl"
+  api_url: "/DVSWebAPI/api"
+
+nissewaard:
+  municipality_name: Nissewaard
+  provider_id: dvsportal
+  base_url: "https://parkeren.nissewaard.nl"
+  api_url: "/DVSWebAPI/api"
+
+oldenzaal:
+  municipality_name: Oldenzaal
+  provider_id: dvsportal
+  base_url: "https://parkeren.oldenzaal.nl"
+  api_url: "/DVSWebAPI/api"
+
+rijswijk:
+  municipality_name: Rijswijk
+  provider_id: dvsportal
+  base_url: "https://parkeren.rijswijk.nl"
+  api_url: "/DVSWebAPI/api"
+
+roermond:
+  municipality_name: Roermond
+  provider_id: dvsportal
+  base_url: "https://parkeren.roermond.nl"
+  api_url: "/DVSWebAPI/api"
+
+schouwen_duiveland:
+  municipality_name: Schouwen-Duiveland
+  provider_id: dvsportal
+  base_url: "https://parkeren.schouwen-duiveland.nl"
+  api_url: "/DVSWebAPI/api"
+
+sittard_geleen:
+  municipality_name: Sittard-Geleen
+  provider_id: dvsportal
+  base_url: "https://parkeren.sittard-geleen.nl"
+  api_url: "/DVSWebAPI/api"
+
+smallingerland:
+  municipality_name: Smallingerland
+  provider_id: dvsportal
+  base_url: "https://parkeren.smallingerland.nl"
+  api_url: "/DVSWebAPI/api"
+
+sudwest_fryslan:
+  municipality_name: Súdwest-Fryslân
+  provider_id: dvsportal
+  base_url: "https://parkeren.sudwestfryslan.nl"
+  api_url: "/DVSWebAPI/api"
+
+veere:
+  municipality_name: Veere
+  provider_id: dvsportal
+  base_url: "https://parkeren.veere.nl"
+  api_url: "/DVSWebAPI/api"
+
+venlo:
+  municipality_name: Venlo
+  provider_id: dvsportal
+  base_url: "https://parkeren.venlo.nl"
+  api_url: "/DVSWebAPI/api"
+
+vlissingen:
+  municipality_name: Vlissingen
+  provider_id: dvsportal
+  base_url: "https://parkeren.vlissingen.nl"
+  api_url: "/DVSWebAPI/api"
+
+waadhoeke:
+  municipality_name: Waadhoeke
+  provider_id: dvsportal
+  base_url: "https://parkeren.waadhoeke.nl"
+  api_url: "/DVSWebAPI/api"
+
+waalwijk:
+  municipality_name: Waalwijk
+  provider_id: dvsportal
+  base_url: "https://parkeren.waalwijk.nl"
+  api_url: "/DVSWebAPI/api"
+
+weert:
+  municipality_name: Weert
+  provider_id: dvsportal
+  base_url: "https://parkeerloket.weert.nl"
+  api_url: "/DVSWebAPI/api"
+
+zaanstad:
+  municipality_name: Zaanstad
+  provider_id: dvsportal
+  base_url: "https://parkeren.zaanstad.nl"
+  api_url: "/DVSWebAPI/api"
+
+zevenaar:
+  municipality_name: Zevenaar
+  provider_id: dvsportal
+  base_url: "https://parkeren.zevenaar.nl"
+  api_url: "/DVSWebAPI/api"
+
+zutphen:
+  municipality_name: Zutphen
+  provider_id: dvsportal
+  base_url: "https://parkeren.zutphen.nl"
+  api_url: "/DVSWebAPI/api"
+
+zwolle:
+  municipality_name: Zwolle
+  provider_id: dvsportal
+  base_url: "https://parkeerloket.zwolle.nl"
+  api_url: "/DVSWebAPI/api"

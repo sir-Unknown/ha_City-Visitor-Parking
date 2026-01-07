@@ -1,0 +1,14 @@
+{
+  "domain": "city_visitor_parking",
+  "name": "City Visitor Parking",
+  "codeowners": ["@ysir-Unknown"],
+  "config_flow": true,
+  "documentation": "https://github.com/sir-Unknown/ha_City-Visitor-Parking",
+  "dependencies": ["frontend"],
+  "integration_type": "service",
+  "iot_class": "cloud_polling",
+  "issue_tracker": "https://github.com/sir-Unknown/ha_City-Visitor-Parking/issues",
+  "quality_scale": "silver",
+  "requirements": ["pycityvisitorparking==0.5.6"],
+  "version": "1.0.0"
+}

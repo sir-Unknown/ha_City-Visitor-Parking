@@ -1,0 +1,332 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Bezoekersparkeren instellen",
+        "description": "Kies je gemeente.",
+        "data": {
+          "municipality_name": "Gemeente"
+        }
+      },
+      "other": {
+        "title": "Andere gemeente",
+        "description": "Voer de providergegevens van je gemeente in.",
+        "data": {
+          "provider_id": "Provider-ID",
+          "municipality_name": "Gemeentenaam",
+          "base_url": "Basis-URL",
+          "api_url": "API-URL"
+        }
+      },
+      "auth": {
+        "title": "Koppel je account",
+        "description": "Meld je aan bij je bezoekersparkeren-account.",
+        "data": {
+          "username": "Gebruikersnaam",
+          "password": "Wachtwoord"
+        }
+      },
+      "permit": {
+        "title": "Kies vergunning",
+        "description": "Selecteer de vergunning die je in Home Assistant wilt beheren.",
+        "data": {
+          "permit_id": "Vergunning",
+          "description": "Beschrijving"
+        }
+      },
+      "reauth_confirm": {
+        "title": "Opnieuw verifiëren",
+        "description": "Werk je gegevens bij voor {name}.",
+        "data": {
+          "username": "Gebruikersnaam",
+          "password": "Wachtwoord"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Kan geen verbinding maken. Controleer je netwerk en probeer het opnieuw.",
+      "invalid_auth": "Ongeldige inloggegevens.",
+      "no_permits": "Geen vergunningen gevonden voor dit account.",
+      "unknown": "Onverwachte fout. Probeer het later opnieuw."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Opties",
+        "description": "Pas betaalvensters en automatisch beëindigen aan. Voer tijden in zoals 09:00-13:00, 14:00-17:30.",
+        "data": {
+          "auto_end_reservation_when_free": "Reservaties automatisch beëindigen wanneer parkeren gratis is",
+          "description": "Beschrijving"
+        },
+        "sections": {
+          "operating_times": {
+            "name": "Betaalvensters",
+            "description": "Voer per dag de betaalvensters in. Gebruik 24-uurs tijd en scheid meerdere vensters met komma's.",
+            "data": {
+              "monday_chargeable_windows": "Maandag",
+              "tuesday_chargeable_windows": "Dinsdag",
+              "wednesday_chargeable_windows": "Woensdag",
+              "thursday_chargeable_windows": "Donderdag",
+              "friday_chargeable_windows": "Vrijdag",
+              "saturday_chargeable_windows": "Zaterdag",
+              "sunday_chargeable_windows": "Zondag"
+            },
+            "data_description": {
+              "monday_chargeable_windows": "Voer betaalvensters in, bijvoorbeeld 09:00-13:00, 14:00-17:30.",
+              "tuesday_chargeable_windows": "Voer betaalvensters in, bijvoorbeeld 09:00-13:00, 14:00-17:30.",
+              "wednesday_chargeable_windows": "Voer betaalvensters in, bijvoorbeeld 09:00-13:00, 14:00-17:30.",
+              "thursday_chargeable_windows": "Voer betaalvensters in, bijvoorbeeld 09:00-13:00, 14:00-17:30.",
+              "friday_chargeable_windows": "Voer betaalvensters in, bijvoorbeeld 09:00-13:00, 14:00-17:30.",
+              "saturday_chargeable_windows": "Voer betaalvensters in, bijvoorbeeld 09:00-13:00, 14:00-17:30.",
+              "sunday_chargeable_windows": "Voer betaalvensters in, bijvoorbeeld 09:00-13:00, 14:00-17:30."
+            }
+          }
+        }
+      }
+    },
+    "error": {
+      "invalid_time_range": "De eindtijd moet na de starttijd liggen.",
+      "invalid_override_format": "Voer tijdvakken in als HH:MM-HH:MM, gescheiden door komma's."
+    }
+  },
+  "services": {
+    "start_reservation": {
+      "name": "Reservering starten",
+      "description": "Start een bezoekersparkeerreservering.",
+      "fields": {
+        "device_id": {
+          "name": "Apparaat",
+          "description": "Het bezoekersparkeerapparaat om te gebruiken."
+        },
+        "start_time": {
+          "name": "Starttijd",
+          "description": "De UTC-starttijd van de reservering."
+        },
+        "end_time": {
+          "name": "Eindtijd",
+          "description": "De UTC-eindtijd van de reservering."
+        },
+        "license_plate": {
+          "name": "Kenteken",
+          "description": "Het kenteken van het voertuig."
+        }
+      }
+    },
+    "update_reservation": {
+      "name": "Reservering bijwerken",
+      "description": "Werk een reservering bij.",
+      "fields": {
+        "device_id": {
+          "name": "Apparaat",
+          "description": "Het bezoekersparkeerapparaat om te gebruiken."
+        },
+        "reservation_id": {
+          "name": "Reservering-ID",
+          "description": "De reservering-ID die je wilt bijwerken."
+        },
+        "start_time": {
+          "name": "Starttijd",
+          "description": "Nieuwe UTC-starttijd van de reservering."
+        },
+        "end_time": {
+          "name": "Eindtijd",
+          "description": "Nieuwe UTC-eindtijd van de reservering."
+        },
+        "license_plate": {
+          "name": "Kenteken",
+          "description": "Nieuw kenteken voor de reservering."
+        }
+      }
+    },
+    "end_reservation": {
+      "name": "Reservering beëindigen",
+      "description": "Beëindig een actieve reservering.",
+      "fields": {
+        "device_id": {
+          "name": "Apparaat",
+          "description": "Het bezoekersparkeerapparaat om te gebruiken."
+        },
+        "reservation_id": {
+          "name": "Reservering-ID",
+          "description": "De reservering-ID die je wilt beëindigen."
+        }
+      }
+    },
+    "add_favorite": {
+      "name": "Favoriet toevoegen",
+      "description": "Voeg een favoriet kenteken toe.",
+      "fields": {
+        "device_id": {
+          "name": "Apparaat",
+          "description": "Het bezoekersparkeerapparaat om te gebruiken."
+        },
+        "license_plate": {
+          "name": "Kenteken",
+          "description": "Het kenteken dat je wilt toevoegen."
+        },
+        "name": {
+          "name": "Naam",
+          "description": "Optionele naam voor de favoriet."
+        }
+      }
+    },
+    "update_favorite": {
+      "name": "Favoriet bijwerken",
+      "description": "Werk een favoriet kenteken bij.",
+      "fields": {
+        "device_id": {
+          "name": "Apparaat",
+          "description": "Het bezoekersparkeerapparaat om te gebruiken."
+        },
+        "favorite_id": {
+          "name": "Favoriet-ID",
+          "description": "De favoriet-ID die je wilt bijwerken."
+        },
+        "license_plate": {
+          "name": "Kenteken",
+          "description": "Het nieuwe kenteken voor de favoriet."
+        },
+        "name": {
+          "name": "Naam",
+          "description": "De nieuwe naam voor de favoriet."
+        }
+      }
+    },
+    "remove_favorite": {
+      "name": "Favoriet verwijderen",
+      "description": "Verwijder een favoriet kenteken.",
+      "fields": {
+        "device_id": {
+          "name": "Apparaat",
+          "description": "Het bezoekersparkeerapparaat om te gebruiken."
+        },
+        "favorite_id": {
+          "name": "Favoriet-ID",
+          "description": "De favoriet-ID die je wilt verwijderen."
+        }
+      }
+    },
+    "list_active_reservations": {
+      "name": "Actieve reserveringen tonen",
+      "description": "Geeft actieve reserveringen voor een vergunning terug, inclusief kenteken en favorietgegevens indien beschikbaar.",
+      "fields": {
+        "device_id": {
+          "name": "Apparaat",
+          "description": "Het bezoekersparkeerapparaat om te gebruiken."
+        }
+      }
+    },
+    "list_favorites": {
+      "name": "Favorieten tonen",
+      "description": "Geeft favorieten voor een vergunning terug (geeft ruwe kentekens terug).",
+      "fields": {
+        "device_id": {
+          "name": "Apparaat",
+          "description": "Het bezoekersparkeerapparaat om te gebruiken."
+        }
+      }
+    }
+  },
+  "exceptions": {
+    "end_before_start": {
+      "message": "De eindtijd moet na de starttijd liggen."
+    },
+    "update_requires_changes": {
+      "message": "Geef minstens één veld op om bij te werken."
+    },
+    "update_requires_full_details": {
+      "message": "De fallback-bijwerking vereist starttijd, eindtijd en kenteken."
+    },
+    "update_requires_license_plate": {
+      "message": "Bijwerken zonder kenteken wordt niet ondersteund."
+    },
+    "reservation_operation_failed": {
+      "message": "De reservering-aanvraag is mislukt. Probeer het later opnieuw."
+    },
+    "favorite_operation_failed": {
+      "message": "De favoriet-aanvraag is mislukt. Probeer het later opnieuw."
+    },
+    "invalid_target": {
+      "message": "Het gekozen apparaat is niet beschikbaar."
+    }
+  },
+  "card": {
+    "field": {
+      "permit": "Vergunning",
+      "favorite": "Favoriet",
+      "name": "Naam",
+      "license_plate": "Kenteken",
+      "start_date": "Startdatum",
+      "start_time": "Starttijd",
+      "end_date": "Einddatum",
+      "end_time": "Eindtijd"
+    },
+    "action": {
+      "add_favorite": "Favoriet toevoegen",
+      "remove_favorite": "Favoriet verwijderen",
+      "start_reservation": "Reservering starten"
+    },
+    "button": {
+      "update_reservation": "Reservering bijwerken",
+      "end_reservation": "Reservering beëindigen"
+    },
+    "section": {
+      "active_reservations": "Actieve reserveringen"
+    },
+    "message": {
+      "select_favorite": "Selecteer een favoriet",
+      "loading_favorites": "Favorieten laden",
+      "loading_active_reservations": "Actieve reserveringen laden",
+      "no_active_reservations": "Geen actieve reserveringen",
+      "active_reservations_failed": "Kan actieve reserveringen niet laden",
+      "no_device_for_permit": "Geen apparaat gevonden voor de gekozen vergunning.",
+      "load_favorites_failed": "Kan favorieten niet laden.",
+      "removing_favorite": "Favoriet verwijderen...",
+      "favorite_removed": "Favoriet verwijderd.",
+      "favorite_remove_failed": "Kan favoriet niet verwijderen.",
+      "select_permit_before_start": "Selecteer een vergunning voordat je een reservering start.",
+      "license_plate_required": "Kenteken is verplicht.",
+      "start_end_required": "Start- en eindtijd zijn verplicht.",
+      "end_before_start": "De eindtijd moet na de starttijd liggen.",
+      "reservation_requested": "Reservering aangevraagd.",
+      "reservation_start_failed": "Reservering starten mislukt.",
+      "reservation_updated": "Reservering bijgewerkt.",
+      "reservation_update_failed": "Kan reservering niet bijwerken.",
+      "reservation_ended": "Reservering beëindigd.",
+      "reservation_end_failed": "Kan reservering niet beëindigen."
+    },
+    "placeholder": {
+      "license_plate": "AA-123-B"
+    }
+  },
+  "entity": {
+    "sensor": {
+      "active_reservations": {
+        "name": "Actieve reserveringen"
+      },
+      "future_reservations": {
+        "name": "Toekomstige reserveringen"
+      },
+      "remaining_time": {
+        "name": "Resterend saldo"
+      },
+      "permit_zone_availability": {
+        "name": "Beschikbaarheid parkeerzone",
+        "state": {
+          "chargeable": "Betaald",
+          "free": "Gratis"
+        }
+      },
+      "next_chargeable_start": {
+        "name": "Start betaalvenster"
+      },
+      "next_chargeable_end": {
+        "name": "Einde betaalvenster"
+      },
+      "favorites": {
+        "name": "Favorieten"
+      }
+    }
+  }
+}

@@ -1,0 +1,332 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Set up visitor parking",
+        "description": "Choose your municipality.",
+        "data": {
+          "municipality_name": "Municipality"
+        }
+      },
+      "other": {
+        "title": "Other municipality",
+        "description": "Enter the provider details for your municipality.",
+        "data": {
+          "provider_id": "Provider ID",
+          "municipality_name": "Municipality name",
+          "base_url": "Base URL",
+          "api_url": "API URL"
+        }
+      },
+      "auth": {
+        "title": "Connect your account",
+        "description": "Sign in to your visitor parking account.",
+        "data": {
+          "username": "Username",
+          "password": "Password"
+        }
+      },
+      "permit": {
+        "title": "Select permit",
+        "description": "Choose the permit to manage in Home Assistant.",
+        "data": {
+          "permit_id": "Permit",
+          "description": "Description"
+        }
+      },
+      "reauth_confirm": {
+        "title": "Reauthenticate",
+        "description": "Update your credentials for {name}.",
+        "data": {
+          "username": "Username",
+          "password": "Password"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Unable to connect. Check your network connection and try again.",
+      "invalid_auth": "Invalid credentials.",
+      "no_permits": "No permits were found for this account.",
+      "unknown": "Unexpected error. Try again later."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Options",
+        "description": "Adjust chargeable windows and auto-end behavior. Enter times like 09:00-13:00, 14:00-17:30.",
+        "data": {
+          "auto_end_reservation_when_free": "Automatically end reservations when parking is free",
+          "description": "Description"
+        },
+        "sections": {
+          "operating_times": {
+            "name": "Chargeable windows",
+            "description": "Enter the chargeable windows for each day. Use 24-hour time and separate multiple windows with commas.",
+            "data": {
+              "monday_chargeable_windows": "Monday",
+              "tuesday_chargeable_windows": "Tuesday",
+              "wednesday_chargeable_windows": "Wednesday",
+              "thursday_chargeable_windows": "Thursday",
+              "friday_chargeable_windows": "Friday",
+              "saturday_chargeable_windows": "Saturday",
+              "sunday_chargeable_windows": "Sunday"
+            },
+            "data_description": {
+              "monday_chargeable_windows": "Enter chargeable windows, for example 09:00-13:00, 14:00-17:30.",
+              "tuesday_chargeable_windows": "Enter chargeable windows, for example 09:00-13:00, 14:00-17:30.",
+              "wednesday_chargeable_windows": "Enter chargeable windows, for example 09:00-13:00, 14:00-17:30.",
+              "thursday_chargeable_windows": "Enter chargeable windows, for example 09:00-13:00, 14:00-17:30.",
+              "friday_chargeable_windows": "Enter chargeable windows, for example 09:00-13:00, 14:00-17:30.",
+              "saturday_chargeable_windows": "Enter chargeable windows, for example 09:00-13:00, 14:00-17:30.",
+              "sunday_chargeable_windows": "Enter chargeable windows, for example 09:00-13:00, 14:00-17:30."
+            }
+          }
+        }
+      }
+    },
+    "error": {
+      "invalid_time_range": "End time must be after start time.",
+      "invalid_override_format": "Enter time windows in the format HH:MM-HH:MM, separated by commas."
+    }
+  },
+  "services": {
+    "start_reservation": {
+      "name": "Start reservation",
+      "description": "Start a visitor parking reservation.",
+      "fields": {
+        "device_id": {
+          "name": "Device",
+          "description": "The visitor parking device to target."
+        },
+        "start_time": {
+          "name": "Start time",
+          "description": "The UTC start time for the reservation."
+        },
+        "end_time": {
+          "name": "End time",
+          "description": "The UTC end time for the reservation."
+        },
+        "license_plate": {
+          "name": "License plate",
+          "description": "The vehicle license plate."
+        }
+      }
+    },
+    "update_reservation": {
+      "name": "Update reservation",
+      "description": "Update reservation details.",
+      "fields": {
+        "device_id": {
+          "name": "Device",
+          "description": "The visitor parking device to target."
+        },
+        "reservation_id": {
+          "name": "Reservation ID",
+          "description": "The reservation identifier to update."
+        },
+        "start_time": {
+          "name": "Start time",
+          "description": "New UTC start time for the reservation."
+        },
+        "end_time": {
+          "name": "End time",
+          "description": "New UTC end time for the reservation."
+        },
+        "license_plate": {
+          "name": "License plate",
+          "description": "New license plate for the reservation."
+        }
+      }
+    },
+    "end_reservation": {
+      "name": "End reservation",
+      "description": "End an active reservation.",
+      "fields": {
+        "device_id": {
+          "name": "Device",
+          "description": "The visitor parking device to target."
+        },
+        "reservation_id": {
+          "name": "Reservation ID",
+          "description": "The reservation identifier to end."
+        }
+      }
+    },
+    "add_favorite": {
+      "name": "Add favorite",
+      "description": "Add a favorite license plate.",
+      "fields": {
+        "device_id": {
+          "name": "Device",
+          "description": "The visitor parking device to target."
+        },
+        "license_plate": {
+          "name": "License plate",
+          "description": "The license plate to add."
+        },
+        "name": {
+          "name": "Name",
+          "description": "Optional name for the favorite."
+        }
+      }
+    },
+    "update_favorite": {
+      "name": "Update favorite",
+      "description": "Update a favorite license plate.",
+      "fields": {
+        "device_id": {
+          "name": "Device",
+          "description": "The visitor parking device to target."
+        },
+        "favorite_id": {
+          "name": "Favorite ID",
+          "description": "The favorite identifier to update."
+        },
+        "license_plate": {
+          "name": "License plate",
+          "description": "The new license plate for the favorite."
+        },
+        "name": {
+          "name": "Name",
+          "description": "The new name for the favorite."
+        }
+      }
+    },
+    "remove_favorite": {
+      "name": "Remove favorite",
+      "description": "Remove a favorite license plate.",
+      "fields": {
+        "device_id": {
+          "name": "Device",
+          "description": "The visitor parking device to target."
+        },
+        "favorite_id": {
+          "name": "Favorite ID",
+          "description": "The favorite identifier to remove."
+        }
+      }
+    },
+    "list_active_reservations": {
+      "name": "List active reservations",
+      "description": "Return active reservations for a permit, including license plate and favorite info when available.",
+      "fields": {
+        "device_id": {
+          "name": "Device",
+          "description": "The visitor parking device to target."
+        }
+      }
+    },
+    "list_favorites": {
+      "name": "List favorites",
+      "description": "Return favorites for a permit (returns raw license plates).",
+      "fields": {
+        "device_id": {
+          "name": "Device",
+          "description": "The visitor parking device to target."
+        }
+      }
+    }
+  },
+  "exceptions": {
+    "end_before_start": {
+      "message": "The end time must be after the start time."
+    },
+    "update_requires_changes": {
+      "message": "Provide at least one field to update."
+    },
+    "update_requires_full_details": {
+      "message": "The fallback update requires start time, end time, and license plate."
+    },
+    "update_requires_license_plate": {
+      "message": "Updating a favorite without a license plate is not supported."
+    },
+    "reservation_operation_failed": {
+      "message": "The reservation request failed. Try again later."
+    },
+    "favorite_operation_failed": {
+      "message": "The favorite request failed. Try again later."
+    },
+    "invalid_target": {
+      "message": "The selected device is not available."
+    }
+  },
+  "card": {
+    "field": {
+      "permit": "Permit",
+      "favorite": "Favorite",
+      "name": "Name",
+      "license_plate": "License plate",
+      "start_date": "Start date",
+      "start_time": "Start time",
+      "end_date": "End date",
+      "end_time": "End time"
+    },
+    "action": {
+      "add_favorite": "Add favorite",
+      "remove_favorite": "Remove favorite",
+      "start_reservation": "Start reservation"
+    },
+    "button": {
+      "update_reservation": "Update reservation",
+      "end_reservation": "End reservation"
+    },
+    "section": {
+      "active_reservations": "Active reservations"
+    },
+    "message": {
+      "select_favorite": "Select a favorite",
+      "loading_favorites": "Loading favorites",
+      "loading_active_reservations": "Loading active reservations",
+      "no_active_reservations": "No active reservations",
+      "active_reservations_failed": "Could not load active reservations",
+      "no_device_for_permit": "No device found for the selected permit.",
+      "load_favorites_failed": "Could not load favorites",
+      "removing_favorite": "Removing favorite...",
+      "favorite_removed": "Favorite removed.",
+      "favorite_remove_failed": "Could not remove favorite.",
+      "select_permit_before_start": "Select a permit before starting a reservation.",
+      "license_plate_required": "License plate is required.",
+      "start_end_required": "Start and end time are required.",
+      "end_before_start": "End time must be after start time.",
+      "reservation_requested": "Reservation requested.",
+      "reservation_start_failed": "Could not start reservation.",
+      "reservation_updated": "Reservation updated.",
+      "reservation_update_failed": "Could not update reservation.",
+      "reservation_ended": "Reservation ended.",
+      "reservation_end_failed": "Could not end reservation."
+    },
+    "placeholder": {
+      "license_plate": "AA-123-B"
+    }
+  },
+  "entity": {
+    "sensor": {
+      "active_reservations": {
+        "name": "Active reservations"
+      },
+      "future_reservations": {
+        "name": "Future reservations"
+      },
+      "remaining_time": {
+        "name": "Remaining balance"
+      },
+      "permit_zone_availability": {
+        "name": "Permit zone availability",
+        "state": {
+          "chargeable": "Chargeable",
+          "free": "Free"
+        }
+      },
+      "next_chargeable_start": {
+        "name": "Chargeable window start"
+      },
+      "next_chargeable_end": {
+        "name": "Chargeable window end"
+      },
+      "favorites": {
+        "name": "Favorites"
+      }
+    }
+  }
+}
