@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from typing import Any
-
 from homeassistant.components.diagnostics import async_redact_data
 from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
 from homeassistant.core import HomeAssistant
@@ -16,11 +14,15 @@ TO_REDACT = [CONF_PASSWORD, CONF_USERNAME]
 
 async def async_get_config_entry_diagnostics(
     hass: HomeAssistant, entry: CityVisitorParkingConfigEntry
-) -> dict[str, Any]:
+) -> dict[str, object]:
     """Return diagnostics for a config entry."""
 
     coordinator = entry.runtime_data.coordinator
     data = coordinator.data
+
+    last_update_success_time = getattr(
+        coordinator, "last_update_success_time", None
+    )
 
     return {
         "entry_data": async_redact_data(dict(entry.data), TO_REDACT),
@@ -31,8 +33,8 @@ async def async_get_config_entry_diagnostics(
             if coordinator.update_interval
             else None,
             "last_update_success": coordinator.last_update_success,
-            "last_update_success_time": coordinator.last_update_success_time.isoformat()
-            if coordinator.last_update_success_time
+            "last_update_success_time": last_update_success_time.isoformat()
+            if last_update_success_time
             else None,
             "active_reservations": len(data.active_reservations),
             "favorites": len(data.favorites),

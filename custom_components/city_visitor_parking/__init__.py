@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import inspect
 import time
+from collections.abc import Callable
 from pathlib import Path
+from typing import Protocol, cast
 
 from homeassistant.components.frontend import add_extra_js_url
 from homeassistant.components.http import StaticPathConfig
@@ -125,6 +127,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     return True
 
 
+class _ZoneValidityMapper(Protocol):
+    """Protocol for providers exposing zone validity mapping."""
+
+    provider_id: str
+    _map_zone_validity: Callable[..., object]
+
+
 def _install_zone_validity_logging(provider: object) -> None:
     """Add extra debug logging when zone validity falls back to the zone block."""
 
@@ -169,7 +178,7 @@ def _install_zone_validity_logging(provider: object) -> None:
             return map_zone_validity(raw, fallback_zone=fallback_zone)
         return map_zone_validity(raw)
 
-    provider._map_zone_validity = _wrap
+    cast(_ZoneValidityMapper, provider)._map_zone_validity = _wrap
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:

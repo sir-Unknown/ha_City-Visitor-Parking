@@ -6,14 +6,14 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import time
 from importlib import resources
-from typing import Any
+from typing import cast
 
 import voluptuous as vol
 import yaml
 from homeassistant import config_entries
 from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
 from homeassistant.core import HomeAssistant, callback
-from homeassistant.data_entry_flow import FlowResult, section
+from homeassistant.data_entry_flow import section
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers import selector
 from homeassistant.util import dt as dt_util
@@ -75,8 +75,8 @@ class CityVisitorParkingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self._reauth_entry: config_entries.ConfigEntry | None = None
 
     async def async_step_user(
-        self, user_input: dict[str, Any] | None = None
-    ) -> FlowResult:
+        self, user_input: dict[str, object] | None = None
+    ) -> config_entries.ConfigFlowResult:
         """Handle the initial step."""
 
         self._providers = await _async_load_providers(self.hass)
@@ -99,7 +99,7 @@ class CityVisitorParkingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             )
             return self.async_show_form(step_id="user", data_schema=schema)
 
-        selected = user_input[CONF_MUNICIPALITY]
+        selected = cast(str, user_input[CONF_MUNICIPALITY])
         if selected == OTHER_OPTION:
             return await self.async_step_other()
 
@@ -107,8 +107,8 @@ class CityVisitorParkingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         return await self.async_step_auth()
 
     async def async_step_other(
-        self, user_input: dict[str, Any] | None = None
-    ) -> FlowResult:
+        self, user_input: dict[str, object] | None = None
+    ) -> config_entries.ConfigFlowResult:
         """Handle manual provider configuration."""
 
         errors: dict[str, str] = {}
@@ -147,23 +147,23 @@ class CityVisitorParkingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             )
 
         self._provider_config = ProviderConfig(
-            provider_id=user_input[CONF_PROVIDER_ID],
-            municipality_name=user_input[CONF_MUNICIPALITY],
-            base_url=user_input.get(CONF_BASE_URL),
-            api_url=user_input.get(CONF_API_URL),
+            provider_id=cast(str, user_input[CONF_PROVIDER_ID]),
+            municipality_name=cast(str, user_input[CONF_MUNICIPALITY]),
+            base_url=cast(str | None, user_input.get(CONF_BASE_URL)),
+            api_url=cast(str | None, user_input.get(CONF_API_URL)),
         )
         return await self.async_step_auth()
 
     async def async_step_auth(
-        self, user_input: dict[str, Any] | None = None
-    ) -> FlowResult:
+        self, user_input: dict[str, object] | None = None
+    ) -> config_entries.ConfigFlowResult:
         """Handle the authentication step."""
 
         return await self._async_handle_auth(user_input, step_id="auth")
 
     async def async_step_permit(
-        self, user_input: dict[str, Any] | None = None
-    ) -> FlowResult:
+        self, user_input: dict[str, object] | None = None
+    ) -> config_entries.ConfigFlowResult:
         """Handle permit selection."""
 
         if user_input is None:
@@ -181,8 +181,8 @@ class CityVisitorParkingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             )
             return self.async_show_form(step_id="permit", data_schema=schema)
 
-        permit_id = user_input[CONF_PERMIT_ID]
-        description = user_input.get(CONF_DESCRIPTION)
+        permit_id = cast(str, user_input[CONF_PERMIT_ID])
+        description = cast(str | None, user_input.get(CONF_DESCRIPTION))
 
         if self._provider_config is None:
             return self.async_abort(reason="unknown")
@@ -211,8 +211,8 @@ class CityVisitorParkingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         return self.async_create_entry(title=title, data=data)
 
     async def async_step_reauth(
-        self, user_input: dict[str, Any] | None = None
-    ) -> FlowResult:
+        self, user_input: dict[str, object] | None = None
+    ) -> config_entries.ConfigFlowResult:
         """Handle reauthentication."""
 
         entry = self.hass.config_entries.async_get_entry(self.context["entry_id"])
@@ -230,15 +230,15 @@ class CityVisitorParkingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         return await self.async_step_reauth_confirm()
 
     async def async_step_reauth_confirm(
-        self, user_input: dict[str, Any] | None = None
-    ) -> FlowResult:
+        self, user_input: dict[str, object] | None = None
+    ) -> config_entries.ConfigFlowResult:
         """Confirm reauthentication."""
 
         return await self._async_handle_auth(user_input, step_id="reauth_confirm")
 
     async def _async_handle_auth(
-        self, user_input: dict[str, Any] | None, *, step_id: str
-    ) -> FlowResult:
+        self, user_input: dict[str, object] | None, *, step_id: str
+    ) -> config_entries.ConfigFlowResult:
         """Validate credentials and move to the next step."""
 
         errors: dict[str, str] = {}
@@ -253,14 +253,13 @@ class CityVisitorParkingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 ),
             )
 
-        self._credentials = {
-            CONF_USERNAME: user_input[CONF_USERNAME],
-            CONF_PASSWORD: user_input[CONF_PASSWORD],
-        }
+        username = cast(str, user_input[CONF_USERNAME])
+        password = cast(str, user_input[CONF_PASSWORD])
+        self._credentials = {CONF_USERNAME: username, CONF_PASSWORD: password}
 
         permits = await self._async_validate_credentials(
-            user_input[CONF_USERNAME],
-            user_input[CONF_PASSWORD],
+            username,
+            password,
             errors,
         )
         if errors:
@@ -365,15 +364,16 @@ class CityVisitorParkingOptionsFlow(config_entries.OptionsFlow):
         self._config_entry = config_entry
 
     async def async_step_init(
-        self, user_input: dict[str, Any] | None = None
-    ) -> FlowResult:
+        self, user_input: dict[str, object] | None = None
+    ) -> config_entries.ConfigFlowResult:
         """Manage the options flow."""
 
         errors: dict[str, str] = {}
         if user_input is not None:
-            overrides = _build_overrides(
-                user_input.get(SECTION_OPERATING_TIMES, {}), errors
-            )
+            section_input = user_input.get(SECTION_OPERATING_TIMES, {})
+            if not isinstance(section_input, Mapping):
+                section_input = {}
+            overrides = _build_overrides(section_input, errors)
             if errors:
                 return self._show_form(user_input, errors)
 
@@ -381,7 +381,7 @@ class CityVisitorParkingOptionsFlow(config_entries.OptionsFlow):
             return self.async_create_entry(
                 title="",
                 data={
-                    CONF_AUTO_END: user_input[CONF_AUTO_END],
+                    CONF_AUTO_END: cast(bool, user_input[CONF_AUTO_END]),
                     CONF_OPERATING_TIME_OVERRIDES: overrides,
                 },
             )
@@ -389,25 +389,27 @@ class CityVisitorParkingOptionsFlow(config_entries.OptionsFlow):
         return self._show_form(user_input, errors)
 
     def _show_form(
-        self, user_input: dict[str, Any] | None, errors: dict[str, str]
-    ) -> FlowResult:
+        self, user_input: dict[str, object] | None, errors: dict[str, str]
+    ) -> config_entries.ConfigFlowResult:
         """Show the options form."""
 
         overrides = self._config_entry.options.get(CONF_OPERATING_TIME_OVERRIDES, {})
         defaults = {CONF_AUTO_END: self._config_entry.options.get(CONF_AUTO_END, False)}
         description_default = self._config_entry.data.get(CONF_DESCRIPTION, "")
         if user_input is not None:
-            defaults[CONF_AUTO_END] = user_input.get(
-                CONF_AUTO_END, defaults[CONF_AUTO_END]
-            )
-            description_default = user_input.get(CONF_DESCRIPTION, description_default)
+            raw_auto_end = user_input.get(CONF_AUTO_END)
+            if isinstance(raw_auto_end, bool):
+                defaults[CONF_AUTO_END] = raw_auto_end
+            raw_description = user_input.get(CONF_DESCRIPTION)
+            if isinstance(raw_description, str):
+                description_default = raw_description
 
-        schema: dict[Any, Any] = {
+        schema: dict[object, object] = {
             vol.Required(CONF_AUTO_END, default=defaults[CONF_AUTO_END]): cv.boolean,
             vol.Optional(CONF_DESCRIPTION, default=description_default): cv.string,
         }
 
-        day_schema: dict[Any, Any] = {}
+        day_schema: dict[object, object] = {}
         for day in WEEKDAY_KEYS:
             day_key = _day_windows_key(day)
             default_windows = _format_override_windows(overrides.get(day))
@@ -428,7 +430,7 @@ class CityVisitorParkingOptionsFlow(config_entries.OptionsFlow):
             step_id="init", data_schema=vol.Schema(schema), errors=errors
         )
 
-    def _update_description(self, raw_description: Any) -> None:
+    def _update_description(self, raw_description: object) -> None:
         """Update the config entry description and title."""
 
         description = str(raw_description).strip() if raw_description else ""
@@ -464,7 +466,7 @@ def _build_unique_id(provider: ProviderConfig, permit_id: str) -> str:
 
 
 def _build_overrides(
-    user_input: Mapping[str, Any], errors: dict[str, str]
+    user_input: Mapping[str, object], errors: dict[str, str]
 ) -> dict[str, list[dict[str, str]]]:
     """Build operating time overrides from user input."""
 
@@ -515,7 +517,7 @@ async def _async_list_providers() -> list[str]:
     return [provider.id for provider in providers]
 
 
-def _parse_time(value: Any) -> time | None:
+def _parse_time(value: object) -> time | None:
     """Parse time strings into time objects."""
 
     if isinstance(value, time):
@@ -535,7 +537,7 @@ def _format_time(value: time | None) -> str | None:
     return value.replace(microsecond=0).strftime("%H:%M")
 
 
-def _format_override_windows(value: Any) -> str:
+def _format_override_windows(value: object) -> str:
     """Format overrides into a comma-separated string."""
 
     windows = _normalize_override_windows(value)
@@ -551,7 +553,9 @@ def _format_override_windows(value: Any) -> str:
     return ", ".join(formatted)
 
 
-def _parse_time_windows(value: Any, errors: dict[str, str]) -> list[dict[str, str]]:
+def _parse_time_windows(
+    value: object, errors: dict[str, str]
+) -> list[dict[str, str]]:
     """Parse a comma-separated time window string."""
 
     if value is None:
@@ -590,7 +594,7 @@ def _parse_time_windows(value: Any, errors: dict[str, str]) -> list[dict[str, st
     return windows
 
 
-def _normalize_override_windows(value: Any) -> list[dict[str, str]]:
+def _normalize_override_windows(value: object) -> list[dict[str, str]]:
     """Normalize override data to a list of window dicts."""
 
     if isinstance(value, list):
@@ -606,7 +610,7 @@ def _day_windows_key(day: str) -> str:
     return f"{WEEKDAY_LABELS[day]}_chargeable_windows"
 
 
-def _get_attr(obj: Any, name: str) -> Any:
+def _get_attr(obj: object, name: str) -> object | None:
     """Return attribute or mapping value for name."""
 
     if isinstance(obj, dict):

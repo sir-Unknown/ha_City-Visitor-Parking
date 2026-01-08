@@ -5,14 +5,35 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Iterable, Mapping
 from datetime import UTC, datetime, time, timedelta
-from typing import Any
+from typing import TYPE_CHECKING, Protocol
 
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.util import dt as dt_util
 from pycityvisitorparking import AuthError, NetworkError
 from pycityvisitorparking.exceptions import PyCityVisitorParkingError
+if TYPE_CHECKING:
+    from pycityvisitorparking import Favorite as ProviderFavorite
+    from pycityvisitorparking import Permit
+    from pycityvisitorparking import Reservation as ProviderReservation
+    from pycityvisitorparking.provider.base import BaseProvider as ProviderProtocol
+else:
+    class ProviderProtocol(Protocol):
+        """Protocol for runtime provider behavior."""
+
+        async def get_permit(self) -> object: ...
+
+        async def list_reservations(self) -> list[object]: ...
+
+        async def list_favorites(self) -> list[object]: ...
+
+        async def end_reservation(self, reservation_id: str, end_time: datetime) -> object: ...
+
+    ProviderFavorite = object
+    Permit = object
+    ProviderReservation = object
 
 from .const import (
     AUTO_END_COOLDOWN,
@@ -37,9 +58,9 @@ class CityVisitorParkingCoordinator(DataUpdateCoordinator[CoordinatorData]):
 
     def __init__(
         self,
-        hass: Any,
+        hass: HomeAssistant,
         *,
-        provider: Any,
+        provider: ProviderProtocol,
         config_entry: ConfigEntry,
         permit_id: str,
         auto_end_state: AutoEndState,
@@ -169,7 +190,7 @@ class CityVisitorParkingCoordinator(DataUpdateCoordinator[CoordinatorData]):
             if attempted_at > cutoff
         }
 
-    def _options(self) -> Mapping[str, Any]:
+    def _options(self) -> Mapping[str, object]:
         """Return options from the config entry or an empty mapping."""
 
         config_entry = self.config_entry
@@ -186,10 +207,12 @@ class CityVisitorParkingCoordinator(DataUpdateCoordinator[CoordinatorData]):
         self._unavailable_logged = True
 
 
-def _normalize_zone_validity(permit: Any) -> list[TimeRange]:
+def _normalize_zone_validity(permit: Permit) -> list[TimeRange]:
     """Normalize zone validity blocks to TimeRange objects in UTC."""
 
-    raw_blocks = _get_attr(permit, "zone_validity") or []
+    raw_blocks = _get_attr(permit, "zone_validity")
+    if not isinstance(raw_blocks, list):
+        raw_blocks = []
     blocks: list[TimeRange] = []
     for block in raw_blocks:
         start = _get_attr(block, "start_time")
@@ -204,20 +227,24 @@ def _normalize_zone_validity(permit: Any) -> list[TimeRange]:
     return blocks
 
 
-def _normalize_remaining_minutes(permit: Any) -> int:
+def _normalize_remaining_minutes(permit: Permit) -> int:
     """Normalize remaining time balance to minutes."""
 
     raw = _get_attr(permit, "remaining_balance")
     if raw is None:
         return 0
     try:
+        if not isinstance(raw, (int, float, str)):
+            return 0
         value = int(raw)
     except (TypeError, ValueError):
         return 0
     return max(0, value)
 
 
-def _normalize_reservations(reservations: Iterable[Any]) -> list[Reservation]:
+def _normalize_reservations(
+    reservations: Iterable[ProviderReservation],
+) -> list[Reservation]:
     """Normalize reservation entries to Reservation objects."""
 
     normalized: list[Reservation] = []
@@ -243,7 +270,7 @@ def _normalize_reservations(reservations: Iterable[Any]) -> list[Reservation]:
     return normalized
 
 
-def _normalize_favorites(favorites: Iterable[Any]) -> list[Favorite]:
+def _normalize_favorites(favorites: Iterable[ProviderFavorite]) -> list[Favorite]:
     """Normalize favorite entries to Favorite objects."""
 
     normalized: list[Favorite] = []
@@ -277,7 +304,7 @@ def _active_reservations(
 
 def _compute_zone_availability(
     zone_validity: list[TimeRange],
-    options: Mapping[str, Any],
+    options: Mapping[str, object],
     now: datetime,
 ) -> ZoneAvailability:
     """Compute zone availability using validity blocks and overrides."""
@@ -310,7 +337,7 @@ def _compute_zone_availability(
 
 def _windows_for_today(
     zone_validity: list[TimeRange],
-    options: Mapping[str, Any],
+    options: Mapping[str, object],
     now: datetime,
 ) -> list[TimeRange]:
     """Return chargeable windows for today, applying overrides if present."""
@@ -320,6 +347,8 @@ def _windows_for_today(
     local_day = WEEKDAY_KEYS[local_now.weekday()]
 
     overrides = options.get(CONF_OPERATING_TIME_OVERRIDES, {})
+    if not isinstance(overrides, Mapping):
+        overrides = {}
     override = overrides.get(local_day)
     override_windows = _normalize_override_windows(override)
     if override_windows:
@@ -371,7 +400,7 @@ def _should_attempt_auto_end(
     return now - last_attempt > AUTO_END_COOLDOWN
 
 
-def _as_utc_datetime(value: Any) -> datetime:
+def _as_utc_datetime(value: object) -> datetime:
     """Convert a datetime or ISO string into a UTC datetime."""
 
     if isinstance(value, datetime):
@@ -390,7 +419,7 @@ def _as_utc_datetime(value: Any) -> datetime:
     raise ValueError("Unsupported datetime value")
 
 
-def _as_time(value: Any) -> time | None:
+def _as_time(value: object) -> time | None:
     """Convert a stored override value into a time object."""
 
     if isinstance(value, time):
@@ -400,7 +429,7 @@ def _as_time(value: Any) -> time | None:
     return None
 
 
-def _normalize_override_windows(value: Any) -> list[dict[str, str]]:
+def _normalize_override_windows(value: object) -> list[dict[str, str]]:
     """Normalize override data to a list of window dicts."""
 
     if isinstance(value, list):
@@ -410,7 +439,7 @@ def _normalize_override_windows(value: Any) -> list[dict[str, str]]:
     return []
 
 
-def _get_attr(obj: Any, name: str) -> Any:
+def _get_attr(obj: object, name: str) -> object | None:
     """Return attribute or mapping value for name."""
 
     if isinstance(obj, dict):

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import time
 from collections.abc import Iterable
-from typing import Any
+from typing import TYPE_CHECKING, cast
 
 import voluptuous as vol
 from homeassistant import config_entries
@@ -12,6 +12,10 @@ from homeassistant.components import websocket_api
 from homeassistant.const import ATTR_CONFIG_ENTRY_ID
 from homeassistant.core import HomeAssistant
 from pycityvisitorparking.exceptions import PyCityVisitorParkingError
+if TYPE_CHECKING:
+    from pycityvisitorparking import Favorite as ProviderFavorite
+else:
+    ProviderFavorite = object
 
 from .const import DOMAIN, LOGGER
 from .models import CityVisitorParkingRuntimeData
@@ -33,19 +37,22 @@ async def async_setup_websocket(hass: HomeAssistant) -> None:
 )
 @websocket_api.async_response
 async def _ws_list_favorites(
-    hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]
+    hass: HomeAssistant,
+    connection: websocket_api.ActiveConnection,
+    msg: dict[str, object],
 ) -> None:
     """Return favorites for a single config entry."""
 
     request_started = time.perf_counter()
-    entry_id = msg[ATTR_CONFIG_ENTRY_ID]
+    entry_id = cast(str, msg[ATTR_CONFIG_ENTRY_ID])
+    msg_id = cast(int, msg["id"])
     entry = hass.config_entries.async_get_entry(entry_id)
     if (
         entry is None
         or entry.domain != DOMAIN
         or entry.state is not config_entries.ConfigEntryState.LOADED
     ):
-        connection.send_error(msg["id"], "invalid_target", "Invalid target")
+        connection.send_error(msg_id, "invalid_target", "Invalid target")
         return
 
     runtime: CityVisitorParkingRuntimeData = entry.runtime_data
@@ -53,11 +60,11 @@ async def _ws_list_favorites(
         favorites = await runtime.provider.list_favorites()
     except PyCityVisitorParkingError:
         connection.send_error(
-            msg["id"], "favorites_failed", "Could not fetch favorites"
+            msg_id, "favorites_failed", "Could not fetch favorites"
         )
         return
 
-    connection.send_result(msg["id"], {"favorites": _normalize_favorites(favorites)})
+    connection.send_result(msg_id, {"favorites": _normalize_favorites(favorites)})
     LOGGER.debug(
         "Favorites websocket response for entry %s: %s favorites (duration=%.3fs)",
         entry_id,
@@ -66,7 +73,9 @@ async def _ws_list_favorites(
     )
 
 
-def _normalize_favorites(favorites: Iterable[Any]) -> list[dict[str, str]]:
+def _normalize_favorites(
+    favorites: Iterable[ProviderFavorite],
+) -> list[dict[str, str]]:
     """Normalize favorites to a JSON-serializable structure."""
 
     normalized: list[dict[str, str]] = []
@@ -89,7 +98,7 @@ def _normalize_favorites(favorites: Iterable[Any]) -> list[dict[str, str]]:
     return normalized
 
 
-def _get_attr(obj: Any, name: str) -> Any:
+def _get_attr(obj: object, name: str) -> object | None:
     """Return attribute or mapping value for name."""
 
     if isinstance(obj, dict):

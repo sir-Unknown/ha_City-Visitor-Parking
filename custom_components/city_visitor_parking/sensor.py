@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any
 
 from homeassistant.components.sensor import SensorDeviceClass, SensorEntity
 from homeassistant.const import UnitOfTime
@@ -110,7 +109,7 @@ class RemainingTimeSensor(CityVisitorParkingEntity, SensorEntity):
         return round(remaining_minutes / 60, 2)
 
     @property
-    def extra_state_attributes(self) -> dict[str, Any]:
+    def extra_state_attributes(self) -> dict[str, object]:
         """Return non-PII attributes for remaining balance."""
 
         next_end_time = _next_end_time(self.coordinator.data)
@@ -150,7 +149,7 @@ class PermitZoneAvailabilitySensor(CityVisitorParkingEntity, SensorEntity):
         )
 
     @property
-    def extra_state_attributes(self) -> dict[str, Any]:
+    def extra_state_attributes(self) -> dict[str, object]:
         """Return availability attributes."""
 
         availability = self.coordinator.data.zone_availability

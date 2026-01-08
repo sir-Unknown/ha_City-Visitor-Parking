@@ -4,8 +4,6 @@ from __future__ import annotations
 
 import time
 from datetime import datetime, timedelta
-from typing import Any
-
 import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.const import ATTR_DEVICE_ID
@@ -15,6 +13,7 @@ from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import selector
 from homeassistant.util import dt as dt_util
+from homeassistant.util.json import JsonValueType
 from pycityvisitorparking import ProviderError
 from pycityvisitorparking.exceptions import PyCityVisitorParkingError
 
@@ -28,7 +27,7 @@ from .const import (
     DOMAIN,
     LOGGER,
 )
-from .models import CityVisitorParkingRuntimeData
+from .models import CityVisitorParkingRuntimeData, Favorite, Reservation
 
 SERVICE_START_RESERVATION = "start_reservation"
 SERVICE_UPDATE_RESERVATION = "update_reservation"
@@ -343,7 +342,7 @@ async def _async_handle_update_favorite(call: ServiceCall) -> None:
         )
 
     try:
-        update_data: dict[str, Any] = {"favorite_id": call.data[ATTR_FAVORITE_ID]}
+        update_data: dict[str, str] = {"favorite_id": call.data[ATTR_FAVORITE_ID]}
         if license_plate is not None:
             update_data["license_plate"] = license_plate
         if name is not None:
@@ -389,16 +388,18 @@ async def _async_handle_remove_favorite(call: ServiceCall) -> None:
         ) from err
 
 
-async def _async_handle_list_active_reservations(call: ServiceCall) -> dict[str, Any]:
+async def _async_handle_list_active_reservations(
+    call: ServiceCall,
+) -> dict[str, JsonValueType]:
     """Handle list active reservations service."""
 
     runtime = _runtime_from_call(call)
     request_started = time.perf_counter()
     update_fields = getattr(runtime.provider, "reservation_update_fields", None)
     if update_fields is None:
-        reservation_update_fields = ("start_time", "end_time")
+        reservation_update_fields = ["start_time", "end_time"]
     else:
-        reservation_update_fields = tuple(str(field) for field in update_fields)
+        reservation_update_fields = [str(field) for field in update_fields]
     stale = False
     try:
         await runtime.coordinator.async_refresh()
@@ -458,20 +459,25 @@ async def _async_handle_list_active_reservations(call: ServiceCall) -> dict[str,
         len(reservations),
         time.perf_counter() - request_started,
     )
+    active_reservations: list[JsonValueType] = [
+        _reservation_payload(reservation, favorite_by_plate)
+        for reservation in visible
+    ]
+    reservation_update_fields_json: list[JsonValueType] = [
+        str(field) for field in reservation_update_fields
+    ]
+
     return {
         "count": len(visible),
         "active_count": len(active),
         "future_count": len(future),
-        "active_reservations": [
-            _reservation_payload(reservation, favorite_by_plate)
-            for reservation in visible
-        ],
+        "active_reservations": active_reservations,
         "stale": stale,
-        "reservation_update_fields": reservation_update_fields,
+        "reservation_update_fields": reservation_update_fields_json,
     }
 
 
-async def _async_handle_list_favorites(call: ServiceCall) -> dict[str, Any]:
+async def _async_handle_list_favorites(call: ServiceCall) -> dict[str, JsonValueType]:
     """Handle list favorites service."""
 
     runtime = _runtime_from_call(call)
@@ -483,14 +489,14 @@ async def _async_handle_list_favorites(call: ServiceCall) -> dict[str, Any]:
             translation_key="favorite_operation_failed",
         ) from err
 
-    normalized = []
+    normalized: list[JsonValueType] = []
     for favorite in favorites or []:
         favorite_id = _get_attr(favorite, "id")
         license_plate = _get_attr(favorite, "license_plate")
         name = _get_attr(favorite, "name")
         if favorite_id is None and license_plate is None:
             continue
-        payload: dict[str, str] = {
+        payload: dict[str, JsonValueType] = {
             "favorite_id": str(favorite_id) if favorite_id is not None else "",
         }
         if license_plate is not None:
@@ -657,7 +663,7 @@ def _is_not_supported(err: ProviderError) -> bool:
     return "not supported" in message or "unsupported" in message
 
 
-def _get_attr(obj: Any, name: str) -> Any:
+def _get_attr(obj: object, name: str) -> object | None:
     """Return attribute or mapping value for name."""
 
     if isinstance(obj, dict):
@@ -674,19 +680,20 @@ def _normalize_plate(value: str | None) -> str:
 
 
 def _reservation_payload(
-    reservation: Any, favorite_by_plate: dict[str, Any]
-) -> dict[str, str]:
+    reservation: Reservation, favorite_by_plate: dict[str, Favorite]
+) -> dict[str, JsonValueType]:
     """Build reservation response payload with favorite metadata."""
 
-    payload: dict[str, str] = {
+    payload: dict[str, JsonValueType] = {
         "reservation_id": reservation.reservation_id,
         "start_time": _format_timestamp(reservation.start_time),
         "end_time": _format_timestamp(reservation.end_time),
     }
 
-    plate = _normalize_plate(reservation.license_plate)
-    if plate:
-        payload["license_plate"] = reservation.license_plate
+    license_plate = reservation.license_plate
+    plate = _normalize_plate(license_plate)
+    if plate and license_plate is not None:
+        payload["license_plate"] = license_plate
         favorite = favorite_by_plate.get(plate)
         if favorite is not None:
             payload["favorite_id"] = favorite.favorite_id
