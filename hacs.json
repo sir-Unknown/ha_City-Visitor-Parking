@@ -1,6 +1,6 @@
 {
   "name": "City Visitor Parking",
-  "version": "1.0.0",
+  "version": "0.1.0",
   "render_readme": true,
   "domains": ["city_visitor_parking"],
   "country": "NL",
