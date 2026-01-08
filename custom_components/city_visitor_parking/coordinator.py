@@ -21,6 +21,7 @@ if TYPE_CHECKING:
     from pycityvisitorparking import Reservation as ProviderReservation
     from pycityvisitorparking.provider.base import BaseProvider as ProviderProtocol
 else:
+
     class ProviderProtocol(Protocol):
         """Protocol for runtime provider behavior."""
 
@@ -239,7 +240,7 @@ def _normalize_remaining_minutes(permit: Permit) -> int:
     if raw is None:
         return 0
     try:
-        if not isinstance(raw, (int, float, str)):
+        if not isinstance(raw, int | float | str):
             return 0
         value = int(raw)
     except (TypeError, ValueError):

@@ -14,6 +14,7 @@ if TYPE_CHECKING:
 
     from .coordinator import CityVisitorParkingCoordinator
 else:
+
     class BaseProvider:  # pragma: no cover - runtime typing fallback
         pass
 

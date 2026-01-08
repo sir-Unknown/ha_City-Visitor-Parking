@@ -20,9 +20,7 @@ async def async_get_config_entry_diagnostics(
     coordinator = entry.runtime_data.coordinator
     data = coordinator.data
 
-    last_update_success_time = getattr(
-        coordinator, "last_update_success_time", None
-    )
+    last_update_success_time = getattr(coordinator, "last_update_success_time", None)
 
     return {
         "entry_data": async_redact_data(dict(entry.data), TO_REDACT),
