@@ -14,6 +14,7 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 from homeassistant.util import dt as dt_util
 from pycityvisitorparking import AuthError, NetworkError
 from pycityvisitorparking.exceptions import PyCityVisitorParkingError
+
 if TYPE_CHECKING:
     from pycityvisitorparking import Favorite as ProviderFavorite
     from pycityvisitorparking import Permit
@@ -29,7 +30,11 @@ else:
 
         async def list_favorites(self) -> list[object]: ...
 
-        async def end_reservation(self, reservation_id: str, end_time: datetime) -> object: ...
+        async def end_reservation(
+            self,
+            reservation_id: str,
+            end_time: datetime,
+        ) -> object: ...
 
     ProviderFavorite = object
     Permit = object

@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 
 from homeassistant.config_entries import ConfigEntry
 from pycityvisitorparking import Client
+
 if TYPE_CHECKING:
     from pycityvisitorparking.provider.base import BaseProvider
 

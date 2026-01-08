@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import time
 from datetime import datetime, timedelta
+
 import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.const import ATTR_DEVICE_ID

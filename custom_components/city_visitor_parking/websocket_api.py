@@ -12,6 +12,7 @@ from homeassistant.components import websocket_api
 from homeassistant.const import ATTR_CONFIG_ENTRY_ID
 from homeassistant.core import HomeAssistant
 from pycityvisitorparking.exceptions import PyCityVisitorParkingError
+
 if TYPE_CHECKING:
     from pycityvisitorparking import Favorite as ProviderFavorite
 else:
