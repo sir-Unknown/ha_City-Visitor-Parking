@@ -1,52 +1,55 @@
 # City Visitor Parking
 
-City Visitor Parking is a Home Assistant custom integration for managing Dutch municipal visitor parking permits using the async-only `pycityvisitorparking` library. The integration is designed to feel and behave like an official Home Assistant integration so that moving it into Core later is straightforward.
+City Visitor Parking helps you manage visitor parking permits from Dutch municipalities directly in Home Assistant. It is built for residents and small businesses who need to start, update, and end visitor parking sessions quickly, see whether parking is paid or free, and keep favorite license plates ready. The goal is a simple, Home Assistant-native experience so you can handle visitor parking from the same place you already manage your home.
 
 ## Features
 
-- Config flow with municipality selection and manual provider entry
-- Permit selection per entry (one device per permit)
-- Sensors for active reservations, remaining balance, availability, chargeable window start/end, and favorites
-- Options for weekday chargeable windows and auto-end when parking becomes free
-- Service calls to manage reservations and favorites
-- Diagnostics with redaction of sensitive data
-- Lovelace card for starting reservations and managing favorites
+- Start, update, and end visitor parking sessions from Home Assistant
+- See at a glance whether parking is paid or free, and when that changes
+- Keep favorite license plates for quick selection
+- Track remaining permit balance and active sessions
+- Optional auto-end when parking becomes free
+- Handy dashboard card for quick access
 
 ## Installation (HACS)
 
-1. Add this repository as a custom repository in HACS (category: Integration).
+1. Add this repository in HACS as a custom repository (category: Integration).
 2. Install **City Visitor Parking** from HACS.
 3. Restart Home Assistant.
 
 ## Manual installation
 
-1. Copy `custom_components/city_visitor_parking/` into your Home Assistant `custom_components/` directory.
+If you prefer manual setup:
+
+1. Copy `custom_components/city_visitor_parking/` into your Home Assistant `custom_components/` folder.
 2. Restart Home Assistant.
 
 ## Configuration
 
 1. Go to **Settings** → **Devices & services** → **Add integration**.
 2. Search for **City Visitor Parking**.
-3. Select your municipality, sign in, and choose a permit.
-4. Optionally set a description to help distinguish multiple entries.
+3. Pick your municipality, sign in, and choose your permit.
+4. Optionally add a short description so you can tell entries apart.
 
 ## Options
 
-- **Operating time overrides**: Set chargeable windows per weekday using comma-separated ranges, for example `09:00-13:00, 14:00-17:30`.
-- **Auto-end when free**: Automatically end active reservations when the zone is free. A cooldown prevents repeated attempts.
-- **Description**: Update the entry label shown in the UI.
+- **Paid time windows**: Set the paid hours per weekday, for example `09:00-13:00, 14:00-17:30`.
+- **Auto-end when free**: Automatically end an active session when parking becomes free again.
+- **Description**: Rename the entry as shown in the UI.
 
 ## Sensors
 
-- **Active reservations**: Number of reservations active right now.
-- **Remaining balance**: Hours of the available permit balance.
-- **Permit zone availability**: `chargeable` or `free`, plus the next change time.
-- **Chargeable window start/end**: Start and end of the current or next chargeable window.
-- **Favorites**: Number of favorite license plates.
+These give you a quick overview in Home Assistant:
+
+- **Active sessions**: How many visitor sessions are currently running.
+- **Remaining balance**: How many hours you still have available.
+- **Paid or free**: Whether the zone is currently paid or free, plus when that changes.
+- **Paid window start/end**: The next start and end time for paid parking.
+- **Favorites**: How many license plates you have saved.
 
 ## Lovelace card
 
-This integration ships a custom card for starting reservations.
+Optional dashboard card for quick actions.
 
 - Add the card as a Lovelace resource (required for hard refreshes): Settings → Dashboards → Resources, URL `/city_visitor_parking/city-visitor-parking-card.js?v=1`, type `Module`.
 - Card type: `custom:city-visitor-parking-card`
@@ -54,7 +57,7 @@ This integration ships a custom card for starting reservations.
 
 ## Services
 
-Services are device-targeted and always operate on exactly one config entry.
+Advanced automations can call these services directly (each runs on a single entry):
 
 - `city_visitor_parking.start_reservation`
 - `city_visitor_parking.update_reservation`
@@ -69,23 +72,17 @@ See `custom_components/city_visitor_parking/services.yaml` for full schemas.
 
 ## Privacy
 
-The integration never logs credentials or raw license plates. Diagnostics redact sensitive values. Note that `list_favorites` and `list_active_reservations` return raw license plates in the service response.
+The integration never logs credentials or raw license plates. Diagnostic reports hide sensitive values. Note that `list_favorites` and `list_active_reservations` return raw license plates in the service response.
 
 ## Troubleshooting
 
-- **Invalid credentials**: Reauthenticate via the integration card.
-- **Cannot connect**: Check your network and the provider availability.
-- **No permits**: Verify that the account has active visitor parking permits.
-
-## Release process
-
-This repository uses GitHub Releases as the source of truth for versions. See `RELEASING.md` for the full step-by-step process.
-
----
+- **Sign-in failed**: Open the integration and reauthenticate.
+- **Cannot connect**: Check your network and the provider status.
+- **No permits**: Make sure your account has active visitor parking permits.
 
 # Nederlands
 
-City Visitor Parking is een Home Assistant custom integration voor bezoekersparkeren in Nederlandse gemeenten via de async-only `pycityvisitorparking`-bibliotheek.
+City Visitor Parking helpt je om bezoekersparkeren van Nederlandse gemeenten direct in Home Assistant te beheren. Het is bedoeld voor bewoners en kleine bedrijven die snel een parkeersessie willen starten of stoppen, willen zien of parkeren betaald of gratis is, en vaste kentekens bij de hand willen houden.
 
 ## Installatie (HACS)
 
@@ -101,13 +98,13 @@ City Visitor Parking is een Home Assistant custom integration voor bezoekerspark
 
 ## Opties
 
-- **Bedrijfstijden**: Stel per weekdag betaalvensters in, bijvoorbeeld `09:00-13:00, 14:00-17:30`.
-- **Automatisch beëindigen**: Beëindig reserveringen automatisch wanneer parkeren gratis wordt.
-- **Beschrijving**: Pas de naam van de integratie aan zoals deze in de UI verschijnt.
+- **Betaalvensters**: Stel per weekdag betaalde tijden in, bijvoorbeeld `09:00-13:00, 14:00-17:30`.
+- **Automatisch beëindigen**: Laat een actieve sessie automatisch stoppen zodra parkeren gratis wordt.
+- **Beschrijving**: Geef de integratie een herkenbare naam in de UI.
 
 ## Lovelace-kaart
 
-Deze integratie bevat een custom kaart om reserveringen te starten.
+Optionele dashboardkaart voor snelle acties.
 
 - Voeg de kaart toe als Lovelace resource (nodig bij hard refreshes): Instellingen → Dashboards → Resources, URL `/city_visitor_parking/city-visitor-parking-card.js?v=1`, type `Module`.
 - Kaarttype: `custom:city-visitor-parking-card`
@@ -115,7 +112,7 @@ Deze integratie bevat een custom kaart om reserveringen te starten.
 
 ## Diensten
 
-Diensten zijn device-gericht en werken altijd op precies één config entry.
+Voor geavanceerde automatiseringen kun je deze diensten gebruiken (elk werkt op één entry):
 
 - `city_visitor_parking.start_reservation`
 - `city_visitor_parking.update_reservation`
@@ -130,4 +127,4 @@ Zie `custom_components/city_visitor_parking/services.yaml` voor de volledige sch
 
 ## Privacy
 
-De integratie logt nooit inloggegevens of ruwe kentekens. Diagnostics redigeren gevoelige waarden. Let op: `list_favorites` en `list_active_reservations` geven ruwe kentekens terug in de service response.
+De integratie logt nooit inloggegevens of ruwe kentekens. Diagnostische rapporten verbergen gevoelige waarden. Let op: `list_favorites` en `list_active_reservations` geven ruwe kentekens terug in de service response.
