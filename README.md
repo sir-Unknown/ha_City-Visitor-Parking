@@ -79,7 +79,7 @@ The integration never logs credentials or raw license plates. Diagnostics redact
 
 ## Release process
 
-This repository uses GitHub Releases as the source of truth for versions. Update the version in `custom_components/city_visitor_parking/manifest.json`, update `CHANGELOG.md`, and publish a GitHub Release with a matching tag (for example `1.2.3`).
+This repository uses GitHub Releases as the source of truth for versions. See `RELEASING.md` for the full step-by-step process.
 
 ---
 
