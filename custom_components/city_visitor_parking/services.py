@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
 import time
+from datetime import datetime, timedelta
 from typing import Any
 
 import voluptuous as vol
@@ -382,9 +382,7 @@ async def _async_handle_remove_favorite(call: ServiceCall) -> None:
         await runtime.provider.remove_favorite(favorite_id)
         LOGGER.debug("Removed favorite for device %s", call.data[ATTR_DEVICE_ID])
     except PyCityVisitorParkingError as err:
-        LOGGER.warning(
-            "Failed to remove favorite (%s)", err.__class__.__name__
-        )
+        LOGGER.warning("Failed to remove favorite (%s)", err.__class__.__name__)
         raise HomeAssistantError(
             translation_domain=DOMAIN,
             translation_key="favorite_operation_failed",
@@ -437,7 +435,9 @@ async def _async_handle_list_active_reservations(call: ServiceCall) -> dict[str,
     reservations = getattr(data, "reservations", []) if data else []
     favorites = getattr(data, "favorites", []) if data else []
     now = dt_util.utcnow()
-    visible = [reservation for reservation in reservations if reservation.end_time > now]
+    visible = [
+        reservation for reservation in reservations if reservation.end_time > now
+    ]
     active = [
         reservation
         for reservation in visible
@@ -450,7 +450,8 @@ async def _async_handle_list_active_reservations(call: ServiceCall) -> dict[str,
         if favorite.license_plate
     }
     LOGGER.debug(
-        "Active reservations response for device %s: %s active, %s future of %s (duration=%.3fs)",
+        "Active reservations response for device %s: %s active, %s future of %s "
+        "(duration=%.3fs)",
         call.data[ATTR_DEVICE_ID],
         len(active),
         len(future),

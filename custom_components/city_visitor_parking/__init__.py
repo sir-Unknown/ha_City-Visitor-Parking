@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 import inspect
 import time
+from pathlib import Path
 
 from homeassistant.components.frontend import add_extra_js_url
 from homeassistant.components.http import StaticPathConfig
@@ -28,8 +28,10 @@ from .const import (
     CONF_PERMIT_ID,
     CONF_PROVIDER_ID,
     DOMAIN,
-    LOGGER as _LOGGER,
     PLATFORMS,
+)
+from .const import (
+    LOGGER as _LOGGER,
 )
 from .coordinator import CityVisitorParkingCoordinator
 from .models import AutoEndState, CityVisitorParkingRuntimeData, ProviderConfig
@@ -135,7 +137,9 @@ def _install_zone_validity_logging(provider: object) -> None:
             return f"raw=list(count={len(raw)})"
         return f"raw={type(raw).__name__}"
 
-    accepts_fallback = "fallback_zone" in inspect.signature(map_zone_validity).parameters
+    accepts_fallback = (
+        "fallback_zone" in inspect.signature(map_zone_validity).parameters
+    )
 
     def _wrap(raw: object, *, fallback_zone: object | None = None) -> object:
         if isinstance(fallback_zone, dict):
@@ -151,7 +155,8 @@ def _install_zone_validity_logging(provider: object) -> None:
                 )
             if not has_candidates and start_raw and end_raw:
                 _LOGGER.debug(
-                    "Provider %s zone validity fallback details %s fallback_start=%s fallback_end=%s",
+                    "Provider %s zone validity fallback details %s "
+                    "fallback_start=%s fallback_end=%s",
                     provider_id,
                     _summarize_raw(raw),
                     start_raw,
@@ -161,7 +166,7 @@ def _install_zone_validity_logging(provider: object) -> None:
             return map_zone_validity(raw, fallback_zone=fallback_zone)
         return map_zone_validity(raw)
 
-    setattr(provider, "_map_zone_validity", _wrap)
+    provider._map_zone_validity = _wrap
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:

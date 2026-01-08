@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable
 import time
+from collections.abc import Iterable
 from typing import Any
 
 import voluptuous as vol

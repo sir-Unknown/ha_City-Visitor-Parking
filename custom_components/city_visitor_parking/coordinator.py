@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping
 import asyncio
+from collections.abc import Iterable, Mapping
 from datetime import UTC, datetime, time, timedelta
 from typing import Any
 
@@ -62,7 +62,10 @@ class CityVisitorParkingCoordinator(DataUpdateCoordinator[CoordinatorData]):
         """Fetch data from the API and normalize it."""
 
         try:
-            LOGGER.debug("Fetching permit, reservations, and favorites for %s", self._permit_id)
+            LOGGER.debug(
+                "Fetching permit, reservations, and favorites for %s",
+                self._permit_id,
+            )
             permit, reservations, favorites = await asyncio.gather(
                 self._provider.get_permit(),
                 self._provider.list_reservations(),
