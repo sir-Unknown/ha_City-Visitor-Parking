@@ -21,6 +21,7 @@ if TYPE_CHECKING:
     from pycityvisitorparking import Reservation as ProviderReservation
     from pycityvisitorparking.provider.base import BaseProvider as ProviderProtocol
 else:
+
     class ProviderProtocol(Protocol):
         """Protocol for runtime provider behavior."""
 

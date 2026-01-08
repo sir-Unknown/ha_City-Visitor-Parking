@@ -461,8 +461,7 @@ async def _async_handle_list_active_reservations(
         time.perf_counter() - request_started,
     )
     active_reservations: list[JsonValueType] = [
-        _reservation_payload(reservation, favorite_by_plate)
-        for reservation in visible
+        _reservation_payload(reservation, favorite_by_plate) for reservation in visible
     ]
     reservation_update_fields_json: list[JsonValueType] = [
         str(field) for field in reservation_update_fields

@@ -60,9 +60,7 @@ async def _ws_list_favorites(
     try:
         favorites = await runtime.provider.list_favorites()
     except PyCityVisitorParkingError:
-        connection.send_error(
-            msg_id, "favorites_failed", "Could not fetch favorites"
-        )
+        connection.send_error(msg_id, "favorites_failed", "Could not fetch favorites")
         return
 
     connection.send_result(msg_id, {"favorites": _normalize_favorites(favorites)})

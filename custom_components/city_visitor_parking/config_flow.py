@@ -553,9 +553,7 @@ def _format_override_windows(value: object) -> str:
     return ", ".join(formatted)
 
 
-def _parse_time_windows(
-    value: object, errors: dict[str, str]
-) -> list[dict[str, str]]:
+def _parse_time_windows(value: object, errors: dict[str, str]) -> list[dict[str, str]]:
     """Parse a comma-separated time window string."""
 
     if value is None:
