@@ -182,6 +182,10 @@ async def _async_register_frontend(hass: HomeAssistant) -> None:
     if data.get("frontend_registered"):
         return
 
+    if hass.http is None or "frontend" not in hass.config.components:
+        _LOGGER.debug("Frontend is not available, skipping static assets")
+        return
+
     await hass.http.async_register_static_paths(
         [
             StaticPathConfig(
