@@ -13,6 +13,15 @@
 4. Vul de titel en release-notities in (bij voorkeur op basis van `CHANGELOG.md`).
 5. Klik op **Publish release**.
 
+## 2a) Automatische release-notities (Release Drafter)
+
+Deze repository gebruikt Release Drafter om release-notities automatisch te verzamelen in een draft release.
+
+1. Zorg dat pull requests labels hebben zoals `bug`, `feature`, of `documentation`.
+2. Ga naar **Releases** op GitHub en open de conceptrelease die Release Drafter heeft aangemaakt.
+3. Controleer en verfijn de release-notities.
+4. Publiceer de release met een tag die exact overeenkomt met de versie.
+
 ## 2b) GitHub Release publiceren via CLI
 
 Voorwaarde: je bent ingelogd met GitHub CLI (`gh auth login`).
@@ -22,10 +31,15 @@ Voorwaarde: je bent ingelogd met GitHub CLI (`gh auth login`).
    git tag 1.2.3
    git push origin 1.2.3
    ```
-2. Publiceer de release met notes uit `CHANGELOG.md` (kopieer de relevante sectie):
-   ```bash
-   gh release create 1.2.3 --title "1.2.3" --notes "Plak hier de releasenotes uit CHANGELOG.md"
-   ```
+2. Publiceer de release met automatisch gegenereerde notes:
+    ```bash
+   gh release create 1.2.3 --title "1.2.3" --generate-notes
+    ```
+
+Alternatief: gebruik de notes uit `CHANGELOG.md` (kopieer de relevante sectie):
+```bash
+gh release create 1.2.3 --title "1.2.3" --notes "Plak hier de releasenotes uit CHANGELOG.md"
+```
 
 ## 3) Release-asset controleren
 
