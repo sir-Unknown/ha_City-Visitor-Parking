@@ -1,0 +1,27 @@
+name-template: "$NEXT_PATCH_VERSION"
+tag-template: "$NEXT_PATCH_VERSION"
+change-template: "- $TITLE (#$NUMBER)"
+no-changes-template: "- No changes"
+categories:
+  - title: "Added"
+    labels:
+      - "feature"
+      - "enhancement"
+  - title: "Fixed"
+    labels:
+      - "bug"
+      - "fix"
+  - title: "Changed"
+    labels:
+      - "chore"
+      - "maintenance"
+  - title: "Tests"
+    labels:
+      - "tests"
+  - title: "Docs"
+    labels:
+      - "documentation"
+template: |
+  ## Changes
+
+  $CHANGES
