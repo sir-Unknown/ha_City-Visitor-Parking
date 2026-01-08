@@ -251,55 +251,6 @@
       "message": "The selected device is not available."
     }
   },
-  "card": {
-    "field": {
-      "permit": "Permit",
-      "favorite": "Favorite",
-      "name": "Name",
-      "license_plate": "License plate",
-      "start_date": "Start date",
-      "start_time": "Start time",
-      "end_date": "End date",
-      "end_time": "End time"
-    },
-    "action": {
-      "add_favorite": "Add favorite",
-      "remove_favorite": "Remove favorite",
-      "start_reservation": "Start reservation"
-    },
-    "button": {
-      "update_reservation": "Update reservation",
-      "end_reservation": "End reservation"
-    },
-    "section": {
-      "active_reservations": "Active reservations"
-    },
-    "message": {
-      "select_favorite": "Select a favorite",
-      "loading_favorites": "Loading favorites",
-      "loading_active_reservations": "Loading active reservations",
-      "no_active_reservations": "No active reservations",
-      "active_reservations_failed": "Could not load active reservations",
-      "no_device_for_permit": "No device found for the selected permit.",
-      "load_favorites_failed": "Could not load favorites",
-      "removing_favorite": "Removing favorite...",
-      "favorite_removed": "Favorite removed.",
-      "favorite_remove_failed": "Could not remove favorite.",
-      "select_permit_before_start": "Select a permit before starting a reservation.",
-      "license_plate_required": "License plate is required.",
-      "start_end_required": "Start and end time are required.",
-      "end_before_start": "End time must be after start time.",
-      "reservation_requested": "Reservation requested.",
-      "reservation_start_failed": "Could not start reservation.",
-      "reservation_updated": "Reservation updated.",
-      "reservation_update_failed": "Could not update reservation.",
-      "reservation_ended": "Reservation ended.",
-      "reservation_end_failed": "Could not end reservation."
-    },
-    "placeholder": {
-      "license_plate": "AA-123-B"
-    }
-  },
   "entity": {
     "sensor": {
       "active_reservations": {

@@ -16,6 +16,7 @@ from homeassistant.exceptions import (
     ConfigEntryError,
     ConfigEntryNotReady,
 )
+from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.typing import ConfigType
 from pycityvisitorparking import AuthError, NetworkError
 from pycityvisitorparking.exceptions import PyCityVisitorParkingError
@@ -37,6 +38,8 @@ from .coordinator import CityVisitorParkingCoordinator
 from .models import AutoEndState, CityVisitorParkingRuntimeData, ProviderConfig
 from .services import async_setup_services
 from .websocket_api import async_setup_websocket
+
+CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
