@@ -326,19 +326,16 @@ class CityVisitorParkingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             errors["base"] = "unknown"
             return []
 
-        choices = [
-            PermitChoice(
-                permit_id=str(
-                    _get_attr(permit, "permit_id") or _get_attr(permit, "id")
-                ),
-                label=str(
-                    _get_attr(permit, "name")
-                    or _get_attr(permit, "label")
-                    or _get_attr(permit, "permit_id")
-                    or _get_attr(permit, "id")
-                ),
-            )
-        ]
+        permit_id = _get_attr(permit, "permit_id") or _get_attr(permit, "id")
+        choices = []
+        if permit_id:
+            label = _get_attr(permit, "name") or _get_attr(permit, "label") or permit_id
+            choices = [
+                PermitChoice(
+                    permit_id=str(permit_id),
+                    label=str(label),
+                )
+            ]
         if not choices:
             errors["base"] = "no_permits"
             return []

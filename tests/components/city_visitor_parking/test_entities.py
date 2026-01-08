@@ -26,6 +26,11 @@ from custom_components.city_visitor_parking.models import (
 from custom_components.city_visitor_parking.sensor import (
     ActiveReservationsSensor,
     PermitZoneAvailabilitySensor,
+    _as_utc_iso,
+    _current_or_next_window,
+    _next_end_time,
+    _remaining_balance_minutes,
+    _timerange_to_dict,
 )
 
 
@@ -117,3 +122,53 @@ def _create_entry(unique_id: str):
     """Create a mock entry for entity tests."""
 
     return MockConfigEntry(domain=DOMAIN, data={}, unique_id=unique_id, title="City")
+
+
+def test_sensor_helpers() -> None:
+    """Sensor helper functions should normalize values."""
+
+    data = _sample_data()
+    data_no_active = CoordinatorData(
+        permit_id=data.permit_id,
+        permit_remaining_minutes=data.permit_remaining_minutes,
+        zone_validity=data.zone_validity,
+        reservations=data.reservations,
+        favorites=data.favorites,
+        zone_availability=data.zone_availability,
+        active_reservations=[],
+    )
+    data_with_active = CoordinatorData(
+        permit_id=data.permit_id,
+        permit_remaining_minutes=data.permit_remaining_minutes,
+        zone_validity=data.zone_validity,
+        reservations=data.reservations,
+        favorites=data.favorites,
+        zone_availability=data.zone_availability,
+        active_reservations=[
+            Reservation(
+                reservation_id="res2",
+                start_time=datetime(2025, 1, 1, 7, 0, tzinfo=UTC),
+                end_time=datetime(2025, 1, 1, 8, 0, tzinfo=UTC),
+            ),
+            Reservation(
+                reservation_id="res3",
+                start_time=datetime(2025, 1, 1, 6, 0, tzinfo=UTC),
+                end_time=datetime(2025, 1, 1, 7, 30, tzinfo=UTC),
+            ),
+        ],
+    )
+    assert _remaining_balance_minutes(data) == 90
+    assert _next_end_time(data_no_active) is None
+    assert _next_end_time(data_with_active) == datetime(2025, 1, 1, 7, 30, tzinfo=UTC)
+    assert _as_utc_iso(None) == ""
+
+    window = TimeRange(
+        start=datetime(2025, 1, 1, 8, 0, tzinfo=UTC),
+        end=datetime(2025, 1, 1, 9, 0, tzinfo=UTC),
+    )
+    assert _timerange_to_dict(window)["start"].endswith("+00:00")
+    assert _current_or_next_window([window], datetime(2025, 1, 1, 7, 0, tzinfo=UTC))
+    assert (
+        _current_or_next_window([window], datetime(2025, 1, 1, 9, 0, tzinfo=UTC))
+        is None
+    )

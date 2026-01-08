@@ -5,6 +5,9 @@ from __future__ import annotations
 from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
+from custom_components.city_visitor_parking.config_flow import (
+    CityVisitorParkingOptionsFlow,
+)
 from custom_components.city_visitor_parking.const import (
     CONF_AUTO_END,
     CONF_DESCRIPTION,
@@ -85,16 +88,69 @@ async def test_options_flow_incomplete_override(hass) -> None:
     assert result["errors"]["base"] == "invalid_override_format"
 
 
-def _create_entry():
-    """Create a mock entry for options tests."""
+async def test_options_flow_non_mapping_section(hass) -> None:
+    """Options flow should handle non-mapping operating_times input."""
 
-    return MockConfigEntry(
-        domain=DOMAIN,
-        data={
-            CONF_PROVIDER_ID: "dvsportal",
-            CONF_MUNICIPALITY: "Apeldoorn",
-            CONF_PERMIT_ID: "PERMIT1",
-            CONF_USERNAME: "user",
-            CONF_PASSWORD: "pass",
+    entry = _create_entry()
+    entry.add_to_hass(hass)
+    flow = CityVisitorParkingOptionsFlow(entry)
+    flow.hass = hass
+    result = await flow.async_step_init(
+        {
+            CONF_AUTO_END: False,
+            "operating_times": "invalid",
+        }
+    )
+
+    assert result["type"] == "create_entry"
+    assert result["data"][CONF_OPERATING_TIME_OVERRIDES] == {}
+
+
+async def test_options_flow_clears_description(hass) -> None:
+    """Options flow should clear the description when blank."""
+
+    entry = _create_entry(description="Home", title="Home - PERMIT1")
+    entry.add_to_hass(hass)
+
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {
+            CONF_AUTO_END: False,
+            CONF_DESCRIPTION: " ",
+            "operating_times": {},
         },
     )
+
+    assert result["type"] == "create_entry"
+    assert CONF_DESCRIPTION not in entry.data
+    assert entry.title == "Apeldoorn - PERMIT1"
+
+
+async def test_options_flow_title_fallback(hass) -> None:
+    """Options flow should fall back to the existing title."""
+
+    entry = MockConfigEntry(domain=DOMAIN, data={}, title="Existing title")
+    entry.add_to_hass(hass)
+    flow = CityVisitorParkingOptionsFlow(entry)
+    flow.hass = hass
+
+    flow._update_description("New description")
+
+    assert entry.title == "Existing title"
+
+
+def _create_entry(description: str | None = None, title: str | None = None):
+    """Create a mock entry for options tests."""
+
+    data = {
+        CONF_PROVIDER_ID: "dvsportal",
+        CONF_MUNICIPALITY: "Apeldoorn",
+        CONF_PERMIT_ID: "PERMIT1",
+        CONF_USERNAME: "user",
+        CONF_PASSWORD: "pass",
+    }
+    if description is not None:
+        data[CONF_DESCRIPTION] = description
+
+    return MockConfigEntry(domain=DOMAIN, data=data, title=title or "Mock Title")

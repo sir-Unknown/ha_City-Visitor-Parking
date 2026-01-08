@@ -1,0 +1,161 @@
+"""Tests for City visitor parking setup."""
+
+from __future__ import annotations
+
+from unittest.mock import AsyncMock, Mock
+
+import pytest
+from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
+from homeassistant.exceptions import (
+    ConfigEntryAuthFailed,
+    ConfigEntryError,
+    ConfigEntryNotReady,
+)
+from pytest_homeassistant_custom_component.common import MockConfigEntry
+
+import custom_components.city_visitor_parking as init_module
+from custom_components.city_visitor_parking.const import (
+    CONF_MUNICIPALITY,
+    CONF_PERMIT_ID,
+    CONF_PROVIDER_ID,
+    DOMAIN,
+)
+
+
+async def test_async_setup_entry_auth_error(hass, monkeypatch, pv_library) -> None:
+    """Auth errors should raise ConfigEntryAuthFailed."""
+
+    entry = _create_entry()
+    entry.add_to_hass(hass)
+
+    provider = AsyncMock()
+    provider.login.side_effect = pv_library.AuthError
+    client = AsyncMock()
+    client.get_provider.return_value = provider
+
+    monkeypatch.setattr(
+        init_module, "async_create_client", AsyncMock(return_value=client)
+    )
+
+    with pytest.raises(ConfigEntryAuthFailed):
+        await init_module.async_setup_entry(hass, entry)
+
+
+async def test_async_setup_entry_network_error(hass, monkeypatch, pv_library) -> None:
+    """Network errors should raise ConfigEntryNotReady."""
+
+    entry = _create_entry()
+    entry.add_to_hass(hass)
+
+    provider = AsyncMock()
+    provider.login.side_effect = pv_library.NetworkError
+    client = AsyncMock()
+    client.get_provider.return_value = provider
+
+    monkeypatch.setattr(
+        init_module, "async_create_client", AsyncMock(return_value=client)
+    )
+
+    with pytest.raises(ConfigEntryNotReady):
+        await init_module.async_setup_entry(hass, entry)
+
+
+async def test_async_setup_entry_provider_error(hass, monkeypatch, pv_library) -> None:
+    """Provider errors should raise ConfigEntryError."""
+
+    entry = _create_entry()
+    entry.add_to_hass(hass)
+
+    provider = AsyncMock()
+    provider.login.side_effect = pv_library.ProviderError
+    client = AsyncMock()
+    client.get_provider.return_value = provider
+
+    monkeypatch.setattr(
+        init_module, "async_create_client", AsyncMock(return_value=client)
+    )
+
+    with pytest.raises(ConfigEntryError):
+        await init_module.async_setup_entry(hass, entry)
+
+
+async def test_register_frontend_assets(hass, monkeypatch) -> None:
+    """Frontend assets should register once when available."""
+
+    hass.config.components.add("frontend")
+    hass.http = AsyncMock()
+    add_extra_js = Mock()
+    monkeypatch.setattr(init_module, "add_extra_js_url", add_extra_js)
+
+    await init_module._async_register_frontend(hass)
+    await init_module._async_register_frontend(hass)
+
+    hass.http.async_register_static_paths.assert_awaited_once()
+    assert add_extra_js.call_count == 2
+    assert hass.data[DOMAIN]["frontend_registered"] is True
+
+
+def test_install_zone_validity_logging_wraps_provider() -> None:
+    """Zone validity mapping should be wrapped when available."""
+
+    calls: list[tuple[object, object | None]] = []
+
+    class Provider:
+        provider_id = "test"
+
+        def _map_zone_validity(
+            self, raw: object, *, fallback_zone: object | None = None
+        ) -> object:
+            calls.append((raw, fallback_zone))
+            return {"raw": raw, "fallback_zone": fallback_zone}
+
+    provider = Provider()
+    init_module._install_zone_validity_logging(provider)
+
+    result = provider._map_zone_validity(
+        [],
+        fallback_zone={"start_time": "2025-01-01T00:00:00", "end_time": "2025-01-02"},
+    )
+
+    assert result["fallback_zone"] is not None
+    assert calls
+
+
+def test_install_zone_validity_logging_without_fallback_param() -> None:
+    """Zone validity mapping should wrap providers without fallback support."""
+
+    calls: list[object] = []
+
+    class Provider:
+        provider_id = "test"
+
+        def _map_zone_validity(self, raw: object) -> object:
+            calls.append(raw)
+            return raw
+
+    provider = Provider()
+    init_module._install_zone_validity_logging(provider)
+
+    fallback = {"start_time": "2025-01-01T00:00:00", "end_time": "2025-01-02"}
+    assert provider._map_zone_validity(None, fallback_zone=fallback) is None
+    assert provider._map_zone_validity({"zone": "A"}, fallback_zone=fallback) == {
+        "zone": "A"
+    }
+    assert calls == [None, {"zone": "A"}]
+
+
+def _create_entry() -> MockConfigEntry:
+    """Create a mock entry for setup tests."""
+
+    return MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_PROVIDER_ID: "dvsportal",
+            CONF_MUNICIPALITY: "City",
+            CONF_PERMIT_ID: "permit",
+            CONF_USERNAME: "user",
+            CONF_PASSWORD: "pass",
+        },
+        unique_id="dvsportal:permit:city",
+        title="City - permit",
+    )
