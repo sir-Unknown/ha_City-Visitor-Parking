@@ -8,10 +8,18 @@ on:
     branches: [main]
     paths-ignore:
       - "**/*.md"
+      - "LICENSE"
+      - ".gitignore"
+      - ".github/dependabot.yml"
+      - "docs/**"
   pull_request:
     branches: [main]
     paths-ignore:
       - "**/*.md"
+      - "LICENSE"
+      - ".gitignore"
+      - ".github/dependabot.yml"
+      - "docs/**"
 
 concurrency:
   group: validate-${{ github.ref }}
