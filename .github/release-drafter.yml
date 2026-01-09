@@ -22,6 +22,4 @@ categories:
     labels:
       - "documentation"
 template: |
-  ## Changes
-
   $CHANGES
