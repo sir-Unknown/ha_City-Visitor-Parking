@@ -51,7 +51,7 @@ These give you a quick overview in Home Assistant:
 
 Optional dashboard card for quick actions.
 
-- Add the card as a Lovelace resource (required for hard refreshes): Settings → Dashboards → Resources, URL `/city_visitor_parking/city-visitor-parking-card.js?v=1`, type `Module`.
+- Resources are registered automatically in dashboard storage mode. If you use YAML mode, add the resources manually: Settings → Dashboards → Resources, URL `/city_visitor_parking/city-visitor-parking-card.js`, type `Module`, and `/city_visitor_parking/city-visitor-parking-active-card.js`, type `Module`.
 - Card type: `custom:city-visitor-parking-card`
 - Optional config: `title`, `icon`, `theme`, `config_entry_id`, `show_favorites`, `show_start_time`, `show_end_time`
 
@@ -106,7 +106,7 @@ City Visitor Parking helpt je om bezoekersparkeren van Nederlandse gemeenten dir
 
 Optionele dashboardkaart voor snelle acties.
 
-- Voeg de kaart toe als Lovelace resource (nodig bij hard refreshes): Instellingen → Dashboards → Resources, URL `/city_visitor_parking/city-visitor-parking-card.js?v=1`, type `Module`.
+- Resources worden automatisch geregistreerd in dashboard storage mode. Gebruik je YAML mode, voeg dan handmatig toe: Instellingen → Dashboards → Resources, URL `/city_visitor_parking/city-visitor-parking-card.js`, type `Module`, en `/city_visitor_parking/city-visitor-parking-active-card.js`, type `Module`.
 - Kaarttype: `custom:city-visitor-parking-card`
 - Optioneel: `title`, `icon`, `theme`, `config_entry_id`, `show_favorites`, `show_start_time`, `show_end_time`
 
