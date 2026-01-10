@@ -2,14 +2,16 @@
 
 ## Unreleased
 
-### Changed
+## Released
+
+### 0.1.2
+
+#### Changed
 
 - Updated the integration to use `pycityvisitorparking==0.5.14`.
 - Automatically register Lovelace resources for the dashboard cards to avoid manual setup and timing issues.
 - Ensure card editor translations are loaded before rendering configuration forms.
 - Reduce duplicated frontend card logic and backend helper utilities.
-
-## Released
 
 ### 0.1.1
 
