@@ -115,3 +115,47 @@ jobs:
 
       - name: Run pytest (with coverage)
         run: pytest --cov --cov-report=term-missing
+
+  frontend:
+    name: Frontend build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: [ruff]
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: custom_components/city_visitor_parking/frontend
+    steps:
+      - name: Checkout the repository
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+
+      - name: Set up Node.js
+        uses: actions/setup-node@4c56a39fc7e9c9fddc3a0f3b4bc8d43d4d4ff81c # v4.0.2
+        with:
+          node-version: "20"
+          cache: "yarn"
+          cache-dependency-path: custom_components/city_visitor_parking/frontend/yarn.lock
+
+      - name: Install frontend dependencies (locked)
+        if: ${{ hashFiles('custom_components/city_visitor_parking/frontend/yarn.lock') != '' }}
+        run: yarn install --non-interactive --frozen-lockfile
+
+      - name: Install frontend dependencies
+        if: ${{ hashFiles('custom_components/city_visitor_parking/frontend/yarn.lock') == '' }}
+        run: yarn install --non-interactive
+
+      - name: Clean frontend dist
+        run: rm -rf dist
+
+      - name: Build frontend
+        run: yarn build
+
+      - name: Lint frontend
+        run: yarn lint
+
+      - name: Type check frontend
+        run: yarn lint:types
+
+      - name: Test frontend
+        run: yarn test
