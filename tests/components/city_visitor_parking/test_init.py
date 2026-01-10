@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, Mock
+from unittest.mock import AsyncMock
 
 import pytest
 from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
@@ -84,14 +84,10 @@ async def test_register_frontend_assets(hass, monkeypatch) -> None:
 
     hass.config.components.add("frontend")
     hass.http = AsyncMock()
-    add_extra_js = Mock()
-    monkeypatch.setattr(init_module, "add_extra_js_url", add_extra_js)
-
-    await init_module._async_register_frontend(hass)
-    await init_module._async_register_frontend(hass)
+    await init_module._async_register_frontend(hass, "frontend")
+    await init_module._async_register_frontend(hass, "frontend")
 
     hass.http.async_register_static_paths.assert_awaited_once()
-    assert add_extra_js.call_count == 2
     assert hass.data[DOMAIN]["frontend_registered"] is True
 
 

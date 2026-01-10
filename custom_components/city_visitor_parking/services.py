@@ -16,7 +16,12 @@ from homeassistant.helpers import selector
 from homeassistant.util import dt as dt_util
 from homeassistant.util.json import JsonValueType
 from pycityvisitorparking import ProviderError
-from pycityvisitorparking.exceptions import PyCityVisitorParkingError
+from pycityvisitorparking.exceptions import (
+    AuthError,
+    NetworkError,
+    PyCityVisitorParkingError,
+    ValidationError,
+)
 
 from .const import (
     ATTR_END_TIME,
@@ -25,9 +30,11 @@ from .const import (
     ATTR_NAME,
     ATTR_RESERVATION_ID,
     ATTR_START_TIME,
+    CONF_PERMIT_ID,
     DOMAIN,
     LOGGER,
 )
+from .helpers import get_attr
 from .models import CityVisitorParkingRuntimeData, Favorite, Reservation
 
 SERVICE_START_RESERVATION = "start_reservation"
@@ -42,6 +49,80 @@ SERVICE_LIST_FAVORITES = "list_favorites"
 DEVICE_SELECTOR = selector.DeviceSelector(
     selector.DeviceSelectorConfig(integration=DOMAIN)
 )
+
+
+def _error_detail(err: PyCityVisitorParkingError) -> str | None:
+    """Return a safe, user-facing detail message when available."""
+    user_message = getattr(err, "user_message", None)
+    if isinstance(user_message, str) and user_message:
+        return user_message
+    detail = getattr(err, "detail", None)
+    if isinstance(detail, str) and detail:
+        return detail
+    return None
+
+
+def _error_base_key(err: PyCityVisitorParkingError, prefix: str) -> str:
+    """Return the base translation key for a failed provider operation."""
+    error_code = getattr(err, "error_code", None)
+    if error_code == "auth_error":
+        suffix = "auth_failed"
+    elif error_code == "network_error":
+        suffix = "network_failed"
+    elif error_code == "validation_error":
+        suffix = "validation_failed"
+    elif error_code == "provider_error":
+        suffix = "provider_failed"
+    elif isinstance(err, AuthError):
+        suffix = "auth_failed"
+    elif isinstance(err, NetworkError):
+        suffix = "network_failed"
+    elif isinstance(err, ValidationError):
+        suffix = "validation_failed"
+    elif isinstance(err, ProviderError):
+        suffix = "provider_failed"
+    else:
+        suffix = "operation_failed"
+    return f"{prefix}_{suffix}"
+
+
+def _reservation_error_key(err: PyCityVisitorParkingError, detail_present: bool) -> str:
+    """Return the translation key for a reservation failure."""
+    base_key = _error_base_key(err, "reservation")
+    if detail_present:
+        return f"{base_key}_detail"
+    return base_key
+
+
+def _favorite_error_key(err: PyCityVisitorParkingError, detail_present: bool) -> str:
+    """Return the translation key for a favorite failure."""
+    base_key = _error_base_key(err, "favorite")
+    if detail_present:
+        return f"{base_key}_detail"
+    return base_key
+
+
+def _raise_reservation_error(err: PyCityVisitorParkingError) -> None:
+    """Raise a translated Home Assistant error for reservation failures."""
+    detail = _error_detail(err)
+    LOGGER.debug("Reservation request failed: %s: %s", type(err).__name__, err)
+    raise HomeAssistantError(
+        translation_domain=DOMAIN,
+        translation_key=_reservation_error_key(err, detail is not None),
+        translation_placeholders={"detail": detail} if detail else None,
+    ) from err
+
+
+def _raise_favorite_error(err: PyCityVisitorParkingError) -> None:
+    """Raise a translated Home Assistant error for favorite failures."""
+    detail = _error_detail(err)
+    LOGGER.debug("Favorite request failed: %s: %s", type(err).__name__, err)
+    raise HomeAssistantError(
+        translation_domain=DOMAIN,
+        translation_key=_favorite_error_key(err, detail is not None),
+        translation_placeholders={"detail": detail} if detail else None,
+    ) from err
+
 
 SERVICE_START_SCHEMA = vol.Schema(
     {
@@ -199,11 +280,7 @@ async def _async_handle_start_reservation(call: ServiceCall) -> None:
             end_time=end,
         )
     except PyCityVisitorParkingError as err:
-        LOGGER.debug("Reservation start failed: %s: %s", type(err).__name__, err)
-        raise HomeAssistantError(
-            translation_domain=DOMAIN,
-            translation_key="reservation_operation_failed",
-        ) from err
+        _raise_reservation_error(err)
     else:
         LOGGER.debug(
             "Reservation start requested for device %s (start=%s end=%s)",
@@ -226,9 +303,9 @@ async def _async_handle_update_reservation(call: ServiceCall) -> None:
             translation_key="update_requires_changes",
         )
 
-    start_dt = _as_utc(start) if start else None
-    end_dt = _as_utc(end) if end else None
-    if start_dt and end_dt and end_dt <= start_dt:
+    start_dt_raw = _as_utc(start) if start else None
+    end_dt_raw = _as_utc(end) if end else None
+    if start_dt_raw and end_dt_raw and end_dt_raw <= start_dt_raw:
         raise ServiceValidationError(
             translation_domain=DOMAIN,
             translation_key="end_before_start",
@@ -238,24 +315,45 @@ async def _async_handle_update_reservation(call: ServiceCall) -> None:
         await _fallback_update_reservation(
             runtime,
             call.data[ATTR_RESERVATION_ID],
-            start_dt,
-            end_dt,
+            start_dt_raw,
+            end_dt_raw,
             license_plate,
         )
         return
 
-    try:
-        await runtime.provider.update_reservation(
-            reservation_id=call.data[ATTR_RESERVATION_ID],
-            start_time=start_dt,
-            end_time=end_dt,
+    update_fields = set(_reservation_update_fields(runtime))
+    allow_start = ATTR_START_TIME in update_fields
+    allow_end = ATTR_END_TIME in update_fields
+    start_dt = start_dt_raw if start_dt_raw and allow_start else None
+    end_dt = end_dt_raw if end_dt_raw and allow_end else None
+    if start is not None and not allow_start:
+        LOGGER.debug(
+            "Ignoring start_time update for device %s (unsupported by provider)",
+            call.data[ATTR_DEVICE_ID],
         )
+    if end is not None and not allow_end:
+        LOGGER.debug(
+            "Ignoring end_time update for device %s (unsupported by provider)",
+            call.data[ATTR_DEVICE_ID],
+        )
+    if start_dt is None and end_dt is None:
+        raise ServiceValidationError(
+            translation_domain=DOMAIN,
+            translation_key="update_requires_changes",
+        )
+
+    try:
+        update_payload: dict[str, object] = {
+            "reservation_id": call.data[ATTR_RESERVATION_ID]
+        }
+        if start_dt is not None:
+            update_payload["start_time"] = start_dt
+        if end_dt is not None:
+            update_payload["end_time"] = end_dt
+        await runtime.provider.update_reservation(**update_payload)
     except (NotImplementedError, ProviderError) as err:
         if isinstance(err, ProviderError) and not _is_not_supported(err):
-            raise HomeAssistantError(
-                translation_domain=DOMAIN,
-                translation_key="reservation_operation_failed",
-            ) from err
+            _raise_reservation_error(err)
         await _fallback_update_reservation(
             runtime,
             call.data[ATTR_RESERVATION_ID],
@@ -264,10 +362,7 @@ async def _async_handle_update_reservation(call: ServiceCall) -> None:
             license_plate,
         )
     except PyCityVisitorParkingError as err:
-        raise HomeAssistantError(
-            translation_domain=DOMAIN,
-            translation_key="reservation_operation_failed",
-        ) from err
+        _raise_reservation_error(err)
     else:
         LOGGER.debug(
             "Reservation update requested for device %s reservation %s "
@@ -290,10 +385,7 @@ async def _async_handle_end_reservation(call: ServiceCall) -> None:
             dt_util.utcnow(),
         )
     except PyCityVisitorParkingError as err:
-        raise HomeAssistantError(
-            translation_domain=DOMAIN,
-            translation_key="reservation_operation_failed",
-        ) from err
+        _raise_reservation_error(err)
     else:
         LOGGER.debug(
             "Reservation end requested for device %s reservation %s",
@@ -308,15 +400,10 @@ async def _async_handle_add_favorite(call: ServiceCall) -> None:
     runtime = _runtime_from_call(call)
     name = call.data.get(ATTR_NAME)
     try:
-        if name is None:
-            await runtime.provider.add_favorite(
-                license_plate=call.data[ATTR_LICENSE_PLATE],
-            )
-        else:
-            await runtime.provider.add_favorite(
-                license_plate=call.data[ATTR_LICENSE_PLATE],
-                name=name,
-            )
+        payload: dict[str, str] = {ATTR_LICENSE_PLATE: call.data[ATTR_LICENSE_PLATE]}
+        if name is not None:
+            payload[ATTR_NAME] = name
+        await runtime.provider.add_favorite(**payload)
     except (TypeError, PyCityVisitorParkingError) as err:
         LOGGER.debug(
             "Add favorite failed for device %s: %s: %s",
@@ -324,10 +411,7 @@ async def _async_handle_add_favorite(call: ServiceCall) -> None:
             type(err).__name__,
             err,
         )
-        raise HomeAssistantError(
-            translation_domain=DOMAIN,
-            translation_key="favorite_operation_failed",
-        ) from err
+        _raise_favorite_error(err)
 
 
 async def _async_handle_update_favorite(call: ServiceCall) -> None:
@@ -343,18 +427,15 @@ async def _async_handle_update_favorite(call: ServiceCall) -> None:
         )
 
     try:
-        update_data: dict[str, str] = {"favorite_id": call.data[ATTR_FAVORITE_ID]}
+        update_data: dict[str, str] = {ATTR_FAVORITE_ID: call.data[ATTR_FAVORITE_ID]}
         if license_plate is not None:
-            update_data["license_plate"] = license_plate
+            update_data[ATTR_LICENSE_PLATE] = license_plate
         if name is not None:
-            update_data["name"] = name
+            update_data[ATTR_NAME] = name
         await runtime.provider.update_favorite(**update_data)
     except (NotImplementedError, ProviderError) as err:
         if isinstance(err, ProviderError) and not _is_not_supported(err):
-            raise HomeAssistantError(
-                translation_domain=DOMAIN,
-                translation_key="favorite_operation_failed",
-            ) from err
+            _raise_favorite_error(err)
         await _fallback_update_favorite(
             runtime, call.data[ATTR_FAVORITE_ID], license_plate, name
         )
@@ -366,10 +447,7 @@ async def _async_handle_update_favorite(call: ServiceCall) -> None:
             type(err).__name__,
             err,
         )
-        raise HomeAssistantError(
-            translation_domain=DOMAIN,
-            translation_key="favorite_operation_failed",
-        ) from err
+        _raise_favorite_error(err)
 
 
 async def _async_handle_remove_favorite(call: ServiceCall) -> None:
@@ -383,10 +461,7 @@ async def _async_handle_remove_favorite(call: ServiceCall) -> None:
         LOGGER.debug("Removed favorite for device %s", call.data[ATTR_DEVICE_ID])
     except PyCityVisitorParkingError as err:
         LOGGER.warning("Failed to remove favorite (%s)", err.__class__.__name__)
-        raise HomeAssistantError(
-            translation_domain=DOMAIN,
-            translation_key="favorite_operation_failed",
-        ) from err
+        _raise_favorite_error(err)
 
 
 async def _async_handle_list_active_reservations(
@@ -396,11 +471,7 @@ async def _async_handle_list_active_reservations(
 
     runtime = _runtime_from_call(call)
     request_started = time.perf_counter()
-    update_fields = getattr(runtime.provider, "reservation_update_fields", None)
-    if update_fields is None:
-        reservation_update_fields = ["start_time", "end_time"]
-    else:
-        reservation_update_fields = [str(field) for field in update_fields]
+    reservation_update_fields = _reservation_update_fields(runtime)
     stale = False
     try:
         await runtime.coordinator.async_refresh()
@@ -452,9 +523,10 @@ async def _async_handle_list_active_reservations(
         if favorite.license_plate
     }
     LOGGER.debug(
-        "Active reservations response for device %s: %s active, %s future of %s "
+        "Active reservations response for %s (permit %s): %s active, %s future of %s "
         "(duration=%.3fs)",
-        call.data[ATTR_DEVICE_ID],
+        runtime.coordinator.config_entry.title,
+        runtime.permit_id,
         len(active),
         len(future),
         len(reservations),
@@ -484,30 +556,28 @@ async def _async_handle_list_favorites(call: ServiceCall) -> dict[str, JsonValue
     try:
         favorites = await runtime.provider.list_favorites()
     except PyCityVisitorParkingError as err:
-        raise HomeAssistantError(
-            translation_domain=DOMAIN,
-            translation_key="favorite_operation_failed",
-        ) from err
+        _raise_favorite_error(err)
 
     normalized: list[JsonValueType] = []
     for favorite in favorites or []:
-        favorite_id = _get_attr(favorite, "id")
-        license_plate = _get_attr(favorite, "license_plate")
-        name = _get_attr(favorite, "name")
+        favorite_id = get_attr(favorite, "id")
+        license_plate = get_attr(favorite, "license_plate")
+        name = get_attr(favorite, "name")
         if favorite_id is None and license_plate is None:
             continue
         payload: dict[str, JsonValueType] = {
-            "favorite_id": str(favorite_id) if favorite_id is not None else "",
+            ATTR_FAVORITE_ID: str(favorite_id) if favorite_id is not None else "",
         }
         if license_plate is not None:
-            payload["license_plate"] = str(license_plate)
+            payload[ATTR_LICENSE_PLATE] = str(license_plate)
         if name is not None:
-            payload["name"] = str(name)
+            payload[ATTR_NAME] = str(name)
         normalized.append(payload)
 
     LOGGER.debug(
-        "List favorites response for device %s: %s favorites",
-        call.data[ATTR_DEVICE_ID],
+        "List favorites response for %s (permit %s): %s favorites",
+        runtime.coordinator.config_entry.title,
+        runtime.permit_id,
         len(normalized),
     )
     return {"count": len(normalized), "favorites": normalized}
@@ -554,10 +624,7 @@ async def _fallback_update_reservation(
             type(err).__name__,
             err,
         )
-        raise HomeAssistantError(
-            translation_domain=DOMAIN,
-            translation_key="reservation_operation_failed",
-        ) from err
+        _raise_reservation_error(err)
     else:
         LOGGER.debug("Fallback reservation update succeeded for %s", reservation_id)
 
@@ -601,10 +668,7 @@ async def _fallback_update_favorite(
             type(err).__name__,
             err,
         )
-        raise HomeAssistantError(
-            translation_domain=DOMAIN,
-            translation_key="favorite_operation_failed",
-        ) from err
+        _raise_favorite_error(err)
     else:
         LOGGER.debug("Fallback favorite update succeeded for %s", favorite_id)
 
@@ -613,33 +677,35 @@ def _runtime_from_call(call: ServiceCall) -> CityVisitorParkingRuntimeData:
     """Resolve runtime data from a service call."""
 
     hass: HomeAssistant = call.hass
-    LOGGER.debug(
-        "Resolving runtime for device %s (data keys=%s)",
-        call.data.get(ATTR_DEVICE_ID),
-        list(call.data),
-    )
     device_registry = dr.async_get(hass)
     device = device_registry.async_get(call.data[ATTR_DEVICE_ID])
     if device is None or not device.config_entries:
-        raise ServiceValidationError(
-            translation_domain=DOMAIN,
-            translation_key="invalid_target",
-        )
+        _raise_invalid_target()
 
     entry_id = next(iter(device.config_entries))
     entry = hass.config_entries.async_get_entry(entry_id)
     if entry is None or entry.domain != DOMAIN:
-        raise ServiceValidationError(
-            translation_domain=DOMAIN,
-            translation_key="invalid_target",
-        )
+        _raise_invalid_target()
     if entry.state is not config_entries.ConfigEntryState.LOADED:
-        raise ServiceValidationError(
-            translation_domain=DOMAIN,
-            translation_key="invalid_target",
-        )
+        _raise_invalid_target()
 
+    LOGGER.debug(
+        "Resolved runtime for %s (permit %s) from device %s (data keys=%s)",
+        entry.title,
+        entry.data.get(CONF_PERMIT_ID),
+        call.data.get(ATTR_DEVICE_ID),
+        list(call.data),
+    )
     return entry.runtime_data
+
+
+def _raise_invalid_target() -> None:
+    """Raise when a service call targets an invalid entry."""
+
+    raise ServiceValidationError(
+        translation_domain=DOMAIN,
+        translation_key="invalid_target",
+    )
 
 
 def _as_utc(value: datetime) -> datetime:
@@ -663,14 +729,6 @@ def _is_not_supported(err: ProviderError) -> bool:
     return "not supported" in message or "unsupported" in message
 
 
-def _get_attr(obj: object, name: str) -> object | None:
-    """Return attribute or mapping value for name."""
-
-    if isinstance(obj, dict):
-        return obj.get(name)
-    return getattr(obj, name, None)
-
-
 def _normalize_plate(value: str | None) -> str:
     """Normalize a license plate for matching."""
 
@@ -685,18 +743,29 @@ def _reservation_payload(
     """Build reservation response payload with favorite metadata."""
 
     payload: dict[str, JsonValueType] = {
-        "reservation_id": reservation.reservation_id,
-        "start_time": _format_timestamp(reservation.start_time),
-        "end_time": _format_timestamp(reservation.end_time),
+        ATTR_RESERVATION_ID: reservation.reservation_id,
+        ATTR_START_TIME: _format_timestamp(reservation.start_time),
+        ATTR_END_TIME: _format_timestamp(reservation.end_time),
     }
 
     license_plate = reservation.license_plate
     plate = _normalize_plate(license_plate)
     if plate and license_plate is not None:
-        payload["license_plate"] = license_plate
+        payload[ATTR_LICENSE_PLATE] = license_plate
         favorite = favorite_by_plate.get(plate)
         if favorite is not None:
-            payload["favorite_id"] = favorite.favorite_id
+            payload[ATTR_FAVORITE_ID] = favorite.favorite_id
             if favorite.name:
                 payload["favorite_name"] = favorite.name
     return payload
+
+
+def _reservation_update_fields(
+    runtime: CityVisitorParkingRuntimeData,
+) -> list[str]:
+    """Return normalized reservation update fields for a provider."""
+
+    update_fields = getattr(runtime.provider, "reservation_update_fields", None)
+    if update_fields is None:
+        return []
+    return [str(field) for field in update_fields]

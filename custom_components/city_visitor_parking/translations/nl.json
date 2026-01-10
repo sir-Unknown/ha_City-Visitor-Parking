@@ -244,14 +244,102 @@
     "reservation_operation_failed": {
       "message": "De reservering-aanvraag is mislukt. Probeer het later opnieuw."
     },
+    "reservation_auth_failed": {
+      "message": "Inloggen mislukt. Authenticeer opnieuw en probeer het nog eens."
+    },
+    "reservation_auth_failed_detail": {
+      "message": "Inloggen mislukt: {detail}"
+    },
+    "reservation_network_failed": {
+      "message": "Kan de parkeeraanbieder niet bereiken. Controleer je netwerk en probeer het opnieuw."
+    },
+    "reservation_network_failed_detail": {
+      "message": "Kan de parkeeraanbieder niet bereiken: {detail}"
+    },
+    "reservation_validation_failed": {
+      "message": "De aanbieder heeft de aanvraag afgewezen. Controleer de tijden en het kenteken."
+    },
+    "reservation_validation_failed_detail": {
+      "message": "De aanbieder heeft de aanvraag afgewezen: {detail}"
+    },
+    "reservation_provider_failed": {
+      "message": "De aanbieder gaf een fout terug. Probeer het later opnieuw."
+    },
+    "reservation_provider_failed_detail": {
+      "message": "De aanbieder gaf een fout terug: {detail}"
+    },
+    "reservation_operation_failed_detail": {
+      "message": "De reserveringsaanvraag is mislukt: {detail}"
+    },
     "favorite_operation_failed": {
       "message": "De favoriet-aanvraag is mislukt. Probeer het later opnieuw."
+    },
+    "favorite_auth_failed": {
+      "message": "Inloggen mislukt. Authenticeer opnieuw en probeer het nog eens."
+    },
+    "favorite_auth_failed_detail": {
+      "message": "Inloggen mislukt: {detail}"
+    },
+    "favorite_network_failed": {
+      "message": "Kan de parkeeraanbieder niet bereiken. Controleer je netwerk en probeer het opnieuw."
+    },
+    "favorite_network_failed_detail": {
+      "message": "Kan de parkeeraanbieder niet bereiken: {detail}"
+    },
+    "favorite_validation_failed": {
+      "message": "De aanbieder heeft de aanvraag afgewezen. Controleer het kenteken."
+    },
+    "favorite_validation_failed_detail": {
+      "message": "De aanbieder heeft de aanvraag afgewezen: {detail}"
+    },
+    "favorite_provider_failed": {
+      "message": "De aanbieder gaf een fout terug. Probeer het later opnieuw."
+    },
+    "favorite_provider_failed_detail": {
+      "message": "De aanbieder gaf een fout terug: {detail}"
+    },
+    "favorite_operation_failed_detail": {
+      "message": "De favoriet-aanvraag is mislukt: {detail}"
     },
     "invalid_target": {
       "message": "Het gekozen apparaat is niet beschikbaar."
     }
   },
   "card": {
+    "name": "Bezoekersparkeren",
+    "description": "Start een bezoekersparkeerreservering.",
+    "active_name": "Bezoekersparkeren actief",
+    "active_description": "Toon actieve bezoekersparkeerreserveringen.",
+    "editor": {
+      "field": {
+        "config_entry": "Vergunning",
+        "title": "Titel",
+        "icon": "Pictogram",
+        "show_favorites": "Toon favorieten",
+        "show_start_time": "Toon starttijd",
+        "show_end_time": "Toon eindtijd"
+      },
+      "description": {
+        "config_entry": "Optioneel. Kies een vergunning om de kaart te koppelen. Laat leeg om een keuzeveld te tonen.",
+        "title": "Optioneel. Aangepaste titel bovenaan de kaart.",
+        "icon": "Optioneel. Pictogram naast de titel.",
+        "show_favorites": "Toon de favorietenkeuze in het reserveringsformulier.",
+        "show_start_time": "Sta het kiezen van een starttijd toe in het reserveringsformulier.",
+        "show_end_time": "Sta het kiezen van een eindtijd toe in het reserveringsformulier."
+      }
+    },
+    "active_editor": {
+      "field": {
+        "config_entry": "Vergunning",
+        "title": "Titel",
+        "icon": "Pictogram"
+      },
+      "description": {
+        "config_entry": "Optioneel. Beperk de lijst tot een vergunning. Laat leeg om alle vergunningen te tonen.",
+        "title": "Optioneel. Aangepaste titel bovenaan de kaart.",
+        "icon": "Optioneel. Pictogram naast de titel."
+      }
+    },
     "field": {
       "permit": "Vergunning",
       "favorite": "Favoriet",
@@ -275,6 +363,7 @@
       "active_reservations": "Actieve reserveringen"
     },
     "message": {
+      "invalid_config": "Ongeldige kaartconfiguratie.",
       "select_favorite": "Selecteer een favoriet",
       "loading_favorites": "Favorieten laden",
       "loading_active_reservations": "Actieve reserveringen laden",

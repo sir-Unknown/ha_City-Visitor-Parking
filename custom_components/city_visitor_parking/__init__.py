@@ -8,10 +8,15 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Protocol, cast
 
-from homeassistant.components.frontend import add_extra_js_url
 from homeassistant.components.http import StaticPathConfig
+from homeassistant.components.lovelace.const import (
+    CONF_RESOURCE_TYPE_WS,
+    CONF_URL,
+    LOVELACE_DATA,
+)
+from homeassistant.components.lovelace.resources import ResourceStorageCollection
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
+from homeassistant.const import CONF_ID, CONF_PASSWORD, CONF_TYPE, CONF_USERNAME
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import (
     ConfigEntryAuthFailed,
@@ -20,6 +25,7 @@ from homeassistant.exceptions import (
 )
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.typing import ConfigType
+from homeassistant.setup import async_when_setup
 from pycityvisitorparking import AuthError, NetworkError
 from pycityvisitorparking.exceptions import PyCityVisitorParkingError
 
@@ -47,7 +53,8 @@ CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     """Set up the City visitor parking integration."""
 
-    await _async_register_frontend(hass)
+    async_when_setup(hass, "frontend", _async_register_frontend)
+    async_when_setup(hass, "lovelace", _async_register_lovelace_resources)
     _LOGGER.debug("Setting up services and websocket API")
     await async_setup_services(hass)
     await async_setup_websocket(hass)
@@ -57,10 +64,9 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up City visitor parking from a config entry."""
 
-    await _async_register_frontend(hass)
     _LOGGER.debug(
         "Initializing config entry %s for provider=%s permit=%s",
-        entry.entry_id,
+        entry.title,
         entry.data.get(CONF_PROVIDER_ID),
         entry.data.get(CONF_PERMIT_ID),
     )
@@ -93,8 +99,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         raise ConfigEntryError from err
     finally:
         _LOGGER.debug(
-            "Provider login duration for %s: %.3fs",
-            entry.entry_id,
+            "Provider login duration for %s (permit %s): %.3fs",
+            entry.title,
+            entry.data.get(CONF_PERMIT_ID),
             time.perf_counter() - login_started,
         )
 
@@ -109,8 +116,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     refresh_started = time.perf_counter()
     await coordinator.async_config_entry_first_refresh()
     _LOGGER.debug(
-        "Initial coordinator refresh duration for %s: %.3fs",
-        entry.entry_id,
+        "Initial coordinator refresh duration for %s (permit %s): %.3fs",
+        entry.title,
+        entry.data.get(CONF_PERMIT_ID),
         time.perf_counter() - refresh_started,
     )
 
@@ -187,15 +195,15 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
 
 
-async def _async_register_frontend(hass: HomeAssistant) -> None:
+async def _async_register_frontend(hass: HomeAssistant, _component: str) -> None:
     """Register the frontend assets once."""
 
     data = hass.data.setdefault(DOMAIN, {})
     if data.get("frontend_registered"):
         return
 
-    if hass.http is None or "frontend" not in hass.config.components:
-        _LOGGER.debug("Frontend is not available, skipping static assets")
+    if hass.http is None:
+        _LOGGER.debug("HTTP is not available, skipping static assets")
         return
 
     await hass.http.async_register_static_paths(
@@ -204,15 +212,78 @@ async def _async_register_frontend(hass: HomeAssistant) -> None:
                 url_path="/city_visitor_parking",
                 path=str(Path(__file__).parent / "frontend" / "dist"),
                 cache_headers=False,
-            )
+            ),
+            StaticPathConfig(
+                url_path="/city_visitor_parking/translations",
+                path=str(Path(__file__).parent / "frontend" / "dist" / "translations"),
+                cache_headers=False,
+            ),
         ]
     )
-    add_extra_js_url(
-        hass,
-        "/city_visitor_parking/city-visitor-parking-card.js",
-    )
-    add_extra_js_url(
-        hass,
-        "/city_visitor_parking/city-visitor-parking-active-card.js",
-    )
     data["frontend_registered"] = True
+
+
+async def _async_register_lovelace_resources(
+    hass: HomeAssistant, _component: str
+) -> None:
+    """Ensure the Lovelace resources exist for the cards."""
+
+    data = hass.data.setdefault(DOMAIN, {})
+    if data.get("lovelace_resources_registered") or hass.config.safe_mode:
+        return
+
+    lovelace_data = hass.data.get(LOVELACE_DATA)
+    if lovelace_data is None:
+        return
+
+    resources = lovelace_data.resources
+    if not isinstance(resources, ResourceStorageCollection):
+        _LOGGER.debug("Lovelace resources are not storage-based, skipping")
+        data["lovelace_resources_registered"] = True
+        return
+
+    if not resources.loaded:
+        await resources.async_load()
+        resources.loaded = True
+
+    dist_path = Path(__file__).parent / "frontend" / "dist"
+    desired_files = [
+        "city-visitor-parking-card.js",
+        "city-visitor-parking-active-card.js",
+    ]
+    desired_urls: dict[str, str] = {}
+    for filename in desired_files:
+        base_url = f"/city_visitor_parking/{filename}"
+        try:
+            version = int((dist_path / filename).stat().st_mtime)
+            desired_urls[base_url] = f"{base_url}?v={version}"
+        except FileNotFoundError:
+            desired_urls[base_url] = base_url
+
+    items = resources.async_items()
+    seen: set[str] = set()
+    for item in items:
+        item_url = item.get(CONF_URL)
+        if not isinstance(item_url, str):
+            continue
+        base_url = item_url.split("?", 1)[0]
+        desired_url = desired_urls.get(base_url)
+        if not desired_url:
+            continue
+        seen.add(base_url)
+        updates: dict[str, str] = {}
+        if item_url != desired_url:
+            updates[CONF_URL] = desired_url
+        if item.get(CONF_TYPE) != "module":
+            updates[CONF_RESOURCE_TYPE_WS] = "module"
+        if updates:
+            await resources.async_update_item(item[CONF_ID], updates)
+
+    for base_url, url in desired_urls.items():
+        if base_url in seen:
+            continue
+        await resources.async_create_item(
+            {CONF_RESOURCE_TYPE_WS: "module", CONF_URL: url}
+        )
+
+    data["lovelace_resources_registered"] = True

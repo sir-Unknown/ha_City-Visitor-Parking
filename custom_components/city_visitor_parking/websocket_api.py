@@ -19,6 +19,7 @@ else:
     ProviderFavorite = object
 
 from .const import DOMAIN, LOGGER
+from .helpers import get_attr
 from .models import CityVisitorParkingRuntimeData
 
 WEBSOCKET_LIST_FAVORITES = "city_visitor_parking/favorites"
@@ -65,8 +66,10 @@ async def _ws_list_favorites(
 
     connection.send_result(msg_id, {"favorites": _normalize_favorites(favorites)})
     LOGGER.debug(
-        "Favorites websocket response for entry %s: %s favorites (duration=%.3fs)",
-        entry_id,
+        "Favorites websocket response for %s (permit %s): %s favorites "
+        "(duration=%.3fs)",
+        entry.title,
+        runtime.permit_id,
         len(favorites or []),
         time.perf_counter() - request_started,
     )
@@ -79,9 +82,9 @@ def _normalize_favorites(
 
     normalized: list[dict[str, str]] = []
     for favorite in favorites or []:
-        favorite_id = _get_attr(favorite, "id")
-        license_plate = _get_attr(favorite, "license_plate")
-        name = _get_attr(favorite, "name")
+        favorite_id = get_attr(favorite, "id")
+        license_plate = get_attr(favorite, "license_plate")
+        name = get_attr(favorite, "name")
         if favorite_id is None and license_plate is None:
             continue
 
@@ -95,11 +98,3 @@ def _normalize_favorites(
         normalized.append(payload)
 
     return normalized
-
-
-def _get_attr(obj: object, name: str) -> object | None:
-    """Return attribute or mapping value for name."""
-
-    if isinstance(obj, dict):
-        return obj.get(name)
-    return getattr(obj, name, None)

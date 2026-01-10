@@ -23,14 +23,16 @@ from custom_components.city_visitor_parking.coordinator import (
     _as_time,
     _as_utc_datetime,
     _compute_zone_availability,
-    _get_attr,
     _normalize_favorites,
-    _normalize_override_windows,
     _normalize_remaining_minutes,
     _normalize_reservations,
     _normalize_zone_validity,
     _should_attempt_auto_end,
     _windows_for_today,
+)
+from custom_components.city_visitor_parking.helpers import (
+    get_attr,
+    normalize_override_windows,
 )
 from custom_components.city_visitor_parking.models import (
     AutoEndState,
@@ -415,8 +417,8 @@ def test_override_helpers() -> None:
     assert _as_time("08:00") is not None
     assert _as_time(time(9, 0)) == time(9, 0)
     assert _as_time(123) is None
-    assert _normalize_override_windows({"start": "08:00", "end": "09:00"})
-    assert _get_attr(SimpleNamespace(name="test"), "name") == "test"
+    assert normalize_override_windows({"start": "08:00", "end": "09:00"})
+    assert get_attr(SimpleNamespace(name="test"), "name") == "test"
 
 
 def test_compute_zone_availability_next_change() -> None:

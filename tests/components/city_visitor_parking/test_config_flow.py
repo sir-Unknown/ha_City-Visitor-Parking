@@ -17,8 +17,6 @@ from custom_components.city_visitor_parking.config_flow import (
     _day_windows_key,
     _format_override_windows,
     _format_time,
-    _get_attr,
-    _normalize_override_windows,
     _parse_time,
     _parse_time_windows,
 )
@@ -28,6 +26,10 @@ from custom_components.city_visitor_parking.const import (
     CONF_PERMIT_ID,
     CONF_PROVIDER_ID,
     DOMAIN,
+)
+from custom_components.city_visitor_parking.helpers import (
+    get_attr,
+    normalize_override_windows,
 )
 from custom_components.city_visitor_parking.models import ProviderConfig
 
@@ -418,14 +420,14 @@ def test_override_helper_parsing() -> None:
     ]
     assert _format_override_windows({"start": "09:00", "end": "10:00"}) == "09:00-10:00"
     assert _format_override_windows([{"start": "09:00"}]) == ""
-    assert _normalize_override_windows([]) == []
+    assert normalize_override_windows([]) == []
     assert _day_windows_key("mon") == "monday_chargeable_windows"
     assert _parse_time(time(8, 0)) == time(8, 0)
     assert _parse_time("08:00") is not None
     assert _parse_time("") is None
     assert _format_time(None) is None
-    assert _get_attr({"name": "test"}, "name") == "test"
-    assert _get_attr(SimpleNamespace(name="attr"), "name") == "attr"
+    assert get_attr({"name": "test"}, "name") == "test"
+    assert get_attr(SimpleNamespace(name="attr"), "name") == "attr"
 
     errors.clear()
     assert _parse_time_windows("invalid", errors) == []

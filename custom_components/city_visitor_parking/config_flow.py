@@ -35,6 +35,7 @@ from .const import (
     LOGGER,
     WEEKDAY_KEYS,
 )
+from .helpers import get_attr, normalize_override_windows
 from .models import ProviderConfig
 
 OTHER_OPTION = "other"
@@ -326,10 +327,10 @@ class CityVisitorParkingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             errors["base"] = "unknown"
             return []
 
-        permit_id = _get_attr(permit, "permit_id") or _get_attr(permit, "id")
+        permit_id = get_attr(permit, "permit_id") or get_attr(permit, "id")
         choices = []
         if permit_id:
-            label = _get_attr(permit, "name") or _get_attr(permit, "label") or permit_id
+            label = get_attr(permit, "name") or get_attr(permit, "label") or permit_id
             choices = [
                 PermitChoice(
                     permit_id=str(permit_id),
@@ -537,7 +538,7 @@ def _format_time(value: time | None) -> str | None:
 def _format_override_windows(value: object) -> str:
     """Format overrides into a comma-separated string."""
 
-    windows = _normalize_override_windows(value)
+    windows = normalize_override_windows(value)
     if not windows:
         return ""
     formatted: list[str] = []
@@ -589,25 +590,7 @@ def _parse_time_windows(value: object, errors: dict[str, str]) -> list[dict[str,
     return windows
 
 
-def _normalize_override_windows(value: object) -> list[dict[str, str]]:
-    """Normalize override data to a list of window dicts."""
-
-    if isinstance(value, list):
-        return [window for window in value if isinstance(window, dict)]
-    if isinstance(value, dict) and "start" in value and "end" in value:
-        return [value]
-    return []
-
-
 def _day_windows_key(day: str) -> str:
     """Return the field key for a weekday's window input."""
 
     return f"{WEEKDAY_LABELS[day]}_chargeable_windows"
-
-
-def _get_attr(obj: object, name: str) -> object | None:
-    """Return attribute or mapping value for name."""
-
-    if isinstance(obj, dict):
-        return obj.get(name)
-    return getattr(obj, name, None)

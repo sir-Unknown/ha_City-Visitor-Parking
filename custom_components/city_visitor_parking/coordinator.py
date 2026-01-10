@@ -49,6 +49,7 @@ from .const import (
     LOGGER,
     WEEKDAY_KEYS,
 )
+from .helpers import get_attr, normalize_override_windows
 from .models import (
     AutoEndState,
     CoordinatorData,
@@ -90,7 +91,8 @@ class CityVisitorParkingCoordinator(DataUpdateCoordinator[CoordinatorData]):
 
         try:
             LOGGER.debug(
-                "Fetching permit, reservations, and favorites for %s",
+                "Fetching permit, reservations, and favorites for %s (permit %s)",
+                self.config_entry.title,
                 self._permit_id,
             )
             permit, reservations, favorites = await asyncio.gather(
@@ -99,7 +101,8 @@ class CityVisitorParkingCoordinator(DataUpdateCoordinator[CoordinatorData]):
                 self._provider.list_favorites(),
             )
             LOGGER.debug(
-                "Fetched data for %s: reservations=%s favorites=%s",
+                "Fetched data for %s (permit %s): reservations=%s favorites=%s",
+                self.config_entry.title,
                 self._permit_id,
                 len(reservations or []),
                 len(favorites or []),
@@ -113,7 +116,8 @@ class CityVisitorParkingCoordinator(DataUpdateCoordinator[CoordinatorData]):
         except (NetworkError, PyCityVisitorParkingError) as err:
             self._log_unavailable_once()
             LOGGER.debug(
-                "Coordinator fetch failed for %s: %s: %s",
+                "Coordinator fetch failed for %s (permit %s): %s: %s",
+                self.config_entry.title,
                 self._permit_id,
                 type(err).__name__,
                 err,
@@ -122,7 +126,8 @@ class CityVisitorParkingCoordinator(DataUpdateCoordinator[CoordinatorData]):
         except Exception as err:  # Allowed in background tasks
             self._log_unavailable_once()
             LOGGER.debug(
-                "Coordinator fetch failed unexpectedly for %s: %s: %s",
+                "Coordinator fetch failed unexpectedly for %s (permit %s): %s: %s",
+                self.config_entry.title,
                 self._permit_id,
                 type(err).__name__,
                 err,
@@ -216,13 +221,13 @@ class CityVisitorParkingCoordinator(DataUpdateCoordinator[CoordinatorData]):
 def _normalize_zone_validity(permit: Permit) -> list[TimeRange]:
     """Normalize zone validity blocks to TimeRange objects in UTC."""
 
-    raw_blocks = _get_attr(permit, "zone_validity")
+    raw_blocks = get_attr(permit, "zone_validity")
     if not isinstance(raw_blocks, list):
         raw_blocks = []
     blocks: list[TimeRange] = []
     for block in raw_blocks:
-        start = _get_attr(block, "start_time")
-        end = _get_attr(block, "end_time")
+        start = get_attr(block, "start_time")
+        end = get_attr(block, "end_time")
         if start is None or end is None:
             continue
         start_dt = _as_utc_datetime(start)
@@ -236,7 +241,7 @@ def _normalize_zone_validity(permit: Permit) -> list[TimeRange]:
 def _normalize_remaining_minutes(permit: Permit) -> int:
     """Normalize remaining time balance to minutes."""
 
-    raw = _get_attr(permit, "remaining_balance")
+    raw = get_attr(permit, "remaining_balance")
     if raw is None:
         return 0
     try:
@@ -255,10 +260,10 @@ def _normalize_reservations(
 
     normalized: list[Reservation] = []
     for reservation in reservations or []:
-        reservation_id = _get_attr(reservation, "id")
-        start = _get_attr(reservation, "start_time")
-        end = _get_attr(reservation, "end_time")
-        license_plate = _get_attr(reservation, "license_plate")
+        reservation_id = get_attr(reservation, "id")
+        start = get_attr(reservation, "start_time")
+        end = get_attr(reservation, "end_time")
+        license_plate = get_attr(reservation, "license_plate")
         if reservation_id is None or start is None or end is None:
             continue
         start_dt = _as_utc_datetime(start)
@@ -281,9 +286,9 @@ def _normalize_favorites(favorites: Iterable[ProviderFavorite]) -> list[Favorite
 
     normalized: list[Favorite] = []
     for favorite in favorites or []:
-        favorite_id = _get_attr(favorite, "id")
-        license_plate = _get_attr(favorite, "license_plate")
-        name = _get_attr(favorite, "name")
+        favorite_id = get_attr(favorite, "id")
+        license_plate = get_attr(favorite, "license_plate")
+        name = get_attr(favorite, "name")
         if favorite_id is None:
             continue
         normalized.append(
@@ -322,17 +327,20 @@ def _compute_zone_availability(
 
     next_change_time = None
     if windows_today:
-        sorted_windows = sorted(windows_today, key=lambda window: window.start)
         if is_chargeable_now:
             next_change_time = min(
-                window.end
-                for window in sorted_windows
-                if window.start <= now < window.end
+                (
+                    window.end
+                    for window in windows_today
+                    if window.start <= now < window.end
+                ),
+                default=None,
             )
         else:
-            upcoming = [window.start for window in sorted_windows if window.start > now]
-            if upcoming:
-                next_change_time = min(upcoming)
+            next_change_time = min(
+                (window.start for window in windows_today if window.start > now),
+                default=None,
+            )
 
     return ZoneAvailability(
         is_chargeable_now=is_chargeable_now,
@@ -356,7 +364,7 @@ def _windows_for_today(
     if not isinstance(overrides, Mapping):
         overrides = {}
     override = overrides.get(local_day)
-    override_windows = _normalize_override_windows(override)
+    override_windows = normalize_override_windows(override)
     if override_windows:
         ranges: list[TimeRange] = []
         for window in override_windows:
@@ -433,21 +441,3 @@ def _as_time(value: object) -> time | None:
     if isinstance(value, str):
         return time.fromisoformat(value)
     return None
-
-
-def _normalize_override_windows(value: object) -> list[dict[str, str]]:
-    """Normalize override data to a list of window dicts."""
-
-    if isinstance(value, list):
-        return [window for window in value if isinstance(window, dict)]
-    if isinstance(value, dict) and "start" in value and "end" in value:
-        return [value]
-    return []
-
-
-def _get_attr(obj: object, name: str) -> object | None:
-    """Return attribute or mapping value for name."""
-
-    if isinstance(obj, dict):
-        return obj.get(name)
-    return getattr(obj, name, None)
