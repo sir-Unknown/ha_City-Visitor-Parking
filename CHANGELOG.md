@@ -4,6 +4,19 @@
 
 ## Released
 
+### 0.1.3
+
+#### Fixed
+
+- Remove unsupported card translations from Home Assistant translation files to satisfy hassfest.
+- Accept `--!>` as a valid HTML comment terminator in the bundled Lit parser.
+
+#### Changed
+
+- Declare `lovelace` in `after_dependencies` for frontend resource registration.
+- Update frontend tooling dependencies and migrate ESLint config to the flat format.
+- Pin GitHub Actions workflow versions for validation and release.
+
 ### 0.1.2
 
 #### Changed
