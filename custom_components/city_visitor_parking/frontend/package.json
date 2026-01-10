@@ -2,10 +2,25 @@
   "name": "city-visitor-parking-frontend",
   "private": true,
   "scripts": {
-    "build": "esbuild src/city-visitor-parking-card.ts src/city-visitor-parking-card-editor.ts src/city-visitor-parking-active-card.ts src/city-visitor-parking-active-card-editor.ts --bundle --format=esm --target=es2020 --outdir=dist",
-    "watch": "npm run build -- --watch"
+    "build": "rm -rf dist && esbuild src/city-visitor-parking-card.ts src/city-visitor-parking-active-card.ts src/city-visitor-parking-active-card-editor.ts --bundle --format=esm --target=es2020 --outdir=dist && mkdir -p dist/translations && cp src/translations/*.json dist/translations/",
+    "watch": "yarn build -- --watch",
+    "lint": "yarn lint:eslint && yarn lint:prettier && yarn lint:types && yarn lint:lit",
+    "lint:eslint": "eslint \"src/**/*.ts\"",
+    "lint:prettier": "prettier --check \"src/**/*.{ts,json,md,css}\"",
+    "lint:types": "tsc -p tsconfig.json --noEmit",
+    "lint:lit": "eslint \"src/**/*.ts\"",
+    "format": "eslint \"src/**/*.ts\" --fix && prettier --write \"src/**/*.{ts,json,md,css}\"",
+    "test": "vitest run --passWithNoTests"
   },
   "devDependencies": {
-    "esbuild": "^0.27.2"
+    "@typescript-eslint/eslint-plugin": "^7.18.0",
+    "@typescript-eslint/parser": "^7.18.0",
+    "eslint": "^8.57.0",
+    "eslint-plugin-lit": "^1.11.0",
+    "esbuild": "^0.27.2",
+    "lit": "^3.2.1",
+    "prettier": "^3.4.2",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
   }
 }

@@ -1,61 +1,38 @@
+import { LitElement, css, html, nothing, type TemplateResult } from "lit";
+import { keyed } from "lit/directives/keyed.js";
 import { getCardConfigForm } from "./city-visitor-parking-card-editor";
+import type { LocalizeFunc } from "./localize";
+import { ensureTranslations, localize } from "./localize";
+import {
+  DOMAIN,
+  errorMessage,
+  formatDate,
+  formatDateTimeLocal,
+  formatTime,
+  isInEditor,
+  registerCustomCard,
+} from "./card-shared";
 
 (() => {
-  const DOMAIN = "city_visitor_parking";
   const CARD_TYPE = "city-visitor-parking-card";
   const WS_LIST_FAVORITES = "city_visitor_parking/favorites";
   const FAVORITE_PLACEHOLDER_VALUE = "__favorite_placeholder__";
-  const TRANSLATION_SECTION = "card";
-  const TRANSLATION_PREFIX = `component.${DOMAIN}.${TRANSLATION_SECTION}`;
-  const DEFAULT_STRINGS: Record<string, string> = {
-    "field.permit": "Permit",
-    "field.favorite": "Favorite",
-    "field.name": "Name",
-    "field.license_plate": "License plate",
-    "field.start_date": "Start date",
-    "field.start_time": "Start time",
-    "field.end_date": "End date",
-    "field.end_time": "End time",
-    "action.add_favorite": "Add favorite",
-    "action.remove_favorite": "Remove favorite",
-    "action.start_reservation": "Start reservation",
-    "message.select_favorite": "Select a favorite",
-    "message.loading_favorites": "Loading favorites",
-    "message.no_device_for_permit": "No device found for the selected permit.",
-    "message.load_favorites_failed": "Could not load favorites",
-    "message.removing_favorite": "Removing favorite...",
-    "message.favorite_removed": "Favorite removed.",
-    "message.favorite_remove_failed": "Could not remove favorite.",
-    "message.select_permit_before_start":
-      "Select a permit before starting a reservation.",
-    "message.license_plate_required": "License plate is required.",
-    "message.start_end_required": "Start and end time are required.",
-    "message.end_before_start": "End time must be after start time.",
-    "message.reservation_requested": "Reservation requested.",
-    "message.reservation_start_failed": "Could not start reservation.",
-    "message.reservation_updated": "Reservation updated.",
-    "message.reservation_update_failed": "Could not update reservation.",
-    "message.reservation_ended": "Reservation ended.",
-    "message.reservation_end_failed": "Could not end reservation.",
-    "placeholder.license_plate": "AA-123-B",
-  };
 
+  type HassState = {
+    state?: string;
+    attributes?: Record<string, unknown>;
+  };
   type HomeAssistant = {
     callWS: <T = unknown>(msg: Record<string, unknown>) => Promise<T>;
     callService: <T = unknown>(
       domain: string,
       service: string,
-      data: Record<string, unknown>
+      data: Record<string, unknown>,
     ) => Promise<T>;
-    localize?: (key: string, ...args: Array<string | number>) => string;
-    loadBackendTranslation?: (
-      section: string,
-      domain?: string
-    ) => Promise<unknown>;
+    localize?: LocalizeFunc;
+    language?: string;
     locale?: Record<string, unknown>;
-    themes?: {
-      themes?: Record<string, Record<string, string>>;
-    };
+    states?: Record<string, HassState>;
   };
   type DeviceEntry = {
     id: string;
@@ -72,7 +49,6 @@ import { getCardConfigForm } from "./city-visitor-parking-card-editor";
     type: string;
     title?: string;
     icon?: string;
-    theme?: string;
     show_reservation_form?: boolean;
     show_favorites?: boolean;
     show_start_time?: boolean;
@@ -80,61 +56,123 @@ import { getCardConfigForm } from "./city-visitor-parking-card-editor";
     config_entry_id?: string;
     device_id?: string;
   };
-  type ValueElement = HTMLElement & {
-    value?: string;
-    updateComplete?: Promise<unknown>;
-  };
+  type ValueElement = HTMLElement & { value?: string };
   type CheckedElement = HTMLElement & { checked: boolean; disabled?: boolean };
-  type DisabledElement = HTMLElement & { disabled?: boolean };
-  type SelectorElement = HTMLElement & {
-    hass?: HomeAssistant;
-    selector?: Record<string, unknown>;
-    value?: string | null;
-    label?: string;
-    disabled?: boolean;
-  };
-  type DateInputElement = HTMLElement & {
-    value?: string;
-    label?: string;
-    disabled?: boolean;
-    locale?: Record<string, unknown>;
-  };
-  type TimeInputElement = HTMLElement & {
-    value?: string;
-    label?: string;
-    disabled?: boolean;
-    locale?: Record<string, unknown>;
-  };
-  type DateTimeInputElement = HTMLElement & {
-    value?: string;
-    disabled?: boolean;
-    updateComplete?: Promise<unknown>;
+  type FavoriteActionState = {
+    showAddFavorite: boolean;
+    showRemoveFavorite: boolean;
+    selectedFavorite: FavoriteItem | null;
   };
 
   const CONFIG_ENTRY_SELECTOR = {
     config_entry: { integration: DOMAIN },
   };
 
-  const pad = (value: number | string): string => String(value).padStart(2, "0");
-  const formatDate = (date: Date): string =>
-    `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
-  const formatTime = (date: Date): string =>
-    `${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
-  const formatDateTimeLocal = (date: Date): string =>
-    `${formatDate(date)}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
   const normalizeTimeValue = (value: string): string =>
     value.length === 5 ? `${value}:00` : value;
   const normalizeMatchValue = (value: string | undefined | null): string =>
-    String(value ?? "").trim().toLowerCase();
+    String(value ?? "")
+      .trim()
+      .toLowerCase();
   const normalizePlateValue = (value: string | undefined | null): string =>
     normalizeMatchValue(value).replace(/[^a-z0-9]/g, "");
+  const INPUT_VALUE_IDS = new Set([
+    "licensePlate",
+    "visitorName",
+    "startDateTime",
+    "startDate",
+    "startTime",
+    "endDateTime",
+    "endDate",
+    "endTime",
+  ]);
+  const CHANGE_VALUE_IDS = new Set([
+    "startDateTime",
+    "startDate",
+    "startTime",
+    "endDateTime",
+    "endDate",
+    "endTime",
+  ]);
 
-  class CityVisitorParkingNewReservationCard extends HTMLElement {
+  class CityVisitorParkingNewReservationCard extends LitElement {
+    static styles = css`
+      :host {
+        display: block;
+      }
+      ha-card {
+        position: relative;
+      }
+      .row {
+        margin: 0;
+      }
+      .card-content {
+        display: flex;
+        flex-direction: column;
+        gap: var(
+          --entities-card-row-gap,
+          var(--card-row-gap, var(--ha-space-2))
+        );
+      }
+      ha-textfield,
+      ha-select,
+      ha-selector,
+      ha-date-input,
+      ha-time-input {
+        width: 100%;
+      }
+      .actions {
+        display: flex;
+        gap: var(--ha-space-2);
+        align-items: center;
+        justify-content: space-between;
+      }
+      .favorite-actions {
+        display: flex;
+        align-items: center;
+        gap: var(--ha-space-2);
+      }
+      .remove-favorite {
+        display: flex;
+        align-items: center;
+        gap: var(--ha-space-2);
+      }
+      .start-button {
+        margin-left: auto;
+      }
+      .start-button.success {
+        --mdc-theme-primary: var(--success-color, #21b365);
+        --mdc-theme-on-primary: var(--text-primary-color, #fff);
+      }
+      .card-header {
+        display: flex;
+        justify-content: space-between;
+      }
+      .card-header .name {
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .icon {
+        padding: 0 var(--ha-space-4) 0 var(--ha-space-2);
+      }
+      ha-alert {
+        margin: 0;
+      }
+      .spinner {
+        display: flex;
+        align-items: center;
+        gap: var(--ha-space-2);
+        color: var(--secondary-text-color);
+        font-size: 0.85rem;
+      }
+    `;
     _config: CardConfig | null;
     _hass: HomeAssistant | null;
     _deviceId: string | null;
     _deviceEntryId: string | null;
     _deviceLoadPromise: Promise<void> | null;
+    _deviceIdByEntryId: Map<string, string | null>;
     _favorites: FavoriteItem[];
     _favoritesError: string | null;
     _favoritesLoadedFor: string | null;
@@ -142,34 +180,37 @@ import { getCardConfigForm } from "./city-visitor-parking-card-editor";
     _favoritesByPlate: Map<string, FavoriteItem>;
     _favoritesByPlateName: Map<string, FavoriteItem>;
     _favoritesByValue: Map<string, FavoriteItem>;
-    _translationsPromise: Promise<unknown> | null;
+    _formValues: Record<string, string>;
     _pendingRemoveFavoriteId: string | null;
     _selectedEntryId: string | null;
     _startButtonSuccess: boolean;
     _startButtonSuccessTimeout: number | null;
     _startInFlight: boolean;
     _favoriteRemoveInFlight: boolean;
+    _addFavoriteChecked: boolean;
+    _suppressFavoriteClear: boolean;
     _payWindowEndEntityId: string | null;
     _payWindowEndEntityDeviceId: string | null;
+    _payWindowEndEntityByDeviceId: Map<string, string | null>;
     _status: string;
     _statusType: "info" | "warning" | "success";
-    _appliedThemeVariables: string[];
-    _appliedThemeName: string | null;
     _renderHandle: number | null;
-    _favoriteActionsHandle: number | null;
-    _localizeEscapedFn: (key: string, ...args: Array<string | number>) => string;
+    _translationsVersion: number;
     _splitDateTimeSupport: boolean | null;
-    _lastLocaleRef: Record<string, unknown> | null;
-    _lastThemeName: string | null;
+    _onClick: (event: Event) => void;
+    _onInput: (event: Event) => void;
+    _onChange: (event: Event) => void;
+    _onPermitSelectChange: (event: Event) => void;
+    _onFavoriteSelectChange: (event: Event) => void;
 
     constructor() {
       super();
-      this.attachShadow({ mode: "open" });
       this._config = null;
       this._hass = null;
       this._deviceId = null;
       this._deviceEntryId = null;
       this._deviceLoadPromise = null;
+      this._deviceIdByEntryId = new Map();
       this._favorites = [];
       this._favoritesError = null;
       this._favoritesLoadedFor = null;
@@ -177,32 +218,36 @@ import { getCardConfigForm } from "./city-visitor-parking-card-editor";
       this._favoritesByPlate = new Map();
       this._favoritesByPlateName = new Map();
       this._favoritesByValue = new Map();
-      this._translationsPromise = null;
+      this._formValues = {};
       this._pendingRemoveFavoriteId = null;
       this._selectedEntryId = null;
       this._startButtonSuccess = false;
       this._startButtonSuccessTimeout = null;
       this._startInFlight = false;
       this._favoriteRemoveInFlight = false;
+      this._addFavoriteChecked = false;
+      this._suppressFavoriteClear = false;
       this._payWindowEndEntityId = null;
       this._payWindowEndEntityDeviceId = null;
+      this._payWindowEndEntityByDeviceId = new Map();
       this._status = "";
       this._statusType = "info";
-      this._appliedThemeVariables = [];
-      this._appliedThemeName = null;
       this._renderHandle = null;
-      this._favoriteActionsHandle = null;
-      this._localizeEscapedFn = (key: string, ...args: Array<string | number>) =>
-        this._escape(this._localize(key, ...args));
+      this._translationsVersion = 0;
       this._splitDateTimeSupport = null;
-      this._lastLocaleRef = null;
-      this._lastThemeName = null;
+      this._onClick = (event: Event) => this._handleClick(event);
+      this._onInput = (event: Event) => this._handleInput(event);
+      this._onChange = (event: Event) => this._handleChange(event);
+      this._onPermitSelectChange = (event: Event) =>
+        this._handlePermitSelectChange(event);
+      this._onFavoriteSelectChange = (event: Event) =>
+        this._handleFavoriteSelectChange(event);
     }
 
-    static getConfigForm(): {
+    static async getConfigForm(hass?: HomeAssistant): Promise<{
       readonly schema: ReadonlyArray<Record<string, unknown>>;
-    } {
-      return getCardConfigForm();
+    }> {
+      return getCardConfigForm(hass);
     }
 
     static getStubConfig(): CardConfig {
@@ -217,7 +262,10 @@ import { getCardConfigForm } from "./city-visitor-parking-card-editor";
 
     setConfig(config: CardConfig): void {
       if (!config || !config.type) {
-        throw new Error("Invalid card config");
+        const globalHass = (window as Window & { hass?: HomeAssistant }).hass;
+        throw new Error(
+          localize(this._hass ?? globalHass, "message.invalid_config"),
+        );
       }
       const priorEntryId = this._getActiveEntryId();
       this._config = {
@@ -227,31 +275,19 @@ import { getCardConfigForm } from "./city-visitor-parking-card-editor";
         show_end_time: config.show_end_time !== false,
         ...config,
       };
-      if (this._config.theme !== this._lastThemeName) {
-        this._lastThemeName = this._config.theme ?? null;
-        this._applyTheme();
-      }
       if (this._config.config_entry_id) {
         this._selectedEntryId = null;
       }
       const entryChanged = this._getActiveEntryId() !== priorEntryId;
-      void this._ensureTranslations();
       if (this._config.device_id) {
         this._deviceId = this._config.device_id;
-          this._deviceEntryId = this._config.config_entry_id || null;
-          this._resetPayWindowEndCache();
+        this._deviceEntryId = this._config.config_entry_id || null;
+        this._resetPayWindowEndCache();
         if (entryChanged) {
-          this._favorites = [];
-          this._favoritesLoadedFor = null;
-          this._rebuildFavoriteIndex();
+          this._resetFavoritesState();
         }
       } else if (entryChanged) {
-        this._deviceId = null;
-        this._deviceEntryId = null;
-        this._resetPayWindowEndCache();
-        this._favorites = [];
-        this._favoritesLoadedFor = null;
-        this._rebuildFavoriteIndex();
+        this._resetDeviceState();
       }
       this._requestRender();
       this._ensureDeviceId();
@@ -260,11 +296,10 @@ import { getCardConfigForm } from "./city-visitor-parking-card-editor";
 
     set hass(hass: HomeAssistant) {
       this._hass = hass;
-      void this._ensureTranslations();
-      if ((this._config?.theme ?? null) !== this._lastThemeName) {
-        this._lastThemeName = this._config?.theme ?? null;
-        this._applyTheme();
-      }
+      void ensureTranslations(this._hass).then(() => {
+        this._translationsVersion += 1;
+        this.requestUpdate();
+      });
       this._requestRender();
       this._ensureDeviceId();
       void this._loadData();
@@ -291,6 +326,14 @@ import { getCardConfigForm } from "./city-visitor-parking-card-editor";
       if (this._deviceEntryId === entryId && this._deviceId) {
         return;
       }
+      const cachedDeviceId = this._deviceIdByEntryId.get(entryId);
+      if (cachedDeviceId !== undefined) {
+        this._deviceId = cachedDeviceId;
+        this._deviceEntryId = entryId;
+        this._resetPayWindowEndCache();
+        this._requestRender();
+        return;
+      }
       if (this._deviceLoadPromise) {
         return;
       }
@@ -303,14 +346,18 @@ import { getCardConfigForm } from "./city-visitor-parking-card-editor";
               ? device.identifiers
               : [];
             const hasDomain = identifiers.some(
-              (identifier: [string, string]) => identifier[0] === DOMAIN
+              (identifier: [string, string]) => identifier[0] === DOMAIN,
             );
             const hasEntry = Array.isArray(device.config_entries)
               ? device.config_entries.includes(entryId)
               : false;
             return hasDomain && hasEntry;
           });
-          this._deviceId = match ? match.id : null;
+          const deviceId = match ? match.id : null;
+          this._deviceId = deviceId;
+          if (deviceId) {
+            this._deviceIdByEntryId.set(entryId, deviceId);
+          }
           this._deviceEntryId = entryId;
           this._resetPayWindowEndCache();
         })
@@ -354,34 +401,39 @@ import { getCardConfigForm } from "./city-visitor-parking-card-editor";
           type: WS_LIST_FAVORITES,
           config_entry_id: entryId,
         });
-        this._favorites = Array.isArray(result?.favorites) ? result.favorites : [];
-        this._rebuildFavoriteIndex();
+        this._setFavorites(
+          Array.isArray(result?.favorites) ? result.favorites : [],
+        );
       } catch (err: unknown) {
-        this._favorites = [];
-        this._rebuildFavoriteIndex();
-        this._favoritesError = this._localize("message.load_favorites_failed");
+        this._setFavorites([]);
+        this._favoritesError = this._errorMessage(
+          err,
+          "message.load_favorites_failed",
+        );
       } finally {
         this._favoritesLoading = false;
         if (this._pendingRemoveFavoriteId) {
           const pendingId = normalizeMatchValue(this._pendingRemoveFavoriteId);
-          const stillPresent = this._favorites.some((favorite: FavoriteItem) => {
-            const candidate = normalizeMatchValue(
-              favorite.id || favorite.license_plate
-            );
-            return candidate === pendingId;
-          });
-      if (this._favoritesError || stillPresent) {
-        this._status = this._localize("message.favorite_remove_failed");
-        this._statusType = "warning";
-      } else {
-        this._status = this._localize("message.favorite_removed");
-        this._statusType = "success";
-        this._setInputValue("visitorName", "");
-        this._setInputValue("licensePlate", "");
-        this._setInputValue("favorite", FAVORITE_PLACEHOLDER_VALUE);
-      }
-      this._pendingRemoveFavoriteId = null;
-    }
+          const stillPresent = this._favorites.some(
+            (favorite: FavoriteItem) => {
+              const candidate = normalizeMatchValue(
+                favorite.id || favorite.license_plate,
+              );
+              return candidate === pendingId;
+            },
+          );
+          if (this._favoritesError || stillPresent) {
+            this._status = this._localize("message.favorite_remove_failed");
+            this._statusType = "warning";
+          } else {
+            this._status = this._localize("message.favorite_removed");
+            this._statusType = "success";
+            this._setInputValue("visitorName", "");
+            this._setInputValue("licensePlate", "");
+            this._setInputValue("favorite", FAVORITE_PLACEHOLDER_VALUE);
+          }
+          this._pendingRemoveFavoriteId = null;
+        }
         this._requestRender();
       }
     }
@@ -390,15 +442,52 @@ import { getCardConfigForm } from "./city-visitor-parking-card-editor";
       if (this._renderHandle !== null) {
         return;
       }
-      this._renderHandle = window.requestAnimationFrame(() => {
+      this._renderHandle = window.setTimeout(() => {
         this._renderHandle = null;
-        this._render();
-      });
+        this.requestUpdate();
+      }, 0);
     }
 
-    _render(): void {
-      if (!this.shadowRoot || !this._config) {
-        return;
+    _getFavoriteActionState(): FavoriteActionState {
+      if (!this._config?.show_favorites) {
+        return {
+          showAddFavorite: false,
+          showRemoveFavorite: false,
+          selectedFavorite: null,
+        };
+      }
+      const controlsDisabled = this._isInEditor();
+      const license = this._getInputValue("licensePlate").trim();
+      const name = this._getInputValue("visitorName").trim();
+      const selectedFavorite = this._findFavoriteByValue(
+        this._getInputValue("favorite"),
+      );
+      const selectedFavoriteMatchesLicense = selectedFavorite
+        ? this._selectedFavoriteMatchesLicense(selectedFavorite, license)
+        : false;
+      const matchingFavorite = this._findFavorite(license, name);
+      const canManageFavorites =
+        !controlsDisabled && !this._favoritesLoading && Boolean(this._deviceId);
+      const showAddFavorite =
+        canManageFavorites &&
+        Boolean(license) &&
+        Boolean(name) &&
+        !matchingFavorite &&
+        !selectedFavoriteMatchesLicense;
+      const showRemoveFavorite =
+        canManageFavorites &&
+        Boolean(selectedFavorite?.id || selectedFavorite?.license_plate) &&
+        selectedFavoriteMatchesLicense;
+      return {
+        showAddFavorite: showAddFavorite && !showRemoveFavorite,
+        showRemoveFavorite,
+        selectedFavorite,
+      };
+    }
+
+    render(): TemplateResult {
+      if (!this._config) {
+        return html``;
       }
 
       const priorLicense = this._getInputValue("licensePlate");
@@ -428,502 +517,497 @@ import { getCardConfigForm } from "./city-visitor-parking-card-editor";
       const hasDevice = Boolean(this._deviceId);
       const useSplitDateTime = this._useSplitDateTime();
       const controlsDisabled = this._isInEditor();
-      const localize = this._localizeEscapedFn;
-      const currentLicense = priorLicense.trim();
-      const currentVisitorName = priorVisitorName.trim();
-      const selectedFavorite = showFavorites
-        ? this._findFavoriteByValue(priorFavorite)
-        : null;
-      const selectedFavoriteMatchesLicense = selectedFavorite
-        ? this._selectedFavoriteMatchesLicense(selectedFavorite, currentLicense)
-        : false;
-      const matchingFavorite = showFavorites
-        ? this._findFavorite(currentLicense, currentVisitorName)
-        : null;
-      const canManageFavorites =
-        !controlsDisabled && !this._favoritesLoading && Boolean(this._deviceId);
-      const showAddFavorite =
-        canManageFavorites
-        && currentLicense
-        && currentVisitorName
-        && !matchingFavorite
-        && !selectedFavoriteMatchesLicense;
-      const showRemoveFavorite =
-        canManageFavorites
-        && Boolean(selectedFavorite?.id || selectedFavorite?.license_plate)
-        && selectedFavoriteMatchesLicense;
-      const favoriteRemoveDisabled = controlsDisabled || this._favoriteRemoveInFlight;
-      if (controlsDisabled) {
-        this.setAttribute("data-preview", "true");
-      } else {
-        this.removeAttribute("data-preview");
-      }
+      const localize = this._localize.bind(this);
+      const { showAddFavorite, showRemoveFavorite, selectedFavorite } =
+        this._getFavoriteActionState();
+      const favoriteRemoveDisabled =
+        controlsDisabled || this._favoriteRemoveInFlight;
+      const favoritesOptions = this._favorites;
+      const favoriteSelectDisabled = controlsDisabled || this._favoritesLoading;
+      const startDisabled =
+        controlsDisabled || !hasDevice || this._startInFlight;
 
-      const favoritesOptions = (this._favorites || [])
-        .map((favorite: FavoriteItem) => {
-          const value = favorite.license_plate || favorite.id || "";
-          const label = favorite.name || favorite.license_plate || favorite.id || "";
-          return `<mwc-list-item value="${this._escape(value)}">${this._escape(
-            label
-          )}</mwc-list-item>`;
-        })
-        .join("");
-
-      const reservationFormSection = showReservationForm
-        ? `
-          ${hasTarget && !hasDevice ? `
-            <ha-alert alert-type="warning">${localize(
-              "message.no_device_for_permit"
-            )}</ha-alert>
-          ` : ""}
-          ${showPermitPicker ? `
-            <div class="row">
-              <ha-selector id="permitSelect" label="${localize(
-                "field.permit"
-              )}"></ha-selector>
-            </div>
-          ` : ""}
-          ${showFavorites ? `
-            <div class="row">
-              <ha-select id="favorite" label="${localize("field.favorite")}" ${
-                controlsDisabled || this._favoritesLoading ? "disabled" : ""
-              }>
-                  <mwc-list-item value="${FAVORITE_PLACEHOLDER_VALUE}">
-                    ${localize("message.select_favorite")}
-                  </mwc-list-item>
-                ${favoritesOptions}
-              </ha-select>
-              ${this._favoritesError ? `
-                <ha-alert alert-type="warning">${this._escape(
-                  this._favoritesError
-                )}</ha-alert>
-              ` : ""}
-            </div>
-          ` : ""}
-          ${showFavorites && this._favoritesLoading ? `
-            <div class="row spinner">
-              <ha-spinner size="small"></ha-spinner>
-              <span>${localize("message.loading_favorites")}</span>
-            </div>
-          ` : ""}
-          <div class="row">
-            <ha-textfield id="visitorName" label="${localize("field.name")}"></ha-textfield>
-          </div>
-          <div class="row">
-            <ha-textfield
-              id="licensePlate"
-              label="${localize("field.license_plate")}"
-              placeholder="${localize("placeholder.license_plate")}"
-            ></ha-textfield>
-          </div>
-          ${showStart ? (
-            useSplitDateTime
-              ? `
-                <div class="row">
-                  <ha-date-input id="startDate" label="${localize(
-                    "field.start_date"
-                  )}"></ha-date-input>
-                </div>
-                <div class="row">
-                  <ha-time-input id="startTime" label="${localize(
-                    "field.start_time"
-                  )}"></ha-time-input>
-                </div>
+      return html`
+        <ha-card
+          @click=${this._onClick}
+          @input=${this._onInput}
+          @change=${this._onChange}
+        >
+          ${showHeader
+            ? html`
+                <h1 class="card-header">
+                  <div class="name">
+                    ${icon
+                      ? html`<ha-icon class="icon" .icon=${icon}></ha-icon>`
+                      : nothing}
+                    ${title}
+                  </div>
+                </h1>
               `
-              : `
-                <div class="row">
-                  <ha-textfield
-                    id="startDateTime"
-                    label="${localize("field.start_time")}"
-                    type="datetime-local"
-                  ></ha-textfield>
-                </div>
-              `
-          ) : ""}
-          ${showEnd ? (
-            useSplitDateTime
-              ? `
-                <div class="row">
-                  <ha-date-input id="endDate" label="${localize(
-                    "field.end_date"
-                  )}"></ha-date-input>
-                </div>
-                <div class="row">
-                  <ha-time-input id="endTime" label="${localize(
-                    "field.end_time"
-                  )}"></ha-time-input>
-                </div>
-              `
-              : `
-                <div class="row">
-                  <ha-textfield
-                    id="endDateTime"
-                    label="${localize("field.end_time")}"
-                    type="datetime-local"
-                  ></ha-textfield>
-                </div>
-              `
-          ) : ""}
-          <div class="row actions">
-            <div class="favorite-actions">
-              ${showFavorites ? `
-                <ha-formfield
-                  id="addFavoriteWrap"
-                  label="${localize("action.add_favorite")}"
-                  ${showAddFavorite ? "" : "hidden"}
-                  style="${showAddFavorite ? "" : "display: none;"}"
-                >
-                  <ha-checkbox
-                    id="addFavorite"
-                  ></ha-checkbox>
-                </ha-formfield>
-                <div
-                  id="removeFavoriteWrap"
-                  class="remove-favorite"
-                  ${showRemoveFavorite ? "" : "hidden"}
-                  style="${showRemoveFavorite ? "" : "display: none;"}"
-                >
-                  <ha-icon-button
-                    id="removeFavorite"
-                    title="${localize("action.remove_favorite")}"
-                    aria-label="${localize("action.remove_favorite")}"
-                    data-favorite-id="${this._escape(selectedFavorite?.id)}"
-                    ${favoriteRemoveDisabled ? "disabled" : ""}
-                  >
-                    <ha-icon icon="mdi:trash-can-outline"></ha-icon>
-                  </ha-icon-button>
-                  <span>${localize("action.remove_favorite")}</span>
-                </div>
-              ` : ""}
-            </div>
-            <ha-button
-              id="startReservation"
-              class="start-button${this._startButtonSuccess ? " success" : ""}"
-              ${controlsDisabled ? "disabled" : ""}
-            >
-              ${localize("action.start_reservation")}
-            </ha-button>
-          </div>
-        `
-        : "";
-
-      this.shadowRoot.innerHTML = `
-        <style>
-          :host {
-            display: block;
-          }
-          ha-card {
-            position: relative;
-          }
-          .row {
-            margin: 0;
-          }
-          .card-content {
-            display: flex;
-            flex-direction: column;
-            gap: var(--entities-card-row-gap, var(--card-row-gap, 8px));
-          }
-          ha-textfield,
-          ha-select,
-          ha-selector,
-          ha-date-input,
-          ha-time-input {
-            width: 100%;
-          }
-          .actions {
-            display: flex;
-            gap: 8px;
-            align-items: center;
-            justify-content: space-between;
-          }
-          .favorite-actions {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-          }
-          .remove-favorite {
-            display: flex;
-            align-items: center;
-            gap: 6px;
-          }
-          .remove-favorite span {
-            pointer-events: none;
-            line-height: 1;
-          }
-          .start-button {
-            margin-left: auto;
-          }
-          .start-button.success {
-            --mdc-theme-primary: var(--success-color, #21b365);
-            --mdc-theme-on-primary: var(--text-primary-color, #fff);
-          }
-          .card-header {
-            display: flex;
-            justify-content: space-between;
-          }
-          .card-header .name {
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-          }
-          .icon {
-            padding: 0 18px 0 8px;
-          }
-          ha-alert {
-            margin: 0;
-          }
-          .spinner {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            color: var(--secondary-text-color);
-            font-size: 0.85rem;
-          }
-        </style>
-        <ha-card>
-          ${
-            showHeader
-              ? `<h1 class="card-header"><div class="name">${
-                  icon
-                    ? `<ha-icon class="icon" icon="${this._escape(icon)}"></ha-icon>`
-                    : ""
-                }${this._escape(title)}</div></h1>`
-              : ""
-          }
+            : nothing}
           <div class="card-content">
-            ${reservationFormSection}
-            ${this._status ? `
-              <ha-alert alert-type="${this._statusType}">${this._escape(
-                this._status
-              )}</ha-alert>
-            ` : ""}
+            ${showReservationForm
+              ? html`
+                  ${hasTarget && !hasDevice
+                    ? html`
+                        <ha-alert alert-type="warning">
+                          ${localize("message.no_device_for_permit")}
+                        </ha-alert>
+                      `
+                    : nothing}
+                  ${showPermitPicker
+                    ? html`
+                        <div class="row">
+                          <ha-selector
+                            id="permitSelect"
+                            .hass=${this._hass}
+                            .selector=${CONFIG_ENTRY_SELECTOR}
+                            .label=${localize("field.permit")}
+                            .value=${activeEntryId ?? null}
+                            @value-changed=${this._onPermitSelectChange}
+                          ></ha-selector>
+                        </div>
+                      `
+                    : nothing}
+                  ${showFavorites
+                    ? html`
+                        <div class="row">
+                          ${keyed(
+                            this._translationsVersion,
+                            html`<ha-select
+                              id="favorite"
+                              .label=${localize("field.favorite")}
+                              .value=${favoriteValue}
+                              ?disabled=${favoriteSelectDisabled}
+                              @selected=${this._onFavoriteSelectChange}
+                            >
+                              <mwc-list-item
+                                value=${FAVORITE_PLACEHOLDER_VALUE}
+                              >
+                                ${localize("message.select_favorite")}
+                              </mwc-list-item>
+                              ${favoritesOptions.map(
+                                (favorite: FavoriteItem) => {
+                                  const value =
+                                    favorite.license_plate || favorite.id || "";
+                                  const label =
+                                    favorite.name ||
+                                    favorite.license_plate ||
+                                    favorite.id ||
+                                    "";
+                                  return html`<mwc-list-item value=${value}
+                                    >${label}</mwc-list-item
+                                  >`;
+                                },
+                              )}
+                            </ha-select>`,
+                          )}
+                          ${this._favoritesError
+                            ? html`
+                                <ha-alert alert-type="warning">
+                                  ${this._favoritesError}
+                                </ha-alert>
+                              `
+                            : nothing}
+                        </div>
+                      `
+                    : nothing}
+                  ${showFavorites && this._favoritesLoading
+                    ? html`
+                        <div class="row spinner">
+                          <ha-spinner size="small"></ha-spinner>
+                          <span>${localize("message.loading_favorites")}</span>
+                        </div>
+                      `
+                    : nothing}
+                  <div class="row">
+                    <ha-textfield
+                      id="visitorName"
+                      .label=${localize("field.name")}
+                      .value=${priorVisitorName}
+                    ></ha-textfield>
+                  </div>
+                  <div class="row">
+                    <ha-textfield
+                      id="licensePlate"
+                      .label=${localize("field.license_plate")}
+                      placeholder=${localize("placeholder.license_plate")}
+                      .value=${priorLicense}
+                    ></ha-textfield>
+                  </div>
+                  ${showStart
+                    ? useSplitDateTime
+                      ? html`
+                          <div class="row">
+                            <ha-date-input
+                              id="startDate"
+                              .label=${localize("field.start_date")}
+                              .locale=${this._hass?.locale}
+                              .value=${priorStartDate}
+                            ></ha-date-input>
+                          </div>
+                          <div class="row">
+                            <ha-time-input
+                              id="startTime"
+                              .label=${localize("field.start_time")}
+                              .locale=${this._hass?.locale}
+                              .value=${priorStartTime}
+                            ></ha-time-input>
+                          </div>
+                        `
+                      : html`
+                          <div class="row">
+                            <ha-textfield
+                              id="startDateTime"
+                              .label=${localize("field.start_time")}
+                              type="datetime-local"
+                              .value=${priorStartDateTime}
+                            ></ha-textfield>
+                          </div>
+                        `
+                    : nothing}
+                  ${showEnd
+                    ? useSplitDateTime
+                      ? html`
+                          <div class="row">
+                            <ha-date-input
+                              id="endDate"
+                              .label=${localize("field.end_date")}
+                              .locale=${this._hass?.locale}
+                              .value=${priorEndDate}
+                            ></ha-date-input>
+                          </div>
+                          <div class="row">
+                            <ha-time-input
+                              id="endTime"
+                              .label=${localize("field.end_time")}
+                              .locale=${this._hass?.locale}
+                              .value=${priorEndTime}
+                            ></ha-time-input>
+                          </div>
+                        `
+                      : html`
+                          <div class="row">
+                            <ha-textfield
+                              id="endDateTime"
+                              .label=${localize("field.end_time")}
+                              type="datetime-local"
+                              .value=${priorEndDateTime}
+                            ></ha-textfield>
+                          </div>
+                        `
+                    : nothing}
+                  <div class="row actions">
+                    <div class="favorite-actions">
+                      ${showFavorites
+                        ? showRemoveFavorite
+                          ? html`
+                              <ha-formfield
+                                id="removeFavoriteWrap"
+                                class="remove-favorite"
+                                .label=${localize("action.remove_favorite")}
+                              >
+                                <ha-icon-button
+                                  id="removeFavorite"
+                                  title=${localize("action.remove_favorite")}
+                                  aria-label=${localize(
+                                    "action.remove_favorite",
+                                  )}
+                                  data-favorite-id=${selectedFavorite?.id ||
+                                  selectedFavorite?.license_plate ||
+                                  ""}
+                                  ?disabled=${favoriteRemoveDisabled}
+                                >
+                                  <ha-icon
+                                    icon="mdi:trash-can-outline"
+                                  ></ha-icon>
+                                </ha-icon-button>
+                              </ha-formfield>
+                            `
+                          : showAddFavorite
+                            ? html`
+                                <ha-formfield
+                                  id="addFavoriteWrap"
+                                  .label=${localize("action.add_favorite")}
+                                >
+                                  <ha-checkbox
+                                    id="addFavorite"
+                                    .checked=${this._addFavoriteChecked}
+                                  ></ha-checkbox>
+                                </ha-formfield>
+                              `
+                            : nothing
+                        : nothing}
+                    </div>
+                    <ha-button
+                      id="startReservation"
+                      class=${this._startButtonSuccess
+                        ? "start-button success"
+                        : "start-button"}
+                      ?disabled=${startDisabled}
+                    >
+                      ${localize("action.start_reservation")}
+                    </ha-button>
+                  </div>
+                `
+              : nothing}
+            ${this._status
+              ? html`
+                  <ha-alert alert-type=${this._statusType}
+                    >${this._status}</ha-alert
+                  >
+                `
+              : nothing}
           </div>
         </ha-card>
       `;
+    }
 
-      this._setInputValue("licensePlate", priorLicense);
-      this._setInputValue("startDate", priorStartDate);
-      this._setInputValue("startTime", priorStartTime);
-      this._setInputValue("endDate", priorEndDate);
-      this._setInputValue("endTime", priorEndTime);
-      this._setInputValue("startDateTime", priorStartDateTime);
-      this._setInputValue("endDateTime", priorEndDateTime);
-      this._setInputValue("visitorName", priorVisitorName);
-      this._setInputValue("favorite", favoriteValue);
-
-      const permitSelect = this.shadowRoot.querySelector<SelectorElement>(
-        "#permitSelect"
-      );
-      if (permitSelect && this._hass) {
-        permitSelect.hass = this._hass;
-        if (showPermitPicker) {
-          permitSelect.selector = CONFIG_ENTRY_SELECTOR;
-        }
-        permitSelect.label = this._localize("field.permit");
-        permitSelect.value = activeEntryId ?? null;
-          const onPermitChange = (event: Event) => {
-            const detail = (event as CustomEvent<{ value?: string | null }>).detail;
-          const value = detail?.value ?? "";
-          if (!value) {
-            this._selectedEntryId = null;
-            this._deviceId = null;
-            this._deviceEntryId = null;
-            this._favorites = [];
-            this._favoritesLoadedFor = null;
-            this._rebuildFavoriteIndex();
-            this._status = "";
-            this._statusType = "info";
-            this._requestRender();
-            return;
-          }
-          if (
-            value === this._selectedEntryId
-            && this._deviceEntryId === value
-            && this._deviceId
-          ) {
-            return;
-          }
-          this._selectedEntryId = value;
-          this._deviceId = null;
-          this._deviceEntryId = null;
-          this._favorites = [];
-          this._favoritesLoadedFor = null;
-          this._rebuildFavoriteIndex();
-          this._status = "";
-          this._statusType = "info";
-          this._requestRender();
-          this._ensureDeviceId();
-          this._maybeLoadFavorites();
-        };
-        permitSelect.addEventListener("value-changed", onPermitChange);
+    updated(): void {
+      if (!this._config) {
+        return;
       }
 
-      const favoriteSelectElement = this.shadowRoot.querySelector<DisabledElement>(
-        "#favorite"
-      );
-      if (favoriteSelectElement) {
-        favoriteSelectElement.disabled =
-          controlsDisabled || this._favoritesLoading;
-      }
+      const controlsDisabled = this._isInEditor();
+      this.toggleAttribute("data-preview", controlsDisabled);
+
+      const showStart = this._config.show_start_time;
+      const showEnd = this._config.show_end_time;
+      const useSplitDateTime = this._useSplitDateTime();
 
       const now = new Date();
       const startDefault = new Date(now.getTime() + 60 * 1000);
-      const endDefault = new Date(startDefault.getTime() + 60 * 60 * 1000);
+      const payWindowEnd = this._getCachedPayWindowEnd();
+      let defaultsUpdated = false;
       if (useSplitDateTime) {
-        const startDateInput =
-          this.shadowRoot.querySelector<DateInputElement>("#startDate");
-        const startTimeInput =
-          this.shadowRoot.querySelector<TimeInputElement>("#startTime");
-        const endDateInput =
-          this.shadowRoot.querySelector<DateInputElement>("#endDate");
-        const endTimeInput =
-          this.shadowRoot.querySelector<TimeInputElement>("#endTime");
-        if (this._hass?.locale && this._hass.locale !== this._lastLocaleRef) {
-          if (startDateInput) {
-            startDateInput.locale = this._hass.locale;
-          }
-          if (startTimeInput) {
-            startTimeInput.locale = this._hass.locale;
-          }
-          if (endDateInput) {
-            endDateInput.locale = this._hass.locale;
-          }
-          if (endTimeInput) {
-            endTimeInput.locale = this._hass.locale;
-          }
-          this._lastLocaleRef = this._hass.locale;
+        if (showStart && !this._getInputValue("startDate")) {
+          this._formValues.startDate = formatDate(startDefault);
+          defaultsUpdated = true;
         }
-        if (showStart) {
-          if (startDateInput && !startDateInput.value) {
-            startDateInput.value = formatDate(startDefault);
-          }
-          if (startTimeInput && !startTimeInput.value) {
-            startTimeInput.value = formatTime(startDefault);
-          }
+        if (showStart && !this._getInputValue("startTime")) {
+          this._formValues.startTime = formatTime(startDefault);
+          defaultsUpdated = true;
         }
-        if (showEnd) {
-          if (endDateInput && !endDateInput.value) {
-            endDateInput.value = formatDate(endDefault);
-          }
-          if (endTimeInput && !endTimeInput.value) {
-            endTimeInput.value = formatTime(endDefault);
-          }
+        if (showEnd && !this._getInputValue("endDate") && payWindowEnd) {
+          this._formValues.endDate = formatDate(payWindowEnd);
+          defaultsUpdated = true;
+        }
+        if (showEnd && !this._getInputValue("endTime") && payWindowEnd) {
+          this._formValues.endTime = formatTime(payWindowEnd);
+          defaultsUpdated = true;
         }
         void this._applyEndDefaultFromPayWindow(true);
-        if (showStart && showEnd) {
-          const syncEnd = () => this._syncEndWithStart(true);
-          startDateInput?.addEventListener("change", syncEnd);
-          startDateInput?.addEventListener("value-changed", syncEnd);
-          startTimeInput?.addEventListener("change", syncEnd);
-          startTimeInput?.addEventListener("value-changed", syncEnd);
-        }
       } else {
-        const startDateTimeInput =
-          this.shadowRoot.querySelector<DateTimeInputElement>("#startDateTime");
-        const endDateTimeInput =
-          this.shadowRoot.querySelector<DateTimeInputElement>("#endDateTime");
-        if (showStart && startDateTimeInput && !startDateTimeInput.value) {
-          this._setElementValue(
-            startDateTimeInput,
-            formatDateTimeLocal(startDefault)
-          );
+        if (showStart && !this._getInputValue("startDateTime")) {
+          this._formValues.startDateTime = formatDateTimeLocal(startDefault);
+          defaultsUpdated = true;
         }
-        if (showEnd && endDateTimeInput && !endDateTimeInput.value) {
-          this._setElementValue(
-            endDateTimeInput,
-            formatDateTimeLocal(endDefault)
-          );
+        if (showEnd && !this._getInputValue("endDateTime") && payWindowEnd) {
+          this._formValues.endDateTime = formatDateTimeLocal(payWindowEnd);
+          defaultsUpdated = true;
         }
         void this._applyEndDefaultFromPayWindow(false);
-        if (showStart && showEnd && startDateTimeInput) {
-          startDateTimeInput.addEventListener("change", () =>
-            this._syncEndWithStart(false)
-          );
-          startDateTimeInput.addEventListener("input", () =>
-            this._syncEndWithStart(false)
-          );
-        }
       }
 
-      if (!controlsDisabled) {
-        const favoriteSelect = this.shadowRoot.querySelector<ValueElement>(
-          "#favorite"
-        );
-        if (favoriteSelect) {
-          const onFavoriteChange = () => {
-            const plate = favoriteSelect.value;
-            if (!plate || plate === FAVORITE_PLACEHOLDER_VALUE) {
-              void this._applyFavoriteSelection("", "");
-              return;
-            }
-            const favorite = this._favoritesByValue.get(
-              normalizeMatchValue(plate)
-            );
-            void this._applyFavoriteSelection(plate, favorite?.name ?? "");
-          };
-          favoriteSelect.addEventListener("selected", onFavoriteChange);
-        }
+      if (defaultsUpdated) {
+        this._requestRender();
       }
 
-      const licenseInput =
-        this.shadowRoot.querySelector<ValueElement>("#licensePlate");
-      if (licenseInput) {
-        licenseInput.addEventListener("input", () =>
-          this._scheduleFavoriteActionsUpdate()
-        );
-      }
-      const nameInput =
-        this.shadowRoot.querySelector<ValueElement>("#visitorName");
-      if (nameInput) {
-        nameInput.addEventListener("input", () =>
-          this._scheduleFavoriteActionsUpdate()
-        );
-      }
-
-      if (showFavorites && !controlsDisabled) {
-        const addFavorite =
-          this.shadowRoot.querySelector<CheckedElement>("#addFavorite");
-        if (addFavorite) {
-          addFavorite.addEventListener("change", () => {
-            this._scheduleFavoriteActionsUpdate();
-          });
-        }
-        const removeFavorite =
-          this.shadowRoot.querySelector<DisabledElement>("#removeFavorite");
-        if (removeFavorite) {
-          removeFavorite.addEventListener("click", () => {
-            const id = removeFavorite.getAttribute("data-favorite-id") ?? "";
-            void this._removeFavorite(id);
-          });
+      if (this._addFavoriteChecked) {
+        const { showAddFavorite } = this._getFavoriteActionState();
+        if (!showAddFavorite) {
+          this._addFavoriteChecked = false;
+          this._requestRender();
         }
       }
-
-      if (!controlsDisabled) {
-        const startButton = this.shadowRoot.querySelector<DisabledElement>(
-          "#startReservation"
-        );
-        if (startButton) {
-          startButton.addEventListener("click", () => void this._handleStart());
-          if (!hasDevice) {
-            startButton.disabled = true;
-          }
-          if (this._startInFlight) {
-            startButton.disabled = true;
-          }
-        }
-      }
-
-      this._scheduleFavoriteActionsUpdate();
     }
 
     _scheduleFavoriteActionsUpdate(): void {
-      if (this._favoriteActionsHandle !== null) {
+      if (!this._config?.show_favorites) {
         return;
       }
-      this._favoriteActionsHandle = window.requestAnimationFrame(() => {
-        this._favoriteActionsHandle = null;
-        this._updateFavoriteActions();
-      });
+      const license = this._getInputValue("licensePlate").trim();
+      const name = this._getInputValue("visitorName").trim();
+      const matchingFavorite = this._findFavorite(license, name);
+      if (matchingFavorite) {
+        const matchingValue =
+          matchingFavorite.license_plate || matchingFavorite.id || "";
+        const currentValue = normalizeMatchValue(
+          this._getInputValue("favorite"),
+        );
+        if (
+          matchingValue &&
+          currentValue !== normalizeMatchValue(matchingValue)
+        ) {
+          this._setInputValue("favorite", matchingValue);
+        }
+      }
+      const { showAddFavorite } = this._getFavoriteActionState();
+      if (!showAddFavorite && this._addFavoriteChecked) {
+        this._addFavoriteChecked = false;
+      }
+      this._requestRender();
+    }
+
+    _handleClick(event: Event): void {
+      if (this._isInEditor()) {
+        return;
+      }
+      const target = event.target as HTMLElement | null;
+      if (!target) {
+        return;
+      }
+      const removeButton = target.closest<HTMLElement>("#removeFavorite");
+      if (removeButton) {
+        const id = removeButton.getAttribute("data-favorite-id") ?? "";
+        void this._removeFavorite(id);
+        return;
+      }
+      const startButton = target.closest<HTMLElement>("#startReservation");
+      if (startButton) {
+        void this._handleStart();
+      }
+    }
+
+    _handleInput(event: Event): void {
+      const target = event.target as HTMLElement | null;
+      if (!target) {
+        return;
+      }
+      if ("id" in target && typeof target.id === "string") {
+        const value = (target as ValueElement).value ?? "";
+        if (INPUT_VALUE_IDS.has(target.id)) {
+          this._setInputValue(target.id, value);
+        }
+      }
+      if (target.id === "licensePlate" || target.id === "visitorName") {
+        const selectedFavorite = this._getInputValue("favorite");
+        if (
+          selectedFavorite &&
+          selectedFavorite !== FAVORITE_PLACEHOLDER_VALUE
+        ) {
+          this._suppressFavoriteClear = true;
+          this._setInputValue("favorite", FAVORITE_PLACEHOLDER_VALUE);
+        }
+        this._scheduleFavoriteActionsUpdate();
+        return;
+      }
+      if (
+        target.id === "startDateTime" &&
+        this._config?.show_start_time &&
+        this._config?.show_end_time &&
+        !this._useSplitDateTime()
+      ) {
+        this._syncEndWithStart(false);
+      }
+    }
+
+    _handleChange(event: Event): void {
+      const target = event.target as HTMLElement | null;
+      if (!target) {
+        return;
+      }
+      if ("id" in target && typeof target.id === "string") {
+        const value = (target as ValueElement).value ?? "";
+        if (CHANGE_VALUE_IDS.has(target.id)) {
+          this._setInputValue(target.id, value);
+        }
+      }
+      if (target.id === "addFavorite") {
+        this._addFavoriteChecked = (target as CheckedElement).checked;
+        this._scheduleFavoriteActionsUpdate();
+        return;
+      }
+      if (
+        target.id === "startDateTime" &&
+        this._config?.show_start_time &&
+        this._config?.show_end_time &&
+        !this._useSplitDateTime()
+      ) {
+        this._syncEndWithStart(false);
+        return;
+      }
+      if (
+        (target.id === "startDate" || target.id === "startTime") &&
+        this._config?.show_start_time &&
+        this._config?.show_end_time &&
+        this._useSplitDateTime()
+      ) {
+        this._syncEndWithStart(true);
+      }
+    }
+
+    _handlePermitSelectChange(event: Event): void {
+      if (this._isInEditor()) {
+        return;
+      }
+      const detail = (event as CustomEvent<{ value?: string | null }>).detail;
+      const value = detail?.value ?? "";
+      this._handlePermitChange(value);
+    }
+
+    _handleFavoriteSelectChange(event: Event): void {
+      if (!this._config?.show_favorites || this._isInEditor()) {
+        return;
+      }
+      const select = event.currentTarget as ValueElement | null;
+      const plate = select?.value;
+      this._setInputValue("favorite", plate ?? "");
+      if (this._suppressFavoriteClear) {
+        this._suppressFavoriteClear = false;
+        if (!plate || plate === FAVORITE_PLACEHOLDER_VALUE) {
+          this._scheduleFavoriteActionsUpdate();
+          return;
+        }
+      }
+      if (!plate || plate === FAVORITE_PLACEHOLDER_VALUE) {
+        void this._applyFavoriteSelection("", "");
+        return;
+      }
+      const favorite = this._favoritesByValue.get(normalizeMatchValue(plate));
+      void this._applyFavoriteSelection(plate, favorite?.name ?? "");
+    }
+
+    _handlePermitChange(value: string): void {
+      if (!value) {
+        this._selectedEntryId = null;
+        this._resetDeviceState();
+        this._status = "";
+        this._statusType = "info";
+        this._requestRender();
+        return;
+      }
+      if (
+        value === this._selectedEntryId &&
+        this._deviceEntryId === value &&
+        this._deviceId
+      ) {
+        return;
+      }
+      this._selectedEntryId = value;
+      this._resetDeviceState();
+      this._status = "";
+      this._statusType = "info";
+      this._requestRender();
+      this._ensureDeviceId();
+      this._maybeLoadFavorites();
+    }
+
+    _resetFavoritesState(): void {
+      this._favoritesLoadedFor = null;
+      this._setFavorites([]);
+    }
+
+    _resetDeviceState(): void {
+      this._deviceId = null;
+      this._deviceEntryId = null;
+      this._resetPayWindowEndCache();
+      this._resetFavoritesState();
+    }
+
+    _setFavorites(favorites: FavoriteItem[]): void {
+      this._favorites = favorites;
+      this._rebuildFavoriteIndex();
     }
 
     _rebuildFavoriteIndex(): void {
@@ -939,7 +1023,9 @@ import { getCardConfigForm } from "./city-visitor-parking-card-editor";
             byPlateName.set(`${plateKey}|${nameKey}`, favorite);
           }
         }
-        const valueKey = normalizeMatchValue(favorite.license_plate || favorite.id);
+        const valueKey = normalizeMatchValue(
+          favorite.license_plate || favorite.id,
+        );
         if (valueKey) {
           byValue.set(valueKey, favorite);
         }
@@ -949,10 +1035,7 @@ import { getCardConfigForm } from "./city-visitor-parking-card-editor";
       this._favoritesByValue = byValue;
     }
 
-    _findFavorite(
-      license: string,
-      name: string
-    ): FavoriteItem | null {
+    _findFavorite(license: string, name: string): FavoriteItem | null {
       const licenseKey = normalizePlateValue(license);
       const nameKey = normalizeMatchValue(name);
       if (!licenseKey) {
@@ -977,10 +1060,10 @@ import { getCardConfigForm } from "./city-visitor-parking-card-editor";
 
     _selectedFavoriteMatchesLicense(
       favorite: FavoriteItem,
-      license: string
+      license: string,
     ): boolean {
       const favoriteLicense = normalizePlateValue(
-        favorite.license_plate || favorite.id
+        favorite.license_plate || favorite.id,
       );
       const licenseKey = normalizePlateValue(license);
       return Boolean(favoriteLicense) && favoriteLicense === licenseKey;
@@ -1008,7 +1091,6 @@ import { getCardConfigForm } from "./city-visitor-parking-card-editor";
         return;
       }
       this._favoriteRemoveInFlight = true;
-      this._requestRender();
       this._pendingRemoveFavoriteId = favoriteId;
       this._status = this._localize("message.removing_favorite");
       this._statusType = "info";
@@ -1021,7 +1103,10 @@ import { getCardConfigForm } from "./city-visitor-parking-card-editor";
           favorite_id: favoriteId,
         });
       } catch (err: unknown) {
-        this._status = this._localize("message.favorite_remove_failed");
+        this._status = this._errorMessage(
+          err,
+          "message.favorite_remove_failed",
+        );
         this._statusType = "warning";
         this._pendingRemoveFavoriteId = null;
         this._favoriteRemoveInFlight = false;
@@ -1031,64 +1116,6 @@ import { getCardConfigForm } from "./city-visitor-parking-card-editor";
       await this._maybeLoadFavorites();
       this._favoriteRemoveInFlight = false;
       this._requestRender();
-    }
-
-    _updateFavoriteActions(): void {
-      if (!this.shadowRoot) {
-        return;
-      }
-      const controlsDisabled = this._isInEditor();
-      const license = this._getInputValue("licensePlate").trim();
-      const name = this._getInputValue("visitorName").trim();
-      const matchingFavorite = this._findFavorite(license, name);
-      const selectedFavorite = this._findFavoriteByValue(
-        this._getInputValue("favorite")
-      );
-      const selectedFavoriteMatchesLicense = selectedFavorite
-        ? this._selectedFavoriteMatchesLicense(selectedFavorite, license)
-        : false;
-      const canManage =
-        !controlsDisabled && !this._favoritesLoading && this._deviceId;
-      const shouldShowAdd =
-        canManage
-        && license
-        && name
-        && !matchingFavorite
-        && !selectedFavoriteMatchesLicense;
-      const shouldShowRemove =
-        canManage
-        && Boolean(selectedFavorite?.id || selectedFavorite?.license_plate)
-        && selectedFavoriteMatchesLicense;
-      const addWrap = this.shadowRoot.querySelector<HTMLElement>(
-        "#addFavoriteWrap"
-      );
-      const addCheckbox = this.shadowRoot.querySelector<CheckedElement>(
-        "#addFavorite"
-      );
-      const removeWrap = this.shadowRoot.querySelector<HTMLElement>(
-        "#removeFavoriteWrap"
-      );
-      const removeButton = this.shadowRoot.querySelector<DisabledElement>(
-        "#removeFavorite"
-      );
-      if (addWrap) {
-        addWrap.style.display = shouldShowAdd ? "" : "none";
-        addWrap.hidden = !shouldShowAdd;
-      }
-      if (removeWrap) {
-        removeWrap.style.display = shouldShowRemove ? "" : "none";
-        removeWrap.hidden = !shouldShowRemove;
-      }
-      if (removeButton) {
-        const favoriteId =
-          selectedFavorite?.id || selectedFavorite?.license_plate || "";
-        removeButton.setAttribute("data-favorite-id", favoriteId);
-      }
-      if (addCheckbox) {
-        if (!shouldShowAdd) {
-          addCheckbox.checked = false;
-        }
-      }
     }
 
     async _handleStart(): Promise<void> {
@@ -1132,15 +1159,11 @@ import { getCardConfigForm } from "./city-visitor-parking-card-editor";
         return;
       }
 
-      const addFavorite =
-        this.shadowRoot?.querySelector<CheckedElement>("#addFavorite");
       const name = this._getInputValue("visitorName").trim();
-      if (addFavorite?.checked && license && name) {
-        const matchingFavorite = this._findFavorite(license, name);
-        if (!matchingFavorite) {
-          this._addFavorite(license, name);
-        }
-        addFavorite.checked = false;
+      const { showAddFavorite } = this._getFavoriteActionState();
+      if (this._addFavoriteChecked && showAddFavorite) {
+        this._addFavorite(license, name);
+        this._addFavoriteChecked = false;
       }
 
       try {
@@ -1151,7 +1174,10 @@ import { getCardConfigForm } from "./city-visitor-parking-card-editor";
           license_plate: license,
         });
       } catch (err: unknown) {
-        this._status = this._localize("message.reservation_update_failed");
+        this._status = this._errorMessage(
+          err,
+          "message.reservation_start_failed",
+        );
         this._statusType = "warning";
         this._startInFlight = false;
         this._requestRender();
@@ -1166,7 +1192,7 @@ import { getCardConfigForm } from "./city-visitor-parking-card-editor";
       window.dispatchEvent(
         new CustomEvent("city-visitor-parking-reservation-started", {
           detail: { device_id: this._deviceId },
-        })
+        }),
       );
     }
 
@@ -1195,15 +1221,25 @@ import { getCardConfigForm } from "./city-visitor-parking-card-editor";
       let start = fallbackStart;
       let end = new Date(start.getTime() + 60 * 60 * 1000);
       if (useSplitDateTime) {
-        const startDateValue = showStart ? this._getInputValue("startDate") : "";
-        const startTimeValue = showStart ? this._getInputValue("startTime") : "";
+        const startDateValue = showStart
+          ? this._getInputValue("startDate")
+          : "";
+        const startTimeValue = showStart
+          ? this._getInputValue("startTime")
+          : "";
         const endDateValue = showEnd ? this._getInputValue("endDate") : "";
         const endTimeValue = showEnd ? this._getInputValue("endTime") : "";
-        start = this._parseDateTime(startDateValue, startTimeValue, fallbackStart);
+        start = this._parseDateTime(
+          startDateValue,
+          startTimeValue,
+          fallbackStart,
+        );
         const fallbackEnd = new Date(start.getTime() + 60 * 60 * 1000);
         end = this._parseDateTime(endDateValue, endTimeValue, fallbackEnd);
       } else {
-        const startValue = showStart ? this._getInputValue("startDateTime") : "";
+        const startValue = showStart
+          ? this._getInputValue("startDateTime")
+          : "";
         const endValue = showEnd ? this._getInputValue("endDateTime") : "";
         start = startValue ? new Date(startValue) : fallbackStart;
         const fallbackEnd = new Date(start.getTime() + 60 * 60 * 1000);
@@ -1236,40 +1272,23 @@ import { getCardConfigForm } from "./city-visitor-parking-card-editor";
     }
 
     _getInputValue(id: string): string {
-      const input = this.shadowRoot?.querySelector<ValueElement>(`#${id}`);
-      return input?.value || "";
+      return this._formValues[id] ?? "";
     }
 
     _setInputValue(id: string, value: string): void {
-      const input = this.shadowRoot?.querySelector<ValueElement>(`#${id}`);
-      if (input && value !== undefined) {
-        this._setElementValue(input, value);
-      }
-    }
-
-    _setElementValue(
-      element: ValueElement | null,
-      value: string | null | undefined
-    ): void {
-      if (!element) {
-        return;
-      }
       const safeValue = value ?? "";
-      const updateComplete = element?.updateComplete;
-      if (updateComplete && typeof updateComplete.then === "function") {
-        updateComplete.then(() => {
-          element.value = safeValue;
-        });
+      if (this._formValues[id] === safeValue) {
         return;
       }
-      element.value = safeValue;
+      this._formValues[id] = safeValue;
+      this._requestRender();
     }
 
     _syncEndWithStart(useSplitDateTime: boolean): void {
       if (!this._config?.show_end_time) {
         return;
       }
-      const offsetMs = 60 * 60 * 1000;
+      const offsetMs = 60 * 1000;
       const payWindowEnd = this._getCachedPayWindowEnd();
       if (useSplitDateTime) {
         const startDateValue = this._getInputValue("startDate");
@@ -1278,7 +1297,7 @@ import { getCardConfigForm } from "./city-visitor-parking-card-editor";
           return;
         }
         const start = new Date(
-          `${startDateValue}T${normalizeTimeValue(startTimeValue)}`
+          `${startDateValue}T${normalizeTimeValue(startTimeValue)}`,
         );
         if (Number.isNaN(start.getTime())) {
           return;
@@ -1301,7 +1320,7 @@ import { getCardConfigForm } from "./city-visitor-parking-card-editor";
     }
 
     async _applyEndDefaultFromPayWindow(
-      useSplitDateTime: boolean
+      useSplitDateTime: boolean,
     ): Promise<void> {
       if (!this._config?.show_end_time) {
         return;
@@ -1336,7 +1355,7 @@ import { getCardConfigForm } from "./city-visitor-parking-card-editor";
     _resolveDefaultEnd(
       start: Date,
       payWindowEnd: Date | null,
-      offsetMs: number
+      offsetMs: number,
     ): Date {
       if (payWindowEnd && payWindowEnd > start) {
         return payWindowEnd;
@@ -1380,25 +1399,39 @@ import { getCardConfigForm } from "./city-visitor-parking-card-editor";
       if (!this._hass || !this._deviceId) {
         return null;
       }
+      const cachedEntityId = this._payWindowEndEntityByDeviceId.get(
+        this._deviceId,
+      );
+      if (cachedEntityId !== undefined) {
+        this._payWindowEndEntityId = cachedEntityId;
+        this._payWindowEndEntityDeviceId = this._deviceId;
+        return this._getCachedPayWindowEnd();
+      }
       if (
         !this._payWindowEndEntityId ||
         this._payWindowEndEntityDeviceId !== this._deviceId
       ) {
         try {
-          const entities = await this._hass.callWS<Array<{
-            entity_id: string;
-            device_id?: string;
-            unique_id?: string;
-            platform?: string;
-            domain?: string;
-          }>>({ type: "config/entity_registry/list" });
+          const entities = await this._hass.callWS<
+            Array<{
+              entity_id: string;
+              device_id?: string;
+              unique_id?: string;
+              platform?: string;
+              domain?: string;
+            }>
+          >({ type: "config/entity_registry/list" });
           const match = entities.find(
             (entity) =>
               entity.device_id === this._deviceId &&
               entity.domain === "sensor" &&
-              entity.unique_id?.endsWith(":next_chargeable_end")
+              entity.unique_id?.endsWith(":next_chargeable_end"),
           );
-          this._payWindowEndEntityId = match?.entity_id ?? null;
+          const entityId = match?.entity_id ?? null;
+          if (entityId) {
+            this._payWindowEndEntityByDeviceId.set(this._deviceId, entityId);
+          }
+          this._payWindowEndEntityId = entityId;
           this._payWindowEndEntityDeviceId = this._deviceId;
         } catch {
           this._payWindowEndEntityId = null;
@@ -1411,20 +1444,7 @@ import { getCardConfigForm } from "./city-visitor-parking-card-editor";
     async _applyFavoriteSelection(plate: string, name: string): Promise<void> {
       this._setInputValue("visitorName", name);
       this._setInputValue("licensePlate", plate);
-      const licenseInput =
-        this.shadowRoot?.querySelector<ValueElement>("#licensePlate");
-      const nameInput =
-        this.shadowRoot?.querySelector<ValueElement>("#visitorName");
-      const pending: Array<Promise<unknown>> = [];
-      if (licenseInput?.updateComplete) {
-        pending.push(licenseInput.updateComplete);
-      }
-      if (nameInput?.updateComplete) {
-        pending.push(nameInput.updateComplete);
-      }
-      if (pending.length) {
-        await Promise.all(pending);
-      }
+      await this.updateComplete;
       this._scheduleFavoriteActionsUpdate();
     }
 
@@ -1432,81 +1452,18 @@ import { getCardConfigForm } from "./city-visitor-parking-card-editor";
       return this._config?.config_entry_id || this._selectedEntryId;
     }
 
-    _localize(key: string, ...args: Array<string | number>): string {
-      const lookupKey = `${TRANSLATION_PREFIX}.${key}`;
-      const translated = this._hass?.localize?.(lookupKey, ...args);
-      if (translated && translated !== lookupKey) {
-        return translated;
-      }
-      return DEFAULT_STRINGS[key] ?? key;
+    _localize(key: string, ..._args: Array<string | number>): string {
+      return localize(this._hass, key);
     }
 
-    _applyTheme(): void {
-      if (!this._hass) {
-        return;
-      }
-      const themeName = this._config?.theme;
-      if (!themeName) {
-        this._clearTheme();
-        return;
-      }
-      const themes = this._hass.themes?.themes as
-        | Record<string, Record<string, string>>
-        | undefined;
-      const theme = themes?.[themeName];
-      if (!theme) {
-        this._clearTheme();
-        return;
-      }
-      if (this._appliedThemeName !== themeName) {
-        this._clearTheme();
-      }
-      const applied: string[] = [];
-      for (const [key, value] of Object.entries(theme)) {
-        if (typeof value !== "string") {
-          continue;
-        }
-        const cssVar = key.startsWith("--") ? key : `--${key}`;
-        this.style.setProperty(cssVar, value);
-        applied.push(cssVar);
-      }
-      this._appliedThemeVariables = applied;
-      this._appliedThemeName = themeName;
-    }
-
-    async _ensureTranslations(): Promise<void> {
-      if (!this._hass || this._translationsPromise) {
-        return;
-      }
-      const loadTranslations = this._hass.loadBackendTranslation;
-      if (typeof loadTranslations !== "function") {
-        return;
-      }
-      this._translationsPromise = loadTranslations.call(
-        this._hass,
-        TRANSLATION_SECTION,
-        DOMAIN
-      );
-      try {
-        await this._translationsPromise;
-      } finally {
-        this._requestRender();
-      }
-    }
-
-    _clearTheme(): void {
-      if (this._appliedThemeVariables.length) {
-        for (const cssVar of this._appliedThemeVariables) {
-          this.style.removeProperty(cssVar);
-        }
-      }
-      this._appliedThemeVariables = [];
-      this._appliedThemeName = null;
+    _errorMessage(err: unknown, fallbackKey: string): string {
+      return errorMessage(err, fallbackKey, this._localize.bind(this));
     }
 
     _useSplitDateTime(): boolean {
       const supportsSplit = Boolean(
-        customElements.get("ha-date-input") && customElements.get("ha-time-input")
+        customElements.get("ha-date-input") &&
+        customElements.get("ha-time-input"),
       );
       if (this._splitDateTimeSupport === null || supportsSplit) {
         this._splitDateTimeSupport = supportsSplit;
@@ -1515,49 +1472,20 @@ import { getCardConfigForm } from "./city-visitor-parking-card-editor";
     }
 
     _isInEditor(): boolean {
-      const selector =
-        "hui-card-preview, hui-card-picker, hui-card-element-editor, " +
-        "hui-card-edit-mode, hui-dialog-edit-card";
-      let node: Node | null = this;
-      while (node) {
-        if (node instanceof HTMLElement && node.matches(selector)) {
-          return true;
-        }
-        if (node instanceof HTMLElement && node.assignedSlot) {
-          node = node.assignedSlot;
-          continue;
-        }
-        const root = node.getRootNode?.();
-        if (root instanceof ShadowRoot) {
-          node = root.host;
-          continue;
-        }
-        node = node.parentNode;
-      }
-      return false;
-    }
-
-    _escape(value: string | number | null | undefined): string {
-      return String(value)
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;")
-        .replace(/'/g, "&#39;");
+      return isInEditor(this);
     }
   }
 
-  if (!customElements.get(CARD_TYPE)) {
-    customElements.define(CARD_TYPE, CityVisitorParkingNewReservationCard);
-  }
-
-  const win = window as Window & {
-    customCards?: Array<{ type: string; name: string; description: string }>;
-  };
-  win.customCards = win.customCards || [];
-  win.customCards.push({
-    type: CARD_TYPE,
-    name: "City visitor parking",
-    description: "Start a visitor parking reservation.",
-  });
+  registerCustomCard(
+    CARD_TYPE,
+    CityVisitorParkingNewReservationCard,
+    localize(
+      (window as Window & { hass?: { localize?: LocalizeFunc } }).hass,
+      "name",
+    ),
+    localize(
+      (window as Window & { hass?: { localize?: LocalizeFunc } }).hass,
+      "description",
+    ),
+  );
 })();
