@@ -281,7 +281,7 @@ var u2 = Array.isArray;
 var d2 = (t3) => u2(t3) || "function" == typeof t3?.[Symbol.iterator];
 var f2 = "[ 	\n\f\r]";
 var v = /<(?:(!--|\/[^a-zA-Z])|(\/?[a-zA-Z][^>\s]*)|(\/?$))/g;
-var _ = /-->/g;
+var _ = /--!?>/g;
 var m = />/g;
 var p2 = RegExp(`>|${f2}(?:([^\\s"'>=/]+)(${f2}*=${f2}*(?:[^ 	
 \f\r"'\`<>=]|("|')|))|$)`, "g");

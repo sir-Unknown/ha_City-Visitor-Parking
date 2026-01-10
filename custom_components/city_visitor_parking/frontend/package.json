@@ -2,7 +2,7 @@
   "name": "city-visitor-parking-frontend",
   "private": true,
   "scripts": {
-    "build": "rm -rf dist && esbuild src/city-visitor-parking-card.ts src/city-visitor-parking-active-card.ts src/city-visitor-parking-active-card-editor.ts --bundle --format=esm --target=es2020 --outdir=dist && mkdir -p dist/translations && cp src/translations/*.json dist/translations/",
+    "build": "rm -rf dist && esbuild src/city-visitor-parking-card.ts src/city-visitor-parking-active-card.ts src/city-visitor-parking-active-card-editor.ts --bundle --format=esm --target=es2020 --outdir=dist && mkdir -p dist/translations && cp src/translations/*.json dist/translations/ && node -e \"const fs=require('fs');const path=require('path');const dir='dist';for(const file of fs.readdirSync(dir)){if(!file.endsWith('.js')){continue;}const full=path.join(dir,file);const data=fs.readFileSync(full,'utf8');const updated=data.replaceAll('/-->/g','/--!?>/g');if(updated!==data){fs.writeFileSync(full,updated);}}\"",
     "watch": "yarn build -- --watch",
     "lint": "yarn lint:eslint && yarn lint:prettier && yarn lint:types && yarn lint:lit",
     "lint:eslint": "eslint \"src/**/*.ts\"",
