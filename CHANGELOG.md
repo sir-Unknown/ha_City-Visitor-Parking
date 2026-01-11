@@ -4,6 +4,14 @@
 
 ## Released
 
+### 0.1.14
+
+#### Fixed
+
+- Restore the release workflow as `release.yml`.
+
+**Full Changelog**: https://github.com/sir-Unknown/ha_City-Visitor-Parking/compare/v0.1.13...v0.1.14
+
 ### 0.1.13
 
 #### Fixed
