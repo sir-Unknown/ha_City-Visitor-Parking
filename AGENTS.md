@@ -22,7 +22,7 @@ Treat this repository as “official-ready”:
 - Keep module naming and responsibilities aligned with official integrations:
   - `const.py`, `config_flow.py`, `coordinator.py`, `services.py`, `diagnostics.py`, `sensor.py`.
 
-Maintain `MIGRATION.md` with concrete steps to move into Core later.
+Document any migration steps in project docs when needed.
 
 ## 3) Quality scale target
 
