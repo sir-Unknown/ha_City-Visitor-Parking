@@ -1402,17 +1402,11 @@ var getCardConfigForm = async (hassOrLocalize) => {
       }
     }
     _handleInput(event) {
-      const target = event.target;
-      if (!target) {
-        return;
+      const field = this._getValueFromEvent(event, INPUT_VALUE_IDS);
+      if (field) {
+        this._setInputValue(field.id, field.value);
       }
-      if ("id" in target && typeof target.id === "string") {
-        const value = target.value ?? "";
-        if (INPUT_VALUE_IDS.has(target.id)) {
-          this._setInputValue(target.id, value);
-        }
-      }
-      if (target.id === "licensePlate" || target.id === "visitorName") {
+      if (field?.id === "licensePlate" || field?.id === "visitorName") {
         const selectedFavorite = this._getInputValue("favorite");
         if (selectedFavorite && selectedFavorite !== FAVORITE_PLACEHOLDER_VALUE) {
           this._suppressFavoriteClear = true;
@@ -1421,7 +1415,7 @@ var getCardConfigForm = async (hassOrLocalize) => {
         this._scheduleFavoriteActionsUpdate();
         return;
       }
-      if (target.id === "startDateTime" && this._config?.show_start_time && this._config?.show_end_time && !this._useSplitDateTime()) {
+      if (field?.id === "startDateTime" && this._config?.show_start_time && this._config?.show_end_time && !this._useSplitDateTime()) {
         this._syncEndWithStart(false);
       }
     }
@@ -1430,22 +1424,20 @@ var getCardConfigForm = async (hassOrLocalize) => {
       if (!target) {
         return;
       }
-      if ("id" in target && typeof target.id === "string") {
-        const value = target.value ?? "";
-        if (CHANGE_VALUE_IDS.has(target.id)) {
-          this._setInputValue(target.id, value);
-        }
+      const field = this._getValueFromEvent(event, CHANGE_VALUE_IDS);
+      if (field) {
+        this._setInputValue(field.id, field.value);
       }
       if (target.id === "addFavorite") {
         this._addFavoriteChecked = target.checked;
         this._scheduleFavoriteActionsUpdate();
         return;
       }
-      if (target.id === "startDateTime" && this._config?.show_start_time && this._config?.show_end_time && !this._useSplitDateTime()) {
+      if (field?.id === "startDateTime" && this._config?.show_start_time && this._config?.show_end_time && !this._useSplitDateTime()) {
         this._syncEndWithStart(false);
         return;
       }
-      if ((target.id === "startDate" || target.id === "startTime") && this._config?.show_start_time && this._config?.show_end_time && this._useSplitDateTime()) {
+      if ((field?.id === "startDate" || field?.id === "startTime") && this._config?.show_start_time && this._config?.show_end_time && this._useSplitDateTime()) {
         this._syncEndWithStart(true);
       }
     }
@@ -1749,6 +1741,24 @@ var getCardConfigForm = async (hassOrLocalize) => {
     }
     _getInputValue(id) {
       return this._formValues[id] ?? "";
+    }
+    _getValueFromEvent(event, ids) {
+      const path = event.composedPath();
+      const element = path.find(
+        (node) => node instanceof HTMLElement && ids.has(node.id)
+      );
+      if (!element) {
+        return null;
+      }
+      const customEvent = event;
+      if (typeof customEvent.detail?.value === "string") {
+        return { id: element.id, value: customEvent.detail.value };
+      }
+      const inputElement = path.find(
+        (node) => node instanceof HTMLInputElement || node instanceof HTMLTextAreaElement
+      );
+      const value = inputElement?.value ?? element.value ?? "";
+      return { id: element.id, value };
     }
     _setInputValue(id, value) {
       const safeValue = value ?? "";

@@ -890,17 +890,11 @@ import {
     }
 
     _handleInput(event: Event): void {
-      const target = event.target as HTMLElement | null;
-      if (!target) {
-        return;
+      const field = this._getValueFromEvent(event, INPUT_VALUE_IDS);
+      if (field) {
+        this._setInputValue(field.id, field.value);
       }
-      if ("id" in target && typeof target.id === "string") {
-        const value = (target as ValueElement).value ?? "";
-        if (INPUT_VALUE_IDS.has(target.id)) {
-          this._setInputValue(target.id, value);
-        }
-      }
-      if (target.id === "licensePlate" || target.id === "visitorName") {
+      if (field?.id === "licensePlate" || field?.id === "visitorName") {
         const selectedFavorite = this._getInputValue("favorite");
         if (
           selectedFavorite &&
@@ -913,7 +907,7 @@ import {
         return;
       }
       if (
-        target.id === "startDateTime" &&
+        field?.id === "startDateTime" &&
         this._config?.show_start_time &&
         this._config?.show_end_time &&
         !this._useSplitDateTime()
@@ -927,11 +921,9 @@ import {
       if (!target) {
         return;
       }
-      if ("id" in target && typeof target.id === "string") {
-        const value = (target as ValueElement).value ?? "";
-        if (CHANGE_VALUE_IDS.has(target.id)) {
-          this._setInputValue(target.id, value);
-        }
+      const field = this._getValueFromEvent(event, CHANGE_VALUE_IDS);
+      if (field) {
+        this._setInputValue(field.id, field.value);
       }
       if (target.id === "addFavorite") {
         this._addFavoriteChecked = (target as CheckedElement).checked;
@@ -939,7 +931,7 @@ import {
         return;
       }
       if (
-        target.id === "startDateTime" &&
+        field?.id === "startDateTime" &&
         this._config?.show_start_time &&
         this._config?.show_end_time &&
         !this._useSplitDateTime()
@@ -948,7 +940,7 @@ import {
         return;
       }
       if (
-        (target.id === "startDate" || target.id === "startTime") &&
+        (field?.id === "startDate" || field?.id === "startTime") &&
         this._config?.show_start_time &&
         this._config?.show_end_time &&
         this._useSplitDateTime()
@@ -1293,6 +1285,31 @@ import {
 
     _getInputValue(id: string): string {
       return this._formValues[id] ?? "";
+    }
+
+    _getValueFromEvent(
+      event: Event,
+      ids: Set<string>,
+    ): { id: string; value: string } | null {
+      const path = event.composedPath();
+      const element = path.find(
+        (node): node is ValueElement =>
+          node instanceof HTMLElement && ids.has(node.id),
+      );
+      if (!element) {
+        return null;
+      }
+      const customEvent = event as CustomEvent<{ value?: string | null }>;
+      if (typeof customEvent.detail?.value === "string") {
+        return { id: element.id, value: customEvent.detail.value };
+      }
+      const inputElement = path.find(
+        (node): node is HTMLInputElement | HTMLTextAreaElement =>
+          node instanceof HTMLInputElement ||
+          node instanceof HTMLTextAreaElement,
+      );
+      const value = inputElement?.value ?? element.value ?? "";
+      return { id: element.id, value };
     }
 
     _setInputValue(id: string, value: string): void {
