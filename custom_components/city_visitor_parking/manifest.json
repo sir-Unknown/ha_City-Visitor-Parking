@@ -10,5 +10,5 @@
   "issue_tracker": "https://github.com/sir-Unknown/ha_City-Visitor-Parking/issues",
   "quality_scale": "silver",
   "requirements": ["pycityvisitorparking==0.5.14"],
-  "version": "0.1.7"
+  "version": "0.1.8"
 }

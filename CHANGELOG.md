@@ -4,6 +4,14 @@
 
 ## Released
 
+### 0.1.8
+
+#### Fixed
+
+- Package the HACS release asset so the integration installs without a nested `custom_components` folder.
+
+**Full Changelog**: https://github.com/sir-Unknown/ha_City-Visitor-Parking/compare/v0.1.7...v0.1.8
+
 ### 0.1.7
 
 #### Changed
