@@ -4,6 +4,14 @@
 
 ## Released
 
+### 0.1.13
+
+#### Fixed
+
+- Use `export-ignore` to exclude frontend sources, tooling files, and `AGENTS.md` from the release zip.
+
+**Full Changelog**: https://github.com/sir-Unknown/ha_City-Visitor-Parking/compare/v0.1.12...v0.1.13
+
 ### 0.1.12
 
 #### Fixed

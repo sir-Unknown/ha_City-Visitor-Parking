@@ -1,0 +1,11 @@
+AGENTS.md export-ignore
+frontend/AGENTS.md export-ignore
+frontend/node_modules export-ignore
+frontend/node_modules/** export-ignore
+frontend/src export-ignore
+frontend/src/** export-ignore
+frontend/eslint.config.cjs export-ignore
+frontend/package.json export-ignore
+frontend/tsconfig.json export-ignore
+frontend/yarn.lock export-ignore
+.gitattributes export-ignore
