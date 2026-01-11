@@ -4,6 +4,14 @@
 
 ## Released
 
+### 0.1.11
+
+#### Fixed
+
+- Add hassfest pre-commit hook and keep manifest key order compliant.
+
+**Full Changelog**: https://github.com/sir-Unknown/ha_City-Visitor-Parking/compare/v0.1.10...v0.1.11
+
 ### 0.1.10
 
 #### Fixed
