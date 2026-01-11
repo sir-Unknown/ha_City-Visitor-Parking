@@ -1,6 +1,6 @@
 # City Visitor Parking 🚗
 
-[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=sir-Unknown&repository=https%3A%2F%2Fgithub.com%2Fsir-Unknown%2Fha_City-Visitor-Parking&category=Integration)
+[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=sir-Unknown&repository=ha_City-Visitor-Parking&category=integration)
 
 Manage Dutch municipality visitor parking permits directly from Home Assistant. Start, update, and end sessions, see paid and free windows, and keep favorite license plates ready.
 
