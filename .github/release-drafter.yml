@@ -21,5 +21,13 @@ categories:
   - title: "Docs"
     labels:
       - "documentation"
+autolabeler:
+  - label: "documentation"
+    files:
+      - "**/*.md"
+      - "docs/**"
+  - label: "tests"
+    files:
+      - "tests/**"
 template: |
   $CHANGES
