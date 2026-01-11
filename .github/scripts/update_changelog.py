@@ -53,21 +53,28 @@ def main() -> int:
     release = _load_release()
     changelog_path = Path("CHANGELOG.md")
     changelog = changelog_path.read_text(encoding="utf-8")
+    newline = "\r\n" if "\r\n" in changelog else "\n"
+    newline_re = r"\r?\n"
 
     if f"### {release['tag']}" in changelog:
         print("Changelog already contains this release")
         return 0
 
-    unreleased_re = re.compile(r"## Unreleased\s*\n\n(?P<body>.*?)(?=\n## )", re.S)
+    unreleased_re = re.compile(
+        rf"## Unreleased\s*{newline_re}{newline_re}(?P<body>.*?)(?={newline_re}## )",
+        re.S,
+    )
     match = unreleased_re.search(changelog)
     if not match:
         print("Unreleased section not found", file=sys.stderr)
         return 1
 
     unreleased_body = _normalize_body(match.group("body"))
-    changelog = unreleased_re.sub("## Unreleased\n\n", changelog, count=1)
+    changelog = unreleased_re.sub(
+        f"## Unreleased{newline}{newline}", changelog, count=1
+    )
 
-    released_re = re.compile(r"(## Released\s*\n\n)")
+    released_re = re.compile(rf"(## Released\s*{newline_re}{newline_re})")
     if not released_re.search(changelog):
         print("Released section not found", file=sys.stderr)
         return 1
@@ -78,7 +85,13 @@ def main() -> int:
     elif unreleased_body:
         release_body = f"{release_body}\n\n{unreleased_body}"
 
-    new_section = f"### {release['tag']}\n\n{release_body}\n\n"
+    release_body = release_body.replace("\r\n", "\n")
+    if newline != "\n":
+        release_body = release_body.replace("\n", newline)
+
+    new_section = (
+        f"### {release['tag']}{newline}{newline}{release_body}{newline}{newline}"
+    )
     changelog = released_re.sub(rf"\1{new_section}", changelog, count=1)
 
     changelog_path.write_text(changelog, encoding="utf-8")
