@@ -13,6 +13,23 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8
+      - name: Set up Node.js
+        uses: actions/setup-node@395ad3262231945c25e8478fd5baf05154b1d79f # v6.1.0
+        with:
+          node-version: "20"
+          cache: "yarn"
+          cache-dependency-path: custom_components/city_visitor_parking/frontend/yarn.lock
+      - name: Install frontend dependencies (locked)
+        if: ${{ hashFiles('custom_components/city_visitor_parking/frontend/yarn.lock') != '' }}
+        run: yarn install --non-interactive --frozen-lockfile
+        working-directory: custom_components/city_visitor_parking/frontend
+      - name: Install frontend dependencies
+        if: ${{ hashFiles('custom_components/city_visitor_parking/frontend/yarn.lock') == '' }}
+        run: yarn install --non-interactive
+        working-directory: custom_components/city_visitor_parking/frontend
+      - name: Build frontend
+        run: yarn build
+        working-directory: custom_components/city_visitor_parking/frontend
       - name: Build release asset
         run: |
           cd custom_components/city_visitor_parking
