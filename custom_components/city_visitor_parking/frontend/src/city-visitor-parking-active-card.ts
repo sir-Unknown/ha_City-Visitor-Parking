@@ -207,6 +207,7 @@ import {
     static getStubConfig(): CardConfig {
       return {
         type: `custom:${CARD_TYPE}`,
+        title: getCardText("active_name"),
       };
     }
 
@@ -751,21 +752,17 @@ import {
   const globalHass = (window as Window & {
     hass?: { localize?: LocalizeFunc };
   }).hass;
-  const getCardText = (key: string, fallback: string): string => {
+  const getCardText = (key: string): string => {
     const value = localize(globalHass, key);
-    return value === key ? fallback : value;
+    return value === key ? "" : value;
   };
   const registerCard = (): void => {
     registerCustomCard(
       CARD_TYPE,
       CityVisitorParkingActiveCard,
-      getCardText("active_name", "City visitor parking active"),
-      getCardText(
-        "active_description",
-        "Show your active visitor parking reservations.",
-      ),
+      getCardText("active_name"),
+      getCardText("active_description"),
     );
   };
-  registerCard();
   void ensureTranslations(globalHass).then(registerCard);
 })();

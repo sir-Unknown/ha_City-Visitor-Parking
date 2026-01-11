@@ -50,8 +50,11 @@ export const getCardConfigForm = async (
         default: true,
       },
     ],
-    computeLabel: (schema) =>
-      localize(hassOrLocalize, getFieldKey("editor.field", schema.name)),
+    computeLabel: (schema) => {
+      const key = getFieldKey("editor.field", schema.name);
+      const label = localize(hassOrLocalize, key);
+      return label === key ? "" : label;
+    },
     computeHelper: (schema) => {
       const key = getFieldKey("editor.description", schema.name);
       const helper = localize(hassOrLocalize, key);

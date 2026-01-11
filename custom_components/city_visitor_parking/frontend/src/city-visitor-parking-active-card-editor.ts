@@ -35,8 +35,11 @@ export const getActiveCardConfigForm = async (
         required: false,
       },
     ],
-    computeLabel: (schema) =>
-      localize(hassOrLocalize, getFieldKey("active_editor.field", schema.name)),
+    computeLabel: (schema) => {
+      const key = getFieldKey("active_editor.field", schema.name);
+      const label = localize(hassOrLocalize, key);
+      return label === key ? "" : label;
+    },
     computeHelper: (schema) => {
       const key = getFieldKey("active_editor.description", schema.name);
       const helper = localize(hassOrLocalize, key);

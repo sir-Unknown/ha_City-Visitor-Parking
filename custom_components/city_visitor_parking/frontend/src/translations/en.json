@@ -1,8 +1,8 @@
 {
   "name": "City visitor parking",
   "description": "Start your visitor parking reservation.",
-  "active_name": "City visitor parking active",
-  "active_description": "Show your active visitor parking reservations.",
+  "active_name": "Reservations",
+  "active_description": "Show your active reservations.",
   "editor.field.config_entry": "Permit",
   "editor.field.title": "Title",
   "editor.field.icon": "Icon",

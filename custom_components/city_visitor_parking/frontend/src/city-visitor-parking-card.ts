@@ -68,6 +68,14 @@ import {
     config_entry: { integration: DOMAIN },
   };
 
+  const globalHass = (window as Window & {
+    hass?: { localize?: LocalizeFunc };
+  }).hass;
+  const getCardText = (key: string): string => {
+    const value = localize(globalHass, key);
+    return value === key ? "" : value;
+  };
+
   const normalizeTimeValue = (value: string): string =>
     value.length === 5 ? `${value}:00` : value;
   const normalizeMatchValue = (value: string | undefined | null): string =>
@@ -253,6 +261,7 @@ import {
     static getStubConfig(): CardConfig {
       return {
         type: `custom:${CARD_TYPE}`,
+        title: getCardText("name"),
         show_reservation_form: true,
         show_favorites: true,
         show_start_time: true,
@@ -1495,21 +1504,13 @@ import {
     }
   }
 
-  const globalHass = (window as Window & {
-    hass?: { localize?: LocalizeFunc };
-  }).hass;
-  const getCardText = (key: string, fallback: string): string => {
-    const value = localize(globalHass, key);
-    return value === key ? fallback : value;
-  };
   const registerCard = (): void => {
     registerCustomCard(
       CARD_TYPE,
       CityVisitorParkingNewReservationCard,
-      getCardText("name", "City visitor parking"),
-      getCardText("description", "Start your visitor parking reservation."),
+      getCardText("name"),
+      getCardText("description"),
     );
   };
-  registerCard();
   void ensureTranslations(globalHass).then(registerCard);
 })();
