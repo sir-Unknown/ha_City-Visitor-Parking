@@ -745,9 +745,6 @@ var getFieldKey = (prefix, name) => {
 };
 var getCardConfigForm = async (hassOrLocalize) => {
   await ensureTranslations(hassOrLocalize);
-  const defaultTitleKey = "name";
-  const defaultTitleValue = localize(hassOrLocalize, defaultTitleKey);
-  const defaultTitle = defaultTitleValue === defaultTitleKey ? "City visitor parking" : defaultTitleValue;
   return {
     schema: [
       {
@@ -758,7 +755,6 @@ var getCardConfigForm = async (hassOrLocalize) => {
       {
         name: "title",
         selector: { text: {} },
-        default: defaultTitle,
         required: false
       },
       {

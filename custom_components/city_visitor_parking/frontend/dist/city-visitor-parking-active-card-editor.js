@@ -99,9 +99,6 @@ var getFieldKey = (prefix, name) => {
 };
 var getActiveCardConfigForm = async (hassOrLocalize) => {
   await ensureTranslations(hassOrLocalize);
-  const defaultTitleKey = "section.active_reservations";
-  const defaultTitleValue = localize(hassOrLocalize, defaultTitleKey);
-  const defaultTitle = defaultTitleValue === defaultTitleKey ? "Active reservations" : defaultTitleValue;
   return {
     schema: [
       {
@@ -112,7 +109,6 @@ var getActiveCardConfigForm = async (hassOrLocalize) => {
       {
         name: "title",
         selector: { text: {} },
-        default: defaultTitle,
         required: false
       },
       {
