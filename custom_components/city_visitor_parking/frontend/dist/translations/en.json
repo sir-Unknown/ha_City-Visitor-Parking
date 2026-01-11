@@ -39,6 +39,7 @@
   "message.select_favorite": "Select your favorite",
   "message.loading_favorites": "Loading your favorites",
   "message.loading_active_reservations": "Loading your active reservations",
+  "message.home_assistant_loading": "Home Assistant is loading. Not all data is available yet.",
   "message.no_active_reservations": "You have no active reservations",
   "message.active_reservations_failed": "We could not load your active reservations",
   "message.no_device_for_permit": "We could not find a device for your selected permit.",

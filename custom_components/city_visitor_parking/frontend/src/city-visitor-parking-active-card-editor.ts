@@ -17,6 +17,12 @@ export const getActiveCardConfigForm = async (
   readonly computeHelper: (schema: FormSchema) => string;
 }> => {
   await ensureTranslations(hassOrLocalize);
+  const defaultTitleKey = "section.active_reservations";
+  const defaultTitleValue = localize(hassOrLocalize, defaultTitleKey);
+  const defaultTitle =
+    defaultTitleValue === defaultTitleKey
+      ? "Active reservations"
+      : defaultTitleValue;
   return {
     schema: [
       {
@@ -27,6 +33,7 @@ export const getActiveCardConfigForm = async (
       {
         name: "title",
         selector: { text: {} },
+        default: defaultTitle,
         required: false,
       },
       {

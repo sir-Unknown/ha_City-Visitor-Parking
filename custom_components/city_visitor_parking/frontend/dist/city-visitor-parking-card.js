@@ -729,11 +729,13 @@ var registerCustomCard = (cardType, ctor, name, description) => {
   }
   const win = window;
   win.customCards = win.customCards || [];
-  win.customCards.push({
-    type: cardType,
-    name,
-    description
-  });
+  const existing = win.customCards.find((card) => card.type === cardType);
+  if (existing) {
+    existing.name = name;
+    existing.description = description;
+    return;
+  }
+  win.customCards.push({ type: cardType, name, description });
 };
 
 // src/city-visitor-parking-card-editor.ts
@@ -743,6 +745,9 @@ var getFieldKey = (prefix, name) => {
 };
 var getCardConfigForm = async (hassOrLocalize) => {
   await ensureTranslations(hassOrLocalize);
+  const defaultTitleKey = "name";
+  const defaultTitleValue = localize(hassOrLocalize, defaultTitleKey);
+  const defaultTitle = defaultTitleValue === defaultTitleKey ? "City visitor parking" : defaultTitleValue;
   return {
     schema: [
       {
@@ -753,6 +758,7 @@ var getCardConfigForm = async (hassOrLocalize) => {
       {
         name: "title",
         selector: { text: {} },
+        default: defaultTitle,
         required: false
       },
       {
@@ -867,9 +873,9 @@ var getCardConfigForm = async (hassOrLocalize) => {
     }
     setConfig(config) {
       if (!config || !config.type) {
-        const globalHass = window.hass;
+        const globalHass2 = window.hass;
         throw new Error(
-          localize(this._hass ?? globalHass, "message.invalid_config")
+          localize(this._hass ?? globalHass2, "message.invalid_config")
         );
       }
       const priorEntryId = this._getActiveEntryId();
@@ -1060,6 +1066,17 @@ var getCardConfigForm = async (hassOrLocalize) => {
     render() {
       if (!this._config) {
         return b2``;
+      }
+      if (!this._hass) {
+        return b2`
+          <ha-card>
+            <div class="card-content">
+              <ha-alert alert-type="warning">
+                ${this._getLoadingMessage()}
+              </ha-alert>
+            </div>
+          </ha-card>
+        `;
       }
       const priorLicense = this._getInputValue("licensePlate");
       const priorStartDate = this._getInputValue("startDate");
@@ -1876,6 +1893,11 @@ var getCardConfigForm = async (hassOrLocalize) => {
     _errorMessage(err, fallbackKey) {
       return errorMessage(err, fallbackKey, this._localize.bind(this));
     }
+    _getLoadingMessage() {
+      const key = "message.home_assistant_loading";
+      const message = localize(this._hass, key);
+      return message === key ? "Home Assistant is loading. Not all data is available yet." : message;
+    }
     _useSplitDateTime() {
       const supportsSplit = Boolean(
         customElements.get("ha-date-input") && customElements.get("ha-time-input")
@@ -1960,18 +1982,21 @@ var getCardConfigForm = async (hassOrLocalize) => {
         font-size: 0.85rem;
       }
     `;
-  registerCustomCard(
-    CARD_TYPE,
-    CityVisitorParkingNewReservationCard,
-    localize(
-      window.hass,
-      "name"
-    ),
-    localize(
-      window.hass,
-      "description"
-    )
-  );
+  const globalHass = window.hass;
+  const getCardText = (key, fallback) => {
+    const value = localize(globalHass, key);
+    return value === key ? fallback : value;
+  };
+  const registerCard = () => {
+    registerCustomCard(
+      CARD_TYPE,
+      CityVisitorParkingNewReservationCard,
+      getCardText("name", "City visitor parking"),
+      getCardText("description", "Start your visitor parking reservation.")
+    );
+  };
+  registerCard();
+  void ensureTranslations(globalHass).then(registerCard);
 })();
 /*! Bundled license information:
 

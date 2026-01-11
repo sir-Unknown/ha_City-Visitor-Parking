@@ -1,7 +1,6 @@
 {
   "domain": "city_visitor_parking",
   "name": "City Visitor Parking",
-  "after_dependencies": ["frontend", "lovelace"],
   "codeowners": ["@sir-Unknown"],
   "config_flow": true,
   "dependencies": ["http"],

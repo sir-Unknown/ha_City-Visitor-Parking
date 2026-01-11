@@ -75,9 +75,11 @@ export const registerCustomCard = (
     customCards?: Array<{ type: string; name: string; description: string }>;
   };
   win.customCards = win.customCards || [];
-  win.customCards.push({
-    type: cardType,
-    name,
-    description,
-  });
+  const existing = win.customCards.find((card) => card.type === cardType);
+  if (existing) {
+    existing.name = name;
+    existing.description = description;
+    return;
+  }
+  win.customCards.push({ type: cardType, name, description });
 };

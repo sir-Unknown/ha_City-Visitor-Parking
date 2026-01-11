@@ -39,6 +39,7 @@
   "message.select_favorite": "Selecteer je favoriet",
   "message.loading_favorites": "Je favorieten worden geladen",
   "message.loading_active_reservations": "Je actieve reserveringen worden geladen",
+  "message.home_assistant_loading": "Home Assistant wordt geladen. Nog niet alle gegevens zijn beschikbaar.",
   "message.no_active_reservations": "Je hebt geen actieve reserveringen",
   "message.active_reservations_failed": "We kunnen je actieve reserveringen niet laden",
   "message.no_device_for_permit": "We kunnen geen apparaat vinden voor je gekozen vergunning.",

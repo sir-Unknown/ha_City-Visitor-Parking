@@ -342,6 +342,17 @@ import {
       if (!this._config) {
         return html``;
       }
+      if (!this._hass) {
+        return html`
+          <ha-card>
+            <div class="card-content">
+              <ha-alert alert-type="warning">
+                ${this._getLoadingMessage()}
+              </ha-alert>
+            </div>
+          </ha-card>
+        `;
+      }
 
       const title = this._config.title || "";
       const icon = this._config.icon;
@@ -702,6 +713,14 @@ import {
       return errorMessage(err, fallbackKey, this._localize.bind(this));
     }
 
+    _getLoadingMessage(): string {
+      const key = "message.home_assistant_loading";
+      const message = localize(this._hass, key);
+      return message === key
+        ? "Home Assistant is loading. Not all data is available yet."
+        : message;
+    }
+
     async _getDomainDevices(): Promise<DeviceEntry[]> {
       if (!this._hass) {
         return [];
@@ -729,16 +748,24 @@ import {
     }
   }
 
-  registerCustomCard(
-    CARD_TYPE,
-    CityVisitorParkingActiveCard,
-    localize(
-      (window as Window & { hass?: { localize?: LocalizeFunc } }).hass,
-      "active_name",
-    ),
-    localize(
-      (window as Window & { hass?: { localize?: LocalizeFunc } }).hass,
-      "active_description",
-    ),
-  );
+  const globalHass = (window as Window & {
+    hass?: { localize?: LocalizeFunc };
+  }).hass;
+  const getCardText = (key: string, fallback: string): string => {
+    const value = localize(globalHass, key);
+    return value === key ? fallback : value;
+  };
+  const registerCard = (): void => {
+    registerCustomCard(
+      CARD_TYPE,
+      CityVisitorParkingActiveCard,
+      getCardText("active_name", "City visitor parking active"),
+      getCardText(
+        "active_description",
+        "Show your active visitor parking reservations.",
+      ),
+    );
+  };
+  registerCard();
+  void ensureTranslations(globalHass).then(registerCard);
 })();
