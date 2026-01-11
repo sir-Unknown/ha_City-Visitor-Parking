@@ -4,6 +4,17 @@
 
 ## Released
 
+### 0.1.7
+
+#### Changed
+
+- Use localized titles for the Lovelace card stubs and labels.
+- Update the active card name and description translations.
+- Remove tracked frontend build outputs and the migration guide.
+- Loosen the documentation requirement for migration steps in .
+
+**Full Changelog**: https://github.com/sir-Unknown/ha_City-Visitor-Parking/compare/v0.1.6...v0.1.7
+
 ### v0.1.7
 
 #### Changed
