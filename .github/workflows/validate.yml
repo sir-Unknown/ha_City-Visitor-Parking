@@ -47,6 +47,8 @@ jobs:
         id: frontend
         uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3.0.2
         with:
+          base: ${{ github.event.pull_request.base.sha || github.event.before || github.sha }}
+          ref: ${{ github.sha }}
           filters: .frontend_files.yaml
 
   ruff:
