@@ -4,6 +4,14 @@
 
 ## Released
 
+### 0.1.9
+
+#### Fixed
+
+- Ensure the release workflow builds and packages frontend `dist` assets for HACS installs.
+
+**Full Changelog**: https://github.com/sir-Unknown/ha_City-Visitor-Parking/compare/v0.1.8...v0.1.9
+
 ### 0.1.8
 
 #### Fixed
