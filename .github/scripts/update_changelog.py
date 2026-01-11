@@ -42,6 +42,9 @@ def _load_release() -> dict[str, str]:
         print("Release tag name is missing", file=sys.stderr)
         raise SystemExit(1)
 
+    if tag.startswith("v") and len(tag) > 1 and tag[1].isdigit():
+        tag = tag[1:]
+
     body = _normalize_body(release.get("body") or "")
     if not body:
         body = "- No changes"
