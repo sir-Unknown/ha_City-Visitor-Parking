@@ -4,6 +4,14 @@
 
 ## Released
 
+### 0.1.10
+
+#### Fixed
+
+- Add `lovelace` as an `after_dependencies` entry to satisfy hassfest.
+
+**Full Changelog**: https://github.com/sir-Unknown/ha_City-Visitor-Parking/compare/v0.1.9...v0.1.10
+
 ### 0.1.9
 
 #### Fixed
