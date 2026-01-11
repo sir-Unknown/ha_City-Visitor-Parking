@@ -4,6 +4,14 @@
 
 ## Released
 
+### 0.1.12
+
+#### Fixed
+
+- Exclude frontend sources and tooling files from the HACS release zip.
+
+**Full Changelog**: https://github.com/sir-Unknown/ha_City-Visitor-Parking/compare/v0.1.11...v0.1.12
+
 ### 0.1.11
 
 #### Fixed
