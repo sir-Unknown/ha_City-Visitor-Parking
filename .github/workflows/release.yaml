@@ -15,7 +15,8 @@ jobs:
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8
       - name: Build release asset
         run: |
-          zip -r city_visitor_parking.zip custom_components/city_visitor_parking
+          cd custom_components/city_visitor_parking
+          zip -r ../../city_visitor_parking.zip .
       - name: Upload release asset
         env:
           GH_TOKEN: ${{ github.token }}
