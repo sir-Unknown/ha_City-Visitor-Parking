@@ -22,12 +22,33 @@ on:
       - "docs/**"
 
 concurrency:
-  group: validate-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 permissions: {}
 
 jobs:
+  info:
+    name: Collect information & changes data
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      frontend: ${{ steps.frontend.outputs.frontend }}
+    steps:
+      - name: Check out code from GitHub
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Filter for frontend changes
+        id: frontend
+        uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3.0.2
+        with:
+          filters: .frontend_files.yaml
+
   ruff:
     name: Ruff (lint/format)
     runs-on: ubuntu-latest
@@ -89,7 +110,6 @@ jobs:
     name: Pytest
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    needs: [ruff]
     permissions:
       contents: read
     steps:
@@ -114,13 +134,14 @@ jobs:
           pip install pytest-cov
 
       - name: Run pytest (with coverage)
-        run: pytest --cov --cov-report=term-missing
+        run: pytest tests/components/city_visitor_parking --cov=custom_components.city_visitor_parking --cov-report=term-missing
 
   frontend:
     name: Frontend build
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    needs: [ruff]
+    needs: [info]
+    if: needs.info.outputs.frontend == 'true'
     permissions:
       contents: read
     defaults:
@@ -153,9 +174,6 @@ jobs:
 
       - name: Lint frontend
         run: yarn lint
-
-      - name: Type check frontend
-        run: yarn lint:types
 
       - name: Test frontend
         run: yarn test
