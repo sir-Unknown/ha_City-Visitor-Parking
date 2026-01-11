@@ -1,31 +1,179 @@
-name: Update changelog
+name: Validate
 
 on:
-  release:
-    types:
-      - published
+  workflow_dispatch:
+  schedule:
+    - cron: "0 0 * * *"
+  push:
+    branches: [main]
+    paths-ignore:
+      - "**/*.md"
+      - "LICENSE"
+      - ".gitignore"
+      - ".github/dependabot.yml"
+      - "docs/**"
+  pull_request:
+    branches: [main]
+    paths-ignore:
+      - "**/*.md"
+      - "LICENSE"
+      - ".gitignore"
+      - ".github/dependabot.yml"
+      - "docs/**"
 
-permissions:
-  contents: write
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions: {}
 
 jobs:
-  update_changelog:
+  info:
+    name: Collect information & changes data
     runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      frontend: ${{ steps.frontend.outputs.frontend }}
     steps:
-      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+      - name: Check out code from GitHub
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
         with:
-          ref: main
           fetch-depth: 0
-      - name: Update CHANGELOG.md
-        run: python .github/scripts/update_changelog.py
-      - name: Commit CHANGELOG.md
+
+      - name: Filter for frontend changes
+        id: frontend
+        uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3.0.2
+        with:
+          filters: .frontend_files.yaml
+
+  ruff:
+    name: Ruff (lint/format)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout the repository
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+
+      - name: Set up Python
+        uses: actions/setup-python@83679a892e2d95755f2dac6acb0bfd1e9ac5d548 # v6.1.0
+        with:
+          python-version-file: ".python-version"
+          cache: "pip"
+
+      - name: Upgrade pip
+        run: python -m pip install --upgrade pip
+
+      - name: Install ruff
+        run: pip install "ruff==0.14.10"
+
+      - name: Ruff check
+        run: ruff check .
+
+      - name: Ruff format check
+        run: ruff format --check .
+
+  hassfest:
+    name: Hassfest validation
+    needs: [ruff]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout the repository
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+      - name: Run hassfest validation
+        uses: home-assistant/actions/hassfest@87c064c607f3c5cc673a24258d0c98d23033bfc3 # master
+
+  hacs:
+    name: HACS validation
+    needs: [ruff]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout the repository
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+      - name: Run HACS validation
+        uses: hacs/action@d556e736723344f83838d08488c983a15381059a # 22.5.0
+        with:
+          category: integration
+          ignore: brands
+
+  tests:
+    name: Pytest
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout the repository
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+
+      - name: Set up Python
+        uses: actions/setup-python@83679a892e2d95755f2dac6acb0bfd1e9ac5d548 # v6.1.0
+        with:
+          python-version-file: ".python-version"
+          cache: "pip"
+          cache-dependency-path: |
+            requirements.txt
+            requirements_test.txt
+
+      - name: Upgrade pip
+        run: python -m pip install --upgrade pip
+
+      - name: Install dependencies
         run: |
-          if git diff --quiet -- CHANGELOG.md; then
-            echo "No changelog changes to commit."
-            exit 0
-          fi
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add CHANGELOG.md
-          git commit -m "Update CHANGELOG.md for ${GITHUB_REF_NAME}"
-          git push
+          pip install -r requirements.txt -r requirements_test.txt
+          pip install pytest-cov
+
+      - name: Run pytest (with coverage)
+        run: pytest tests/components/city_visitor_parking --cov=custom_components.city_visitor_parking --cov-report=term-missing
+
+  frontend:
+    name: Frontend build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: [info]
+    if: needs.info.outputs.frontend == 'true'
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: custom_components/city_visitor_parking/frontend
+    steps:
+      - name: Checkout the repository
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+
+      - name: Set up Node.js
+        uses: actions/setup-node@395ad3262231945c25e8478fd5baf05154b1d79f # v6.1.0
+        with:
+          node-version: "20"
+          cache: "yarn"
+          cache-dependency-path: custom_components/city_visitor_parking/frontend/yarn.lock
+
+      - name: Install frontend dependencies (locked)
+        if: ${{ hashFiles('custom_components/city_visitor_parking/frontend/yarn.lock') != '' }}
+        run: yarn install --non-interactive --frozen-lockfile
+
+      - name: Install frontend dependencies
+        if: ${{ hashFiles('custom_components/city_visitor_parking/frontend/yarn.lock') == '' }}
+        run: yarn install --non-interactive
+
+      - name: Clean frontend dist
+        run: rm -rf dist
+
+      - name: Build frontend
+        run: yarn build
+
+      - name: Lint frontend
+        run: yarn lint
+
+      - name: Test frontend
+        run: yarn test
