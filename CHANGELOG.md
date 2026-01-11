@@ -4,6 +4,10 @@
 
 ## Released
 
+### v0.1.6
+
+**Full Changelog**: https://github.com/sir-Unknown/ha_City-Visitor-Parking/compare/0.1.5...v0.1.6
+
 ### 0.1.3
 
 #### Fixed
