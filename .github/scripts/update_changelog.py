@@ -9,6 +9,19 @@ import re
 import sys
 from pathlib import Path
 
+CHANGES_HEADING = "## Changes"
+
+
+def _normalize_body(body: str) -> str:
+    body = body.strip()
+    if body.startswith(CHANGES_HEADING):
+        body = re.sub(r"^## Changes\s*", "", body, flags=re.S).strip()
+    if not body:
+        return ""
+
+    # Demote category headings to sit under the version heading in the changelog.
+    return re.sub(r"^### ", "#### ", body, flags=re.M)
+
 
 def _load_release() -> dict[str, str]:
     event_path = os.environ.get("GITHUB_EVENT_PATH")
@@ -29,14 +42,9 @@ def _load_release() -> dict[str, str]:
         print("Release tag name is missing", file=sys.stderr)
         raise SystemExit(1)
 
-    body = (release.get("body") or "").strip()
-    if body.startswith("## Changes"):
-        body = re.sub(r"^## Changes\s*", "", body, flags=re.S).strip()
+    body = _normalize_body(release.get("body") or "")
     if not body:
         body = "- No changes"
-
-    # Demote category headings to sit under the version heading in the changelog.
-    body = re.sub(r"^### ", "#### ", body, flags=re.M)
 
     return {"tag": tag, "body": body}
 
@@ -50,19 +58,27 @@ def main() -> int:
         print("Changelog already contains this release")
         return 0
 
-    unreleased_re = re.compile(r"(## Unreleased\s*\n\n).*?(?=\n## )", re.S)
-    if not unreleased_re.search(changelog):
+    unreleased_re = re.compile(r"## Unreleased\s*\n\n(?P<body>.*?)(?=\n## )", re.S)
+    match = unreleased_re.search(changelog)
+    if not match:
         print("Unreleased section not found", file=sys.stderr)
         return 1
 
-    changelog = unreleased_re.sub(r"\1", changelog, count=1)
+    unreleased_body = _normalize_body(match.group("body"))
+    changelog = unreleased_re.sub("## Unreleased\n\n", changelog, count=1)
 
     released_re = re.compile(r"(## Released\s*\n\n)")
     if not released_re.search(changelog):
         print("Released section not found", file=sys.stderr)
         return 1
 
-    new_section = f"### {release['tag']}\n\n{release['body']}\n\n"
+    release_body = release["body"]
+    if unreleased_body and release_body == "- No changes":
+        release_body = unreleased_body
+    elif unreleased_body:
+        release_body = f"{release_body}\n\n{unreleased_body}"
+
+    new_section = f"### {release['tag']}\n\n{release_body}\n\n"
     changelog = released_re.sub(rf"\1{new_section}", changelog, count=1)
 
     changelog_path.write_text(changelog, encoding="utf-8")
