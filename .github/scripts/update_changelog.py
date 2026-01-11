@@ -61,8 +61,8 @@ def main() -> int:
         return 0
 
     unreleased_re = re.compile(
-        rf"## Unreleased\s*{newline_re}{newline_re}(?P<body>.*?)(?={newline_re}## )",
-        re.S,
+        rf"## Unreleased\s*{newline_re}{newline_re}(?P<body>.*?)(?=^## )",
+        re.S | re.M,
     )
     match = unreleased_re.search(changelog)
     if not match:
