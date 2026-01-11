@@ -29,5 +29,8 @@ autolabeler:
   - label: "tests"
     files:
       - "tests/**"
+  - label: "maintenance"
+    files:
+      - ".github/**"
 template: |
   $CHANGES
