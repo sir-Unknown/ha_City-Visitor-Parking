@@ -11,6 +11,8 @@ __pycache__/
 build/
 develop-eggs/
 dist/
+!custom_components/city_visitor_parking/frontend/dist/
+!custom_components/city_visitor_parking/frontend/dist/**
 downloads/
 eggs/
 .eggs/
