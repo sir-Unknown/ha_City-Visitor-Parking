@@ -1,10 +1,10 @@
 {
   "domain": "city_visitor_parking",
   "name": "City Visitor Parking",
+  "after_dependencies": ["lovelace"],
   "codeowners": ["@sir-Unknown"],
   "config_flow": true,
   "dependencies": ["http"],
-  "after_dependencies": ["lovelace"],
   "documentation": "https://github.com/sir-Unknown/ha_City-Visitor-Parking",
   "integration_type": "service",
   "iot_class": "cloud_polling",

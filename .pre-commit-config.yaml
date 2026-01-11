@@ -7,6 +7,20 @@ repos:
       - id: ruff-format
   - repo: local
     hooks:
+      - id: hassfest
+        name: hassfest (city_visitor_parking)
+        entry: python
+        args:
+          - -m
+          - script.hassfest
+          - --action
+          - validate
+          - --core-path
+          - ../homeassistant-core
+          - --integration-path
+          - custom_components/city_visitor_parking
+        language: system
+        pass_filenames: false
       - id: pytest
         name: pytest
         entry: pytest
