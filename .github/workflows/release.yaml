@@ -32,16 +32,10 @@ jobs:
         working-directory: custom_components/city_visitor_parking/frontend
       - name: Build release asset
         run: |
-          git archive --format=zip --output city_visitor_parking.zip \
-            --exclude=AGENTS.md \
-            --exclude=frontend/AGENTS.md \
-            --exclude=frontend/node_modules \
-            --exclude=frontend/src \
-            --exclude=frontend/eslint.config.cjs \
-            --exclude=frontend/package.json \
-            --exclude=frontend/tsconfig.json \
-            --exclude=frontend/yarn.lock \
-            HEAD:custom_components/city_visitor_parking
+          git -C custom_components/city_visitor_parking archive --format=zip \
+            --output ../../city_visitor_parking.zip \
+            --worktree-attributes \
+            HEAD
       - name: Upload release asset
         env:
           GH_TOKEN: ${{ github.token }}
