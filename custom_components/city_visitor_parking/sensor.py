@@ -2,16 +2,18 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from collections.abc import Mapping
+from datetime import datetime, timedelta
 
 from homeassistant.components.sensor import SensorDeviceClass, SensorEntity
 from homeassistant.const import UnitOfTime
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.util import dt as dt_util
 
-from .const import STATE_CHARGEABLE, STATE_FREE
-from .coordinator import CityVisitorParkingCoordinator
+from .const import CONF_OPERATING_TIME_OVERRIDES, STATE_CHARGEABLE, STATE_FREE
+from .coordinator import CityVisitorParkingCoordinator, _windows_for_today
 from .entity import CityVisitorParkingEntity
 from .models import CityVisitorParkingConfigEntry, CoordinatorData, TimeRange
 
@@ -30,6 +32,8 @@ async def async_setup_entry(
             FutureReservationsSensor(coordinator, entry),
             RemainingTimeSensor(coordinator, entry),
             PermitZoneAvailabilitySensor(coordinator, entry),
+            ProviderChargeableStartSensor(coordinator, entry),
+            ProviderChargeableEndSensor(coordinator, entry),
             NextChargeableStartSensor(coordinator, entry),
             NextChargeableEndSensor(coordinator, entry),
             FavoritesSensor(coordinator, entry),
@@ -153,13 +157,80 @@ class PermitZoneAvailabilitySensor(CityVisitorParkingEntity, SensorEntity):
         """Return availability attributes."""
 
         availability = self.coordinator.data.zone_availability
+        provider_windows = _windows_for_today(
+            self.coordinator.data.zone_validity,
+            {},
+            dt_util.utcnow(),
+        )
         return {
             **(self._attr_extra_state_attributes or {}),
             "is_chargeable_now": availability.is_chargeable_now,
             "next_change_time": _as_utc_iso(availability.next_change_time)
             if availability.next_change_time
             else None,
+            "windows_today": [
+                _timerange_to_dict(window) for window in availability.windows_today
+            ],
+            "provider_windows_today": [
+                _timerange_to_dict(window) for window in provider_windows
+            ],
         }
+
+
+class ProviderChargeableStartSensor(CityVisitorParkingEntity, SensorEntity):
+    """Sensor for the start of the current or next provider chargeable window."""
+
+    _attr_translation_key = "provider_chargeable_start"
+    _attr_device_class = SensorDeviceClass.TIMESTAMP
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_entity_registry_enabled_default = False
+
+    def __init__(
+        self,
+        coordinator: CityVisitorParkingCoordinator,
+        entry: CityVisitorParkingConfigEntry,
+    ) -> None:
+        """Initialize the sensor."""
+
+        super().__init__(coordinator, entry, "provider_chargeable_start")
+
+    @property
+    def native_value(self) -> datetime | None:
+        """Return the start of the current or next provider chargeable window."""
+
+        window = _current_or_next_window(
+            self.coordinator.data.zone_validity,
+            dt_util.utcnow(),
+        )
+        return window.start if window else None
+
+
+class ProviderChargeableEndSensor(CityVisitorParkingEntity, SensorEntity):
+    """Sensor for the end of the current or next provider chargeable window."""
+
+    _attr_translation_key = "provider_chargeable_end"
+    _attr_device_class = SensorDeviceClass.TIMESTAMP
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_entity_registry_enabled_default = False
+
+    def __init__(
+        self,
+        coordinator: CityVisitorParkingCoordinator,
+        entry: CityVisitorParkingConfigEntry,
+    ) -> None:
+        """Initialize the sensor."""
+
+        super().__init__(coordinator, entry, "provider_chargeable_end")
+
+    @property
+    def native_value(self) -> datetime | None:
+        """Return the end of the current or next provider chargeable window."""
+
+        window = _current_or_next_window(
+            self.coordinator.data.zone_validity,
+            dt_util.utcnow(),
+        )
+        return window.end if window else None
 
 
 class NextChargeableStartSensor(CityVisitorParkingEntity, SensorEntity):
@@ -181,9 +252,11 @@ class NextChargeableStartSensor(CityVisitorParkingEntity, SensorEntity):
     def native_value(self) -> datetime | None:
         """Return the start of the current or next chargeable window."""
 
-        window = _current_or_next_window(
+        now = dt_util.utcnow()
+        window = _current_or_next_window_with_overrides(
             self.coordinator.data.zone_validity,
-            dt_util.utcnow(),
+            self._entry.options,
+            now,
         )
         return window.start if window else None
 
@@ -207,9 +280,11 @@ class NextChargeableEndSensor(CityVisitorParkingEntity, SensorEntity):
     def native_value(self) -> datetime | None:
         """Return the end of the current or next chargeable window."""
 
-        window = _current_or_next_window(
+        now = dt_util.utcnow()
+        window = _current_or_next_window_with_overrides(
             self.coordinator.data.zone_validity,
-            dt_util.utcnow(),
+            self._entry.options,
+            now,
         )
         return window.end if window else None
 
@@ -277,3 +352,27 @@ def _current_or_next_window(
             continue
         return window
     return None
+
+
+def _current_or_next_window_with_overrides(
+    zone_validity: list[TimeRange],
+    options: Mapping[str, object],
+    now: datetime,
+) -> TimeRange | None:
+    """Return the current or next chargeable window, honoring overrides."""
+
+    overrides = options.get(CONF_OPERATING_TIME_OVERRIDES, {})
+    if not isinstance(overrides, Mapping) or not overrides:
+        return _current_or_next_window(zone_validity, now)
+
+    windows: list[TimeRange] = []
+    # Look ahead one week to apply weekday overrides for upcoming windows.
+    for offset in range(7):
+        windows.extend(
+            _windows_for_today(zone_validity, options, now + timedelta(days=offset))
+        )
+
+    if not windows:
+        return _current_or_next_window(zone_validity, now)
+
+    return _current_or_next_window(windows, now)

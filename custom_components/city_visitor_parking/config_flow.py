@@ -392,6 +392,8 @@ class CityVisitorParkingOptionsFlow(config_entries.OptionsFlow):
         """Show the options form."""
 
         overrides = self._config_entry.options.get(CONF_OPERATING_TIME_OVERRIDES, {})
+        if not isinstance(overrides, Mapping):
+            overrides = {}
         defaults = {CONF_AUTO_END: self._config_entry.options.get(CONF_AUTO_END, False)}
         description_default = self._config_entry.data.get(CONF_DESCRIPTION, "")
         if user_input is not None:
@@ -401,6 +403,20 @@ class CityVisitorParkingOptionsFlow(config_entries.OptionsFlow):
             raw_description = user_input.get(CONF_DESCRIPTION)
             if isinstance(raw_description, str):
                 description_default = raw_description
+
+        expanded = False
+        for day in WEEKDAY_KEYS:
+            if normalize_override_windows(overrides.get(day)):
+                expanded = True
+                break
+        if not expanded and user_input is not None:
+            section_input = user_input.get(SECTION_OPERATING_TIMES, {})
+            if isinstance(section_input, Mapping):
+                for day in WEEKDAY_KEYS:
+                    raw_value = section_input.get(_day_windows_key(day))
+                    if isinstance(raw_value, str) and raw_value.strip():
+                        expanded = True
+                        break
 
         schema: dict[object, object] = {
             vol.Required(CONF_AUTO_END, default=defaults[CONF_AUTO_END]): cv.boolean,
@@ -421,7 +437,7 @@ class CityVisitorParkingOptionsFlow(config_entries.OptionsFlow):
             )
 
         schema[vol.Required(SECTION_OPERATING_TIMES)] = section(
-            vol.Schema(day_schema), {"collapsed": True}
+            vol.Schema(day_schema), {"collapsed": not expanded}
         )
 
         return self.async_show_form(

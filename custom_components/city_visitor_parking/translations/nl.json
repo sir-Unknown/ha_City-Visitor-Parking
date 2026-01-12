@@ -323,6 +323,12 @@
           "free": "Gratis"
         }
       },
+      "provider_chargeable_start": {
+        "name": "Start provider betaalvenster"
+      },
+      "provider_chargeable_end": {
+        "name": "Einde provider betaalvenster"
+      },
       "next_chargeable_start": {
         "name": "Start betaalvenster"
       },

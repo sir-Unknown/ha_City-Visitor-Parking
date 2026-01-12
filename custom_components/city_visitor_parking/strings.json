@@ -323,6 +323,12 @@
           "free": "Free"
         }
       },
+      "provider_chargeable_start": {
+        "name": "Provider chargeable window start"
+      },
+      "provider_chargeable_end": {
+        "name": "Provider chargeable window end"
+      },
       "next_chargeable_start": {
         "name": "Chargeable window start"
       },

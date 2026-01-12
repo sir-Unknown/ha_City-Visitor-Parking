@@ -25,6 +25,7 @@ class CityVisitorParkingEntity(CoordinatorEntity[CityVisitorParkingCoordinator])
         """Initialize the entity."""
 
         super().__init__(coordinator)
+        self._entry = entry
         municipality = entry.data.get(CONF_MUNICIPALITY)
         permit_id = entry.data.get(CONF_PERMIT_ID)
         device_name = (
