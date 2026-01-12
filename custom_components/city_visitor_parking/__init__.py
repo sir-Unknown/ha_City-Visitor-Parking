@@ -53,7 +53,7 @@ CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     """Set up the City visitor parking integration."""
 
-    async_when_setup(hass, "frontend", _async_register_frontend)
+    await _async_register_frontend(hass, "frontend")
     async_when_setup(hass, "lovelace", _async_register_lovelace_resources)
     _LOGGER.debug("Setting up services and websocket API")
     await async_setup_services(hass)
@@ -206,20 +206,33 @@ async def _async_register_frontend(hass: HomeAssistant, _component: str) -> None
         _LOGGER.debug("HTTP is not available, skipping static assets")
         return
 
-    await hass.http.async_register_static_paths(
-        [
-            StaticPathConfig(
-                url_path="/city_visitor_parking",
-                path=str(Path(__file__).parent / "frontend" / "dist"),
-                cache_headers=False,
-            ),
+    dist_path = Path(__file__).parent / "frontend" / "dist"
+    if not dist_path.is_dir():
+        _LOGGER.error("Frontend assets directory is missing: %s", dist_path)
+        return
+
+    translations_path = dist_path / "translations"
+    static_paths = [
+        StaticPathConfig(
+            url_path="/city_visitor_parking",
+            path=str(dist_path),
+            cache_headers=False,
+        )
+    ]
+    if translations_path.is_dir():
+        static_paths.append(
             StaticPathConfig(
                 url_path="/city_visitor_parking/translations",
-                path=str(Path(__file__).parent / "frontend" / "dist" / "translations"),
+                path=str(translations_path),
                 cache_headers=False,
-            ),
-        ]
-    )
+            )
+        )
+    else:
+        _LOGGER.warning(
+            "Frontend translations directory is missing: %s", translations_path
+        )
+
+    await hass.http.async_register_static_paths(static_paths)
     data["frontend_registered"] = True
 
 
@@ -247,6 +260,9 @@ async def _async_register_lovelace_resources(
         resources.loaded = True
 
     dist_path = Path(__file__).parent / "frontend" / "dist"
+    if not dist_path.is_dir():
+        _LOGGER.error("Frontend assets directory is missing: %s", dist_path)
+        return
     desired_files = [
         "city-visitor-parking-card.js",
         "city-visitor-parking-active-card.js",
