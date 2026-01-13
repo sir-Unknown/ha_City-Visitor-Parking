@@ -95,6 +95,7 @@ async def test_diagnostics_redacts_sensitive_data(hass) -> None:
         coordinator=coordinator,
         permit_id="permit",
         auto_end_state=AutoEndState(),
+        operating_time_overrides={},
     )
 
     diagnostics = await async_get_config_entry_diagnostics(hass, entry)

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import inspect
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Protocol, cast
 
@@ -34,16 +34,24 @@ from .const import (
     CONF_API_URL,
     CONF_BASE_URL,
     CONF_MUNICIPALITY,
+    CONF_OPERATING_TIME_OVERRIDES,
     CONF_PERMIT_ID,
     CONF_PROVIDER_ID,
     DOMAIN,
     PLATFORMS,
+    WEEKDAY_KEYS,
 )
 from .const import (
     LOGGER as _LOGGER,
 )
 from .coordinator import CityVisitorParkingCoordinator
-from .models import AutoEndState, CityVisitorParkingRuntimeData, ProviderConfig
+from .helpers import normalize_override_windows
+from .models import (
+    AutoEndState,
+    CityVisitorParkingRuntimeData,
+    OperatingTimeOverrides,
+    ProviderConfig,
+)
 from .services import async_setup_services
 from .websocket_api import async_setup_websocket
 
@@ -129,8 +137,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         coordinator=coordinator,
         permit_id=entry.data[CONF_PERMIT_ID],
         auto_end_state=auto_end_state,
+        operating_time_overrides=_normalize_operating_time_overrides(entry.options),
     )
 
+    entry.async_on_unload(entry.add_update_listener(_async_update_listener))
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     return True
 
@@ -187,6 +197,44 @@ def _install_zone_validity_logging(provider: object) -> None:
         return map_zone_validity(raw)
 
     cast(_ZoneValidityMapper, provider)._map_zone_validity = _wrap
+
+
+def _normalize_operating_time_overrides(
+    options: Mapping[str, object],
+) -> OperatingTimeOverrides:
+    """Normalize operating time overrides for change detection."""
+
+    raw_overrides = options.get(CONF_OPERATING_TIME_OVERRIDES)
+    if not isinstance(raw_overrides, Mapping):
+        return {}
+
+    normalized: OperatingTimeOverrides = {}
+    for day in WEEKDAY_KEYS:
+        windows = normalize_override_windows(raw_overrides.get(day))
+        if not windows:
+            continue
+        day_windows: list[tuple[str, str]] = []
+        for window in windows:
+            start = window.get("start")
+            end = window.get("end")
+            if not start or not end:
+                continue
+            day_windows.append((str(start), str(end)))
+        if day_windows:
+            normalized[day] = tuple(day_windows)
+    return normalized
+
+
+async def _async_update_listener(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Handle config entry updates."""
+
+    runtime = entry.runtime_data
+    overrides = _normalize_operating_time_overrides(entry.options)
+    if overrides != runtime.operating_time_overrides:
+        # Reload so the coordinator recomputes availability with new windows.
+        await hass.config_entries.async_reload(entry.entry_id)
+        return
+    runtime.operating_time_overrides = overrides
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:

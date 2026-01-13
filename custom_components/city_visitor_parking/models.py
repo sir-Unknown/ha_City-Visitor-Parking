@@ -85,6 +85,9 @@ class AutoEndState:
     attempted_ids: dict[str, datetime] = field(default_factory=dict)
 
 
+type OperatingTimeOverrides = dict[str, tuple[tuple[str, str], ...]]
+
+
 @dataclass
 class CityVisitorParkingRuntimeData:
     """Runtime data stored on the config entry."""
@@ -95,6 +98,7 @@ class CityVisitorParkingRuntimeData:
     coordinator: CityVisitorParkingCoordinator
     permit_id: str
     auto_end_state: AutoEndState
+    operating_time_overrides: OperatingTimeOverrides
 
 
 type CityVisitorParkingConfigEntry = ConfigEntry[CityVisitorParkingRuntimeData]

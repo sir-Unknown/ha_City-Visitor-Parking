@@ -273,6 +273,7 @@ def _create_entry_with_device(hass, permit_id: str):
         coordinator=coordinator,
         permit_id=permit_id,
         auto_end_state=AutoEndState(),
+        operating_time_overrides={},
     )
     entry.runtime_data = runtime
 

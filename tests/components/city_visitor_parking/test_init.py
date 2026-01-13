@@ -5,6 +5,7 @@ from __future__ import annotations
 from unittest.mock import AsyncMock
 
 import pytest
+from homeassistant import config_entries
 from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
 from homeassistant.exceptions import (
     ConfigEntryAuthFailed,
@@ -15,7 +16,9 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 import custom_components.city_visitor_parking as init_module
 from custom_components.city_visitor_parking.const import (
+    CONF_AUTO_END,
     CONF_MUNICIPALITY,
+    CONF_OPERATING_TIME_OVERRIDES,
     CONF_PERMIT_ID,
     CONF_PROVIDER_ID,
     DOMAIN,
@@ -77,6 +80,44 @@ async def test_async_setup_entry_provider_error(hass, monkeypatch, pv_library) -
 
     with pytest.raises(ConfigEntryError):
         await init_module.async_setup_entry(hass, entry)
+
+
+async def test_update_listener_reloads_on_override_change(hass, monkeypatch) -> None:
+    """Override changes should reload the entry."""
+
+    entry = await _setup_entry(hass, monkeypatch)
+
+    reload_mock = AsyncMock()
+    monkeypatch.setattr(hass.config_entries, "async_reload", reload_mock)
+
+    hass.config_entries.async_update_entry(
+        entry,
+        options={
+            CONF_OPERATING_TIME_OVERRIDES: {"mon": [{"start": "09:00", "end": "11:00"}]}
+        },
+    )
+    await hass.async_block_till_done()
+
+    reload_mock.assert_awaited_once_with(entry.entry_id)
+
+
+async def test_update_listener_skips_reload_without_override_change(
+    hass, monkeypatch
+) -> None:
+    """Non-override updates should not reload the entry."""
+
+    entry = await _setup_entry(hass, monkeypatch)
+
+    reload_mock = AsyncMock()
+    monkeypatch.setattr(hass.config_entries, "async_reload", reload_mock)
+
+    hass.config_entries.async_update_entry(
+        entry,
+        options={CONF_AUTO_END: True},
+    )
+    await hass.async_block_till_done()
+
+    reload_mock.assert_not_awaited()
 
 
 async def test_register_frontend_assets(hass, monkeypatch) -> None:
@@ -155,3 +196,32 @@ def _create_entry() -> MockConfigEntry:
         unique_id="dvsportal:permit:city",
         title="City - permit",
     )
+
+
+async def _setup_entry(hass, monkeypatch) -> MockConfigEntry:
+    """Set up a config entry with a stub provider."""
+
+    entry = _create_entry()
+    entry.add_to_hass(hass)
+    entry.mock_state(hass, config_entries.ConfigEntryState.SETUP_IN_PROGRESS)
+
+    provider = AsyncMock()
+    provider.get_permit.return_value = {"id": "permit", "zone_validity": []}
+    provider.list_reservations.return_value = []
+    provider.list_favorites.return_value = []
+
+    client = AsyncMock()
+    client.get_provider.return_value = provider
+
+    monkeypatch.setattr(
+        init_module, "async_create_client", AsyncMock(return_value=client)
+    )
+    monkeypatch.setattr(
+        hass.config_entries,
+        "async_forward_entry_setups",
+        AsyncMock(return_value=True),
+    )
+
+    await init_module.async_setup_entry(hass, entry)
+
+    return entry

@@ -144,4 +144,5 @@ def _runtime(provider: AsyncMock) -> CityVisitorParkingRuntimeData:
         coordinator=AsyncMock(),
         permit_id="permit",
         auto_end_state=AutoEndState(),
+        operating_time_overrides={},
     )
