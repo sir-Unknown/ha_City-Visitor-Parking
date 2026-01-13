@@ -157,23 +157,36 @@ class PermitZoneAvailabilitySensor(CityVisitorParkingEntity, SensorEntity):
         """Return availability attributes."""
 
         availability = self.coordinator.data.zone_availability
+        now = dt_util.utcnow()
         provider_windows = _windows_for_today(
             self.coordinator.data.zone_validity,
             {},
-            dt_util.utcnow(),
+            now,
+        )
+        next_window = _current_or_next_window_with_overrides(
+            self.coordinator.data.zone_validity,
+            self._entry.options,
+            now,
+        )
+        provider_next_window = _current_or_next_window(
+            self.coordinator.data.zone_validity,
+            now,
         )
         return {
             **(self._attr_extra_state_attributes or {}),
             "is_chargeable_now": availability.is_chargeable_now,
-            "next_change_time": _as_utc_iso(availability.next_change_time)
-            if availability.next_change_time
-            else None,
-            "windows_today": [
-                _timerange_to_dict(window) for window in availability.windows_today
-            ],
-            "provider_windows_today": [
+            "Today provider": [
                 _timerange_to_dict(window) for window in provider_windows
             ],
+            "Today user entered": [
+                _timerange_to_dict(window) for window in availability.windows_today
+            ],
+            "Next provider": _timerange_to_dict(provider_next_window)
+            if provider_next_window
+            else None,
+            "Next user entered": _timerange_to_dict(next_window)
+            if next_window
+            else None,
         }
 
 

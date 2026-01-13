@@ -90,7 +90,7 @@ async def test_zone_availability_uses_overrides() -> None:
             active_reservations=[],
         )
         coordinator = _make_coordinator(data)
-        entry = _create_entry("provider:permit1:city")
+        entry = _create_entry("provider:permit1:city", options=options)
         sensor = PermitZoneAvailabilitySensor(coordinator, entry)
 
         assert sensor.native_value == "free"
@@ -103,14 +103,16 @@ async def test_zone_availability_uses_overrides() -> None:
                 tzinfo=local_now.tzinfo,
             )
         )
-        assert attributes["windows_today"] == [
-            _timerange_to_dict(
-                TimeRange(start=expected_override_start, end=expected_override_end)
-            )
-        ]
-        assert attributes["provider_windows_today"] == [
-            _timerange_to_dict(zone_validity[0])
-        ]
+        expected_window = TimeRange(
+            start=expected_override_start,
+            end=expected_override_end,
+        )
+        expected_provider = _timerange_to_dict(zone_validity[0])
+        expected_user = _timerange_to_dict(expected_window)
+        assert attributes["Today provider"] == [expected_provider]
+        assert attributes["Today user entered"] == [expected_user]
+        assert attributes["Next provider"] == expected_provider
+        assert attributes["Next user entered"] == expected_user
         provider_start_sensor = ProviderChargeableStartSensor(coordinator, entry)
         provider_end_sensor = ProviderChargeableEndSensor(coordinator, entry)
         assert provider_start_sensor.native_value == zone_validity[0].start
@@ -203,10 +205,16 @@ def _make_coordinator(data: CoordinatorData):
     return coordinator
 
 
-def _create_entry(unique_id: str):
+def _create_entry(unique_id: str, options: dict[str, object] | None = None):
     """Create a mock entry for entity tests."""
 
-    return MockConfigEntry(domain=DOMAIN, data={}, unique_id=unique_id, title="City")
+    return MockConfigEntry(
+        domain=DOMAIN,
+        data={},
+        options=options or {},
+        unique_id=unique_id,
+        title="City",
+    )
 
 
 def test_sensor_helpers() -> None:
