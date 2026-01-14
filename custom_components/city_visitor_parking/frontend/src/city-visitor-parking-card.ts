@@ -157,6 +157,10 @@ import { ensureTranslations } from "./localize";
           align-items: center;
           gap: var(--ha-space-2);
         }
+        .favorite-label {
+          color: var(--secondary-text-color);
+          font-size: 0.875rem;
+        }
         .leading {
           width: 48px;
           min-width: 48px;
@@ -945,13 +949,12 @@ import { ensureTranslations } from "./localize";
                   <div class="row actions">
                     <div class="favorite-actions">
                       ${showFavorites
-                        ? showRemoveFavorite
+                          ? showRemoveFavorite
                           ? html`
-                              <ha-formfield
-                                id="removeFavoriteWrap"
-                                class="remove-favorite"
-                                .label=${localize("action.remove_favorite")}
-                              >
+                              <div class="remove-favorite">
+                                <span class="favorite-label">
+                                  ${localize("action.remove_favorite")}
+                                </span>
                                 <ha-icon-button
                                   id="removeFavorite"
                                   title=${localize("action.remove_favorite")}
@@ -969,7 +972,7 @@ import { ensureTranslations } from "./localize";
                                     ></ha-icon>
                                   </div>
                                 </ha-icon-button>
-                              </ha-formfield>
+                              </div>
                             `
                           : showAddFavorite
                             ? html`

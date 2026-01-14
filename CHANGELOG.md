@@ -4,6 +4,16 @@
 
 ## Released
 
+### 0.1.17
+
+#### Changed
+
+- Use the config entry selector in the card editor and refine the layout.
+- Update active reservation edits immediately on field changes with quieter reloads.
+- Improve the remove favorite action label styling.
+
+**Full Changelog**: https://github.com/sir-Unknown/ha_City-Visitor-Parking/compare/v0.1.16...0.1.17
+
 ### 0.1.16
 
 #### Fixed

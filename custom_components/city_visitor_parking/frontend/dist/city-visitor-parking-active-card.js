@@ -883,11 +883,6 @@ var getActiveCardConfigForm = async (hassOrLocalize) => {
   return {
     schema: [
       {
-        name: "config_entry_id",
-        selector: { config_entry: { integration: DOMAIN } },
-        required: false
-      },
-      {
         name: "title",
         selector: { text: {} },
         required: false
@@ -895,6 +890,11 @@ var getActiveCardConfigForm = async (hassOrLocalize) => {
       {
         name: "icon",
         selector: { icon: {} },
+        required: false
+      },
+      {
+        name: "config_entry_id",
+        selector: { config_entry: { integration: DOMAIN } },
         required: false
       }
     ],
@@ -926,6 +926,7 @@ var getActiveCardConfigForm = async (hassOrLocalize) => {
       this._activeReservationsError = null;
       this._activeReservationsLoadedFor = null;
       this._activeReservationsLoading = false;
+      this._suppressLoadingIndicator = false;
       this._reservationUpdateFieldsByDevice = {};
       this._devicesPromise = null;
       this._configEntriesPromise = null;
@@ -940,6 +941,7 @@ var getActiveCardConfigForm = async (hassOrLocalize) => {
       this._errorMessage = createErrorMessage(() => this._hass);
       this._onActionClick = (event) => this._handleActionClick(event);
       this._onReservationInput = (event) => this._handleReservationInput(event);
+      this._onReservationChange = (event) => this._handleReservationChange(event);
       this._onPickerClick = (event) => this._handlePickerClick(event);
     }
     connectedCallback() {
@@ -991,7 +993,7 @@ var getActiveCardConfigForm = async (hassOrLocalize) => {
     getCardSize() {
       return 3;
     }
-    async _maybeLoadActiveReservations(force = false) {
+    async _maybeLoadActiveReservations(force = false, silent = false) {
       if (!this._hass || !this._config) {
         return;
       }
@@ -1003,6 +1005,7 @@ var getActiveCardConfigForm = async (hassOrLocalize) => {
         return;
       }
       this._activeReservationsLoading = true;
+      this._suppressLoadingIndicator = silent;
       this._activeReservationsError = null;
       this._requestRender();
       try {
@@ -1069,6 +1072,7 @@ var getActiveCardConfigForm = async (hassOrLocalize) => {
         this._activeReservationsLoadedFor = null;
       } finally {
         this._activeReservationsLoading = false;
+        this._suppressLoadingIndicator = false;
         this._requestRender();
       }
     }
@@ -1098,9 +1102,10 @@ var getActiveCardConfigForm = async (hassOrLocalize) => {
     _renderActiveReservations(controlsDisabled) {
       const hasReservations = this._activeReservations.length > 0;
       const showEmpty = !this._activeReservationsLoading && !this._activeReservationsError && !hasReservations;
+      const showSpinner = this._activeReservationsLoading && !this._suppressLoadingIndicator;
       return b2`
         <div class="row active-reservations">
-          ${this._activeReservationsLoading ? b2`
+          ${showSpinner ? b2`
                 <div class="row spinner">
                   <ha-spinner size="small"></ha-spinner>
                   <span
@@ -1132,7 +1137,6 @@ var getActiveCardConfigForm = async (hassOrLocalize) => {
       const updateFields = reservation.device_id && this._reservationUpdateFieldsByDevice[reservation.device_id] ? this._reservationUpdateFieldsByDevice[reservation.device_id] : [];
       const allowStart = updateFields.includes("start_time");
       const allowEnd = updateFields.includes("end_time");
-      const allowUpdate = allowStart || allowEnd;
       const isBusy = this._reservationInFlight.has(reservation.reservation_id);
       const inputOverrides = this._reservationInputValues.get(
         reservation.reservation_id
@@ -1162,6 +1166,7 @@ var getActiveCardConfigForm = async (hassOrLocalize) => {
               .value=${startValue}
               ?disabled=${controlsDisabled || !allowStart || isBusy}
               @input=${this._onReservationInput}
+              @change=${this._onReservationChange}
               @click=${this._onPickerClick}
             ></ha-textfield>
             <ha-textfield
@@ -1173,18 +1178,11 @@ var getActiveCardConfigForm = async (hassOrLocalize) => {
               .value=${endValue}
               ?disabled=${controlsDisabled || !allowEnd || isBusy}
               @input=${this._onReservationInput}
+              @change=${this._onReservationChange}
               @click=${this._onPickerClick}
             ></ha-textfield>
           </div>
           <div class="active-reservation-actions">
-            <ha-button
-              class="active-reservation-update"
-              data-reservation-id=${reservation.reservation_id}
-              ?outlined=${true}
-              ?disabled=${controlsDisabled || isBusy || !allowUpdate}
-            >
-              ${this._localize("button.update_reservation")}
-            </ha-button>
             <ha-button
               class="active-reservation-end"
               data-reservation-id=${reservation.reservation_id}
@@ -1199,14 +1197,6 @@ var getActiveCardConfigForm = async (hassOrLocalize) => {
     _handleActionClick(event) {
       const target = event.target;
       if (!target) {
-        return;
-      }
-      const updateButton = target.closest(
-        "ha-button.active-reservation-update"
-      );
-      if (updateButton) {
-        const reservationId = updateButton.dataset.reservationId ?? "";
-        void this._handleActiveReservationUpdate(reservationId);
         return;
       }
       const endButton = target.closest(
@@ -1235,6 +1225,23 @@ var getActiveCardConfigForm = async (hassOrLocalize) => {
         ...current,
         [fieldKey]: value
       });
+    }
+    _handleReservationChange(event) {
+      if (this._isInEditor()) {
+        return;
+      }
+      const target = event.target;
+      if (!target) {
+        return;
+      }
+      const element = target;
+      const reservationId = element.dataset.reservationId ?? "";
+      const field = element.dataset.field;
+      if (!reservationId || field !== "start" && field !== "end") {
+        return;
+      }
+      this._handleReservationInput(event);
+      void this._handleActiveReservationUpdate(reservationId);
     }
     _handlePickerClick(event) {
       showPicker(event, this._isInEditor());
@@ -1282,7 +1289,10 @@ var getActiveCardConfigForm = async (hassOrLocalize) => {
       const startValue = allowStart ? inputOverrides?.start !== void 0 ? inputOverrides.start.trim() : formatOptionalDateTimeLocal(reservation.start_time) : "";
       const endValue = allowEnd ? inputOverrides?.end !== void 0 ? inputOverrides.end.trim() : formatOptionalDateTimeLocal(reservation.end_time) : "";
       if (allowStart && !startValue || allowEnd && !endValue) {
-        this._setStatus(this._localize("message.start_end_required"), "warning");
+        this._setStatus(
+          this._localize("message.start_end_required"),
+          "warning"
+        );
         this._reservationInFlight.delete(reservationId);
         this._requestRender();
         return;
@@ -1297,7 +1307,10 @@ var getActiveCardConfigForm = async (hassOrLocalize) => {
       const startDate = allowStart ? parseDate(startValue) : parseDate(reservation.start_time);
       const endDate = allowEnd ? parseDate(endValue) : parseDate(reservation.end_time);
       if (allowStart && !startDate || allowEnd && !endDate) {
-        this._setStatus(this._localize("message.start_end_required"), "warning");
+        this._setStatus(
+          this._localize("message.start_end_required"),
+          "warning"
+        );
         this._reservationInFlight.delete(reservationId);
         this._requestRender();
         return;
@@ -1341,7 +1354,7 @@ var getActiveCardConfigForm = async (hassOrLocalize) => {
       this._reservationInputValues.delete(reservationId);
       this._reservationInFlight.delete(reservationId);
       this._activeReservationsLoadedFor = null;
-      await this._maybeLoadActiveReservations(true);
+      await this._maybeLoadActiveReservations(true, true);
     }
     async _handleActiveReservationEnd(reservationId) {
       if (!this._hass || !reservationId) {
@@ -1450,53 +1463,53 @@ var getActiveCardConfigForm = async (hassOrLocalize) => {
   CityVisitorParkingActiveCard.styles = [
     BASE_CARD_STYLES,
     i`
-      .active-reservations {
-        display: flex;
-        flex-direction: column;
-        gap: var(--ha-space-2);
-      }
-      .active-reservation {
-        border: 1px solid var(--divider-color);
-        border-radius: var(--ha-card-border-radius, var(--ha-space-2));
-        padding: var(--ha-space-3);
-        display: flex;
-        flex-direction: column;
-        gap: var(--ha-space-2);
-      }
-      .active-reservation-summary {
-        display: flex;
-        flex-direction: column;
-        gap: var(--ha-space-1);
-      }
-      .active-reservation-heading {
-        font-weight: 600;
-      }
-      .active-reservation-label {
-        color: var(--secondary-text-color);
-        font-family: var(--primary-font-family, "Roboto", "Noto", sans-serif);
-        font-size: 14px;
-        font-weight: 400;
-      }
-      .active-reservation-times {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
-        gap: var(--ha-space-2);
-      }
-      .reservation-input {
-        width: 100%;
-      }
-      .active-reservation-actions {
-        display: flex;
-        gap: var(--ha-space-2);
-        flex-wrap: wrap;
-      }
-      .active-reservation-end {
-        margin-left: auto;
-      }
-      .active-reservations-empty {
-        font-size: 0.9rem;
-        color: var(--secondary-text-color);
-      }
+        .active-reservations {
+          display: flex;
+          flex-direction: column;
+          gap: var(--ha-space-2);
+        }
+        .active-reservation {
+          border: 1px solid var(--divider-color);
+          border-radius: var(--ha-card-border-radius, var(--ha-space-2));
+          padding: var(--ha-space-3);
+          display: flex;
+          flex-direction: column;
+          gap: var(--ha-space-2);
+        }
+        .active-reservation-summary {
+          display: flex;
+          flex-direction: column;
+          gap: var(--ha-space-1);
+        }
+        .active-reservation-heading {
+          font-weight: 600;
+        }
+        .active-reservation-label {
+          color: var(--secondary-text-color);
+          font-family: var(--primary-font-family, "Roboto", "Noto", sans-serif);
+          font-size: 14px;
+          font-weight: 400;
+        }
+        .active-reservation-times {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+          gap: var(--ha-space-2);
+        }
+        .reservation-input {
+          width: 100%;
+        }
+        .active-reservation-actions {
+          display: flex;
+          gap: var(--ha-space-2);
+          flex-wrap: wrap;
+        }
+        .active-reservation-end {
+          margin-left: auto;
+        }
+        .active-reservations-empty {
+          font-size: 0.9rem;
+          color: var(--secondary-text-color);
+        }
       `
   ];
   const registerCard = () => {
@@ -1516,10 +1529,7 @@ var getActiveCardConfigForm = async (hassOrLocalize) => {
     const hass = getGlobalHass2();
     void ensureTranslations(hass).then(registerCard);
     if (!getHassLanguage(hass) && attempt < 20) {
-      window.setTimeout(
-        () => registerCardWithTranslations(attempt + 1),
-        500
-      );
+      window.setTimeout(() => registerCardWithTranslations(attempt + 1), 500);
     }
   };
   registerCardWithTranslations();

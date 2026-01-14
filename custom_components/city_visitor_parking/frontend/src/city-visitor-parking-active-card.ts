@@ -112,6 +112,7 @@ import { ensureTranslations } from "./localize";
     _activeReservationsError: string | null;
     _activeReservationsLoadedFor: string | null;
     _activeReservationsLoading: boolean;
+    _suppressLoadingIndicator: boolean;
     _reservationUpdateFieldsByDevice: Record<string, string[]>;
     _devicesPromise: Promise<DeviceEntry[]> | null;
     _configEntriesPromise: Promise<Map<string, string>> | null;
@@ -126,6 +127,7 @@ import { ensureTranslations } from "./localize";
     _errorMessage: (err: unknown, fallbackKey: string) => string;
     _onActionClick: (event: Event) => void;
     _onReservationInput: (event: Event) => void;
+    _onReservationChange: (event: Event) => void;
     _onPickerClick: (event: Event) => void;
 
     constructor() {
@@ -136,6 +138,7 @@ import { ensureTranslations } from "./localize";
       this._activeReservationsError = null;
       this._activeReservationsLoadedFor = null;
       this._activeReservationsLoading = false;
+      this._suppressLoadingIndicator = false;
       this._reservationUpdateFieldsByDevice = {};
       this._devicesPromise = null;
       this._configEntriesPromise = null;
@@ -151,6 +154,8 @@ import { ensureTranslations } from "./localize";
       this._onActionClick = (event: Event) => this._handleActionClick(event);
       this._onReservationInput = (event: Event) =>
         this._handleReservationInput(event);
+      this._onReservationChange = (event: Event) =>
+        this._handleReservationChange(event);
       this._onPickerClick = (event: Event) => this._handlePickerClick(event);
     }
 
@@ -212,7 +217,10 @@ import { ensureTranslations } from "./localize";
       return 3;
     }
 
-    async _maybeLoadActiveReservations(force = false): Promise<void> {
+    async _maybeLoadActiveReservations(
+      force = false,
+      silent = false,
+    ): Promise<void> {
       if (!this._hass || !this._config) {
         return;
       }
@@ -229,6 +237,7 @@ import { ensureTranslations } from "./localize";
         return;
       }
       this._activeReservationsLoading = true;
+      this._suppressLoadingIndicator = silent;
       this._activeReservationsError = null;
       this._requestRender();
       try {
@@ -308,6 +317,7 @@ import { ensureTranslations } from "./localize";
         this._activeReservationsLoadedFor = null;
       } finally {
         this._activeReservationsLoading = false;
+        this._suppressLoadingIndicator = false;
         this._requestRender();
       }
     }
@@ -344,9 +354,11 @@ import { ensureTranslations } from "./localize";
         !this._activeReservationsLoading &&
         !this._activeReservationsError &&
         !hasReservations;
+      const showSpinner =
+        this._activeReservationsLoading && !this._suppressLoadingIndicator;
       return html`
         <div class="row active-reservations">
-          ${this._activeReservationsLoading
+          ${showSpinner
             ? html`
                 <div class="row spinner">
                   <ha-spinner size="small"></ha-spinner>
@@ -394,7 +406,6 @@ import { ensureTranslations } from "./localize";
           : [];
       const allowStart = updateFields.includes("start_time");
       const allowEnd = updateFields.includes("end_time");
-      const allowUpdate = allowStart || allowEnd;
       const isBusy = this._reservationInFlight.has(reservation.reservation_id);
       const inputOverrides = this._reservationInputValues.get(
         reservation.reservation_id,
@@ -434,6 +445,7 @@ import { ensureTranslations } from "./localize";
               .value=${startValue}
               ?disabled=${controlsDisabled || !allowStart || isBusy}
               @input=${this._onReservationInput}
+              @change=${this._onReservationChange}
               @click=${this._onPickerClick}
             ></ha-textfield>
             <ha-textfield
@@ -445,18 +457,11 @@ import { ensureTranslations } from "./localize";
               .value=${endValue}
               ?disabled=${controlsDisabled || !allowEnd || isBusy}
               @input=${this._onReservationInput}
+              @change=${this._onReservationChange}
               @click=${this._onPickerClick}
             ></ha-textfield>
           </div>
           <div class="active-reservation-actions">
-            <ha-button
-              class="active-reservation-update"
-              data-reservation-id=${reservation.reservation_id}
-              ?outlined=${true}
-              ?disabled=${controlsDisabled || isBusy || !allowUpdate}
-            >
-              ${this._localize("button.update_reservation")}
-            </ha-button>
             <ha-button
               class="active-reservation-end"
               data-reservation-id=${reservation.reservation_id}
@@ -472,14 +477,6 @@ import { ensureTranslations } from "./localize";
     _handleActionClick(event: Event): void {
       const target = event.target as HTMLElement | null;
       if (!target) {
-        return;
-      }
-      const updateButton = target.closest<DisabledElement>(
-        "ha-button.active-reservation-update",
-      );
-      if (updateButton) {
-        const reservationId = updateButton.dataset.reservationId ?? "";
-        void this._handleActiveReservationUpdate(reservationId);
         return;
       }
       const endButton = target.closest<DisabledElement>(
@@ -509,6 +506,24 @@ import { ensureTranslations } from "./localize";
         ...current,
         [fieldKey]: value,
       });
+    }
+
+    _handleReservationChange(event: Event): void {
+      if (this._isInEditor()) {
+        return;
+      }
+      const target = event.target as ValueElement | null;
+      if (!target) {
+        return;
+      }
+      const element = target as HTMLElement;
+      const reservationId = element.dataset.reservationId ?? "";
+      const field = element.dataset.field;
+      if (!reservationId || (field !== "start" && field !== "end")) {
+        return;
+      }
+      this._handleReservationInput(event);
+      void this._handleActiveReservationUpdate(reservationId);
     }
 
     _handlePickerClick(event: Event): void {
@@ -638,7 +653,7 @@ import { ensureTranslations } from "./localize";
       this._reservationInputValues.delete(reservationId);
       this._reservationInFlight.delete(reservationId);
       this._activeReservationsLoadedFor = null;
-      await this._maybeLoadActiveReservations(true);
+      await this._maybeLoadActiveReservations(true, true);
     }
 
     async _handleActiveReservationEnd(reservationId: string): Promise<void> {

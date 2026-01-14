@@ -24,11 +24,6 @@ export const getActiveCardConfigForm = async (
   return {
     schema: [
       {
-        name: "config_entry_id",
-        selector: { config_entry: { integration: DOMAIN } },
-        required: false,
-      },
-      {
         name: "title",
         selector: { text: {} },
         required: false,
@@ -36,6 +31,11 @@ export const getActiveCardConfigForm = async (
       {
         name: "icon",
         selector: { icon: {} },
+        required: false,
+      },
+      {
+        name: "config_entry_id",
+        selector: { config_entry: { integration: DOMAIN } },
         required: false,
       },
     ],

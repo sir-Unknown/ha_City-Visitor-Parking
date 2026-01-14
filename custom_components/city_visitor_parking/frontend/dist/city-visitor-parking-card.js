@@ -914,11 +914,6 @@ var getCardConfigForm = async (hassOrLocalize) => {
   return {
     schema: [
       {
-        name: "config_entry_id",
-        selector: { config_entry: { integration: DOMAIN } },
-        required: false
-      },
-      {
         name: "title",
         selector: { text: {} },
         required: false
@@ -926,6 +921,11 @@ var getCardConfigForm = async (hassOrLocalize) => {
       {
         name: "icon",
         selector: { icon: {} },
+        required: false
+      },
+      {
+        name: "config_entry_id",
+        selector: { config_entry: { integration: DOMAIN } },
         required: false
       },
       {
@@ -1473,20 +1473,18 @@ var getCardConfigForm = async (hassOrLocalize) => {
                             <mwc-list-item value=${PERMIT_PLACEHOLDER_VALUE}>
                               ${permitPlaceholderText}
                             </mwc-list-item>
-                            ${this._permitOptions.map(
-        (entry) => {
-          const secondaryText = entry.secondary;
-          return b2`<mwc-list-item
-                                  value=${entry.id}
-                                  ?twoline=${Boolean(secondaryText)}
-                                >
-                                  <span>${entry.primary}</span>
-                                  ${secondaryText ? b2`<span slot="secondary"
-                                        >${secondaryText}</span
-                                      >` : A}
-                                </mwc-list-item>`;
-        }
-      )}
+                            ${this._permitOptions.map((entry) => {
+        const secondaryText = entry.secondary;
+        return b2`<mwc-list-item
+                                value=${entry.id}
+                                ?twoline=${Boolean(secondaryText)}
+                              >
+                                <span>${entry.primary}</span>
+                                ${secondaryText ? b2`<span slot="secondary"
+                                      >${secondaryText}</span
+                                    >` : A}
+                              </mwc-list-item>`;
+      })}
                           </ha-select>
                         </div>
                       ` : A}
@@ -1608,11 +1606,10 @@ var getCardConfigForm = async (hassOrLocalize) => {
                   <div class="row actions">
                     <div class="favorite-actions">
                       ${showFavorites ? showRemoveFavorite ? b2`
-                              <ha-formfield
-                                id="removeFavoriteWrap"
-                                class="remove-favorite"
-                                .label=${localize2("action.remove_favorite")}
-                              >
+                              <div class="remove-favorite">
+                                <span class="favorite-label">
+                                  ${localize2("action.remove_favorite")}
+                                </span>
                                 <ha-icon-button
                                   id="removeFavorite"
                                   title=${localize2("action.remove_favorite")}
@@ -1628,7 +1625,7 @@ var getCardConfigForm = async (hassOrLocalize) => {
                                     ></ha-icon>
                                   </div>
                                 </ha-icon-button>
-                              </ha-formfield>
+                              </div>
                             ` : showAddFavorite ? b2`
                                 <ha-formfield
                                   id="addFavoriteWrap"
@@ -2045,7 +2042,10 @@ var getCardConfigForm = async (hassOrLocalize) => {
       }
       const { start, end } = this._resolveTimes();
       if (!start || !end) {
-        this._setStatus(this._localize("message.start_end_required"), "warning");
+        this._setStatus(
+          this._localize("message.start_end_required"),
+          "warning"
+        );
         this._startInFlight = false;
         this._requestRender();
         return;
@@ -2364,10 +2364,7 @@ var getCardConfigForm = async (hassOrLocalize) => {
       }
       if (showEnd) {
         if (force || !this._getInputValue("endDateTime")) {
-          this._setInputValue(
-            "endDateTime",
-            formatDateTimeLocal(defaults.end)
-          );
+          this._setInputValue("endDateTime", formatDateTimeLocal(defaults.end));
         }
       }
     }
@@ -2402,50 +2399,54 @@ var getCardConfigForm = async (hassOrLocalize) => {
   CityVisitorParkingNewReservationCard.styles = [
     BASE_CARD_STYLES,
     i`
-      ha-textfield,
-      ha-select,
-      ha-selector,
-      ha-date-input,
-      ha-time-input {
-        width: 100%;
-      }
-      .actions {
-        display: flex;
-        gap: var(--ha-space-2);
-        align-items: center;
-        justify-content: space-between;
-      }
-      .favorite-actions {
-        display: flex;
-        align-items: center;
-        gap: var(--ha-space-2);
-      }
-      .remove-favorite {
-        display: flex;
-        align-items: center;
-        gap: var(--ha-space-2);
-      }
-      .leading {
-        width: 48px;
-        min-width: 48px;
-        height: 48px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-      }
-      .leading ha-icon,
-      .leading mwc-icon {
-        width: 24px;
-        height: 24px;
-        transform: translateY(-4px);
-      }
-      .start-button {
-        margin-left: auto;
-      }
-      .start-button.success {
-        --mdc-theme-primary: var(--success-color, #21b365);
-        --mdc-theme-on-primary: var(--text-primary-color, #fff);
-      }
+        ha-textfield,
+        ha-select,
+        ha-selector,
+        ha-date-input,
+        ha-time-input {
+          width: 100%;
+        }
+        .actions {
+          display: flex;
+          gap: var(--ha-space-2);
+          align-items: center;
+          justify-content: space-between;
+        }
+        .favorite-actions {
+          display: flex;
+          align-items: center;
+          gap: var(--ha-space-2);
+        }
+        .remove-favorite {
+          display: flex;
+          align-items: center;
+          gap: var(--ha-space-2);
+        }
+        .favorite-label {
+          color: var(--secondary-text-color);
+          font-size: 0.875rem;
+        }
+        .leading {
+          width: 48px;
+          min-width: 48px;
+          height: 48px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
+        .leading ha-icon,
+        .leading mwc-icon {
+          width: 24px;
+          height: 24px;
+          transform: translateY(-4px);
+        }
+        .start-button {
+          margin-left: auto;
+        }
+        .start-button.success {
+          --mdc-theme-primary: var(--success-color, #21b365);
+          --mdc-theme-on-primary: var(--text-primary-color, #fff);
+        }
       `
   ];
   const registerCard = () => {
@@ -2465,10 +2466,7 @@ var getCardConfigForm = async (hassOrLocalize) => {
     const hass = getGlobalHass2();
     void ensureTranslations(hass).then(registerCard);
     if (!getHassLanguage(hass) && attempt < 20) {
-      window.setTimeout(
-        () => registerCardWithTranslations(attempt + 1),
-        500
-      );
+      window.setTimeout(() => registerCardWithTranslations(attempt + 1), 500);
     }
   };
   registerCardWithTranslations();
