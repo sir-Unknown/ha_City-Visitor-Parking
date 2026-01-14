@@ -106,6 +106,32 @@ async def test_options_flow_non_mapping_section(hass) -> None:
     assert result["data"][CONF_OPERATING_TIME_OVERRIDES] == {}
 
 
+async def test_options_flow_non_mapping_overrides(hass) -> None:
+    """Options flow should handle invalid stored overrides."""
+
+    entry = _create_entry(options={CONF_OPERATING_TIME_OVERRIDES: "bad"})
+    entry.add_to_hass(hass)
+
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+
+    assert result["type"] == "form"
+
+
+async def test_options_flow_expands_with_overrides(hass) -> None:
+    """Options flow should expand when overrides exist."""
+
+    entry = _create_entry(
+        options={
+            CONF_OPERATING_TIME_OVERRIDES: {"mon": [{"start": "08:00", "end": "09:00"}]}
+        }
+    )
+    entry.add_to_hass(hass)
+
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+
+    assert result["type"] == "form"
+
+
 async def test_options_flow_clears_description(hass) -> None:
     """Options flow should clear the description when blank."""
 
@@ -140,7 +166,11 @@ async def test_options_flow_title_fallback(hass) -> None:
     assert entry.title == "Existing title"
 
 
-def _create_entry(description: str | None = None, title: str | None = None):
+def _create_entry(
+    description: str | None = None,
+    title: str | None = None,
+    options: dict[str, object] | None = None,
+):
     """Create a mock entry for options tests."""
 
     data = {
@@ -153,4 +183,9 @@ def _create_entry(description: str | None = None, title: str | None = None):
     if description is not None:
         data[CONF_DESCRIPTION] = description
 
-    return MockConfigEntry(domain=DOMAIN, data=data, title=title or "Mock Title")
+    return MockConfigEntry(
+        domain=DOMAIN,
+        data=data,
+        options=options or {},
+        title=title or "Mock Title",
+    )

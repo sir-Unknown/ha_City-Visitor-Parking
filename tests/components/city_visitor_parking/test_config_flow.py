@@ -17,6 +17,7 @@ from custom_components.city_visitor_parking.config_flow import (
     _day_windows_key,
     _format_override_windows,
     _format_time,
+    _normalize_optional_text,
     _parse_time,
     _parse_time_windows,
 )
@@ -317,6 +318,27 @@ async def test_reconfigure_flow_success(hass) -> None:
     assert entry.data[CONF_API_URL] == "/api"
 
 
+async def test_reconfigure_flow_missing_data_aborts(hass) -> None:
+    """Reconfigure should abort when entry data is missing."""
+
+    entry = MockConfigEntry(domain=DOMAIN, data={})
+    entry.add_to_hass(hass)
+
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN,
+        context={"source": "reconfigure", "entry_id": entry.entry_id},
+    )
+    assert result["type"] == "form"
+
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {CONF_BASE_URL: "https://example.com", CONF_API_URL: "/api"},
+    )
+
+    assert result["type"] == "abort"
+    assert result["reason"] == "unknown"
+
+
 async def test_reconfigure_missing_entry_aborts(hass) -> None:
     """Reconfigure should abort when the entry is missing."""
 
@@ -466,6 +488,7 @@ def test_override_helper_parsing() -> None:
     assert _format_time(None) is None
     assert get_attr({"name": "test"}, "name") == "test"
     assert get_attr(SimpleNamespace(name="attr"), "name") == "attr"
+    assert _normalize_optional_text(123) is None
 
     errors.clear()
     assert _parse_time_windows("invalid", errors) == []
