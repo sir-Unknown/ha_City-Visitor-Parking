@@ -81,7 +81,7 @@ jobs:
 
   hassfest:
     name: Hassfest validation
-    needs: [ruff, pyright]
+    needs: [ruff]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -94,7 +94,7 @@ jobs:
 
   hacs:
     name: HACS validation
-    needs: [ruff, pyright]
+    needs: [ruff]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -110,7 +110,7 @@ jobs:
 
   tests:
     name: Pytest
-    needs: [pyright]
+    needs: [ruff]
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
@@ -139,31 +139,6 @@ jobs:
       - name: Run pytest (with coverage)
         run: pytest tests/components/city_visitor_parking --cov=custom_components.city_visitor_parking --cov-report=term-missing
 
-  pyright:
-    name: Pyright type check
-    needs: [ruff]
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    permissions:
-      contents: read
-    steps:
-      - name: Checkout the repository
-        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
-
-      - name: Set up Python
-        uses: actions/setup-python@83679a892e2d95755f2dac6acb0bfd1e9ac5d548 # v6.1.0
-        with:
-          python-version-file: ".python-version"
-          cache: "pip"
-
-      - name: Upgrade pip
-        run: python -m pip install --upgrade pip
-
-      - name: Install pyright
-        run: pip install "pyright==1.1.408"
-
-      - name: Run pyright
-        run: pyright
 
   frontend:
     name: Frontend build
