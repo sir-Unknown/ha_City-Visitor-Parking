@@ -24,6 +24,9 @@ Manage Dutch municipality visitor parking permits from Home Assistant. Start, up
 
 - English: [docs/README.md](docs/README.md)
 - Nederlands: [docs/nl/README.md](docs/nl/README.md)
+- Library: [pyCityVisitorParking](https://github.com/sir-Unknown/pyCityVisitorParking)
+- Library README: [pyCityVisitorParking README](https://github.com/sir-Unknown/pyCityVisitorParking#readme)
+- PyPI: [pycityvisitorparking](https://pypi.org/project/pycityvisitorparking/)
 
 Quick links:
 - Lovelace cards: [docs/cards.md](docs/cards.md)
