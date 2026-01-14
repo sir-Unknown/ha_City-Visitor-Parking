@@ -1114,8 +1114,14 @@ var getCardConfigForm = async (hassOrLocalize) => {
       this._prevHaState = hass.config?.state;
       this._hass = hass;
       const nextLanguage = this._getTranslationLanguage(hass);
-      if (nextLanguage !== this._translationsLanguage) {
+      if (nextLanguage !== this._translationsLanguage || !this._translationsReady) {
         this._translationsReady = false;
+        void ensureTranslations(this._hass).then(() => {
+          this._translationsVersion += 1;
+          this._translationsReady = true;
+          this._translationsLanguage = nextLanguage;
+          this.requestUpdate();
+        });
       }
       const becameRunning = prev !== "RUNNING" && hass.config?.state === "RUNNING";
       if (becameRunning) {
@@ -1123,12 +1129,6 @@ var getCardConfigForm = async (hassOrLocalize) => {
         this._favoritesRetryAfter = 0;
         this._zoneStatusTsByEntryId.clear();
       }
-      void ensureTranslations(this._hass).then(() => {
-        this._translationsVersion += 1;
-        this._translationsReady = true;
-        this._translationsLanguage = nextLanguage;
-        this.requestUpdate();
-      });
       this._requestRender();
       this._ensureDeviceId();
       this._ensurePermitOptions();
@@ -1493,7 +1493,7 @@ var getCardConfigForm = async (hassOrLocalize) => {
                   ${showFavorites ? b2`
                         <div class="row">
                           ${i6(
-        `${this._translationsVersion}-${activeEntryId ?? ""}`,
+        activeEntryId ?? "",
         b2`<ha-select
                               id="favorite"
                               .label=${localize2("field.favorite")}
@@ -1767,9 +1767,10 @@ var getCardConfigForm = async (hassOrLocalize) => {
       if (!this._config?.show_favorites || this._isInEditor()) {
         return;
       }
+      const detail = event.detail;
       const select = event.currentTarget;
-      const plate = select?.value;
-      this._setInputValue("favorite", plate ?? "");
+      const plate = detail?.value ?? select?.value ?? "";
+      this._setInputValue("favorite", plate);
       if (this._suppressFavoriteClear) {
         this._suppressFavoriteClear = false;
         if (!plate || plate === FAVORITE_PLACEHOLDER_VALUE) {

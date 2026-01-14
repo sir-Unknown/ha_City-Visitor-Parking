@@ -353,8 +353,17 @@ import { ensureTranslations } from "./localize";
       this._prevHaState = hass.config?.state;
       this._hass = hass;
       const nextLanguage = this._getTranslationLanguage(hass);
-      if (nextLanguage !== this._translationsLanguage) {
+      if (
+        nextLanguage !== this._translationsLanguage ||
+        !this._translationsReady
+      ) {
         this._translationsReady = false;
+        void ensureTranslations(this._hass).then(() => {
+          this._translationsVersion += 1;
+          this._translationsReady = true;
+          this._translationsLanguage = nextLanguage;
+          this.requestUpdate();
+        });
       }
       const becameRunning =
         prev !== "RUNNING" && hass.config?.state === "RUNNING";
@@ -363,12 +372,6 @@ import { ensureTranslations } from "./localize";
         this._favoritesRetryAfter = 0;
         this._zoneStatusTsByEntryId.clear();
       }
-      void ensureTranslations(this._hass).then(() => {
-        this._translationsVersion += 1;
-        this._translationsReady = true;
-        this._translationsLanguage = nextLanguage;
-        this.requestUpdate();
-      });
       this._requestRender();
       this._ensureDeviceId();
       this._ensurePermitOptions();
@@ -805,7 +808,7 @@ import { ensureTranslations } from "./localize";
                     ? html`
                         <div class="row">
                           ${keyed(
-                            `${this._translationsVersion}-${activeEntryId ?? ""}`,
+                            activeEntryId ?? "",
                             html`<ha-select
                               id="favorite"
                               .label=${localize("field.favorite")}
@@ -1146,9 +1149,10 @@ import { ensureTranslations } from "./localize";
       if (!this._config?.show_favorites || this._isInEditor()) {
         return;
       }
+      const detail = (event as CustomEvent<{ value?: string | null }>).detail;
       const select = event.currentTarget as ValueElement | null;
-      const plate = select?.value;
-      this._setInputValue("favorite", plate ?? "");
+      const plate = detail?.value ?? select?.value ?? "";
+      this._setInputValue("favorite", plate);
       if (this._suppressFavoriteClear) {
         this._suppressFavoriteClear = false;
         if (!plate || plate === FAVORITE_PLACEHOLDER_VALUE) {

@@ -4,6 +4,15 @@
 
 ## Released
 
+### 0.1.16
+
+#### Fixed
+
+- Keep the favorites dropdown from closing on Home Assistant updates.
+- Read the favorite selection from the event detail value.
+
+**Full Changelog**: https://github.com/sir-Unknown/ha_City-Visitor-Parking/compare/v0.1.15...v0.1.16
+
 ### 0.1.15
 
 #### Fixed
