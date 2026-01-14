@@ -41,7 +41,20 @@
           "username": "Gebruikersnaam",
           "password": "Wachtwoord"
         }
+      },
+      "reconfigure": {
+        "title": "Endpoints bijwerken",
+        "description": "Werk de basis- of API-URL bij voor {name}. Laat leeg om de huidige waarden te behouden.",
+        "data": {
+          "base_url": "Basis-URL",
+          "api_url": "API-URL"
+        }
       }
+    },
+    "abort": {
+      "reauth_successful": "Inloggegevens bijgewerkt",
+      "reconfigure_successful": "Configuratie bijgewerkt",
+      "wrong_account": "Het geselecteerde account komt niet overeen met deze entry"
     },
     "error": {
       "cannot_connect": "Kan geen verbinding maken. Controleer je netwerk en probeer het opnieuw.",

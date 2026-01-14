@@ -41,7 +41,20 @@
           "username": "Username",
           "password": "Password"
         }
+      },
+      "reconfigure": {
+        "title": "Update endpoints",
+        "description": "Update the base or API URL for {name}. Leave blank to keep the current values.",
+        "data": {
+          "base_url": "Base URL",
+          "api_url": "API URL"
+        }
       }
+    },
+    "abort": {
+      "reauth_successful": "Credentials updated",
+      "reconfigure_successful": "Configuration updated",
+      "wrong_account": "The selected account does not match this entry"
     },
     "error": {
       "cannot_connect": "Unable to connect. Check your network connection and try again.",

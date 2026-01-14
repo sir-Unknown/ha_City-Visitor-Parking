@@ -6,8 +6,9 @@ import inspect
 import time
 from collections.abc import Callable, Mapping
 from pathlib import Path
-from typing import Protocol, cast
+from typing import Final, Protocol, cast
 
+import voluptuous as vol
 from homeassistant.components.http import StaticPathConfig
 from homeassistant.components.lovelace.const import (
     CONF_RESOURCE_TYPE_WS,
@@ -15,7 +16,6 @@ from homeassistant.components.lovelace.const import (
     LOVELACE_DATA,
 )
 from homeassistant.components.lovelace.resources import ResourceStorageCollection
-from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_ID, CONF_PASSWORD, CONF_TYPE, CONF_USERNAME
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import (
@@ -48,6 +48,7 @@ from .coordinator import CityVisitorParkingCoordinator
 from .helpers import normalize_override_windows
 from .models import (
     AutoEndState,
+    CityVisitorParkingConfigEntry,
     CityVisitorParkingRuntimeData,
     OperatingTimeOverrides,
     ProviderConfig,
@@ -55,7 +56,7 @@ from .models import (
 from .services import async_setup_services
 from .websocket_api import async_setup_websocket
 
-CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
+CONFIG_SCHEMA: Final[vol.Schema] = cv.config_entry_only_config_schema(DOMAIN)
 
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
@@ -69,7 +70,9 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     return True
 
 
-async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+async def async_setup_entry(
+    hass: HomeAssistant, entry: CityVisitorParkingConfigEntry
+) -> bool:
     """Set up City visitor parking from a config entry."""
 
     _LOGGER.debug(
@@ -225,10 +228,12 @@ def _normalize_operating_time_overrides(
     return normalized
 
 
-async def _async_update_listener(hass: HomeAssistant, entry: ConfigEntry) -> None:
+async def _async_update_listener(
+    hass: HomeAssistant, entry: CityVisitorParkingConfigEntry
+) -> None:
     """Handle config entry updates."""
 
-    runtime = entry.runtime_data
+    runtime: CityVisitorParkingRuntimeData = entry.runtime_data
     overrides = _normalize_operating_time_overrides(entry.options)
     if overrides != runtime.operating_time_overrides:
         # Reload so the coordinator recomputes availability with new windows.
@@ -237,7 +242,9 @@ async def _async_update_listener(hass: HomeAssistant, entry: ConfigEntry) -> Non
     runtime.operating_time_overrides = overrides
 
 
-async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+async def async_unload_entry(
+    hass: HomeAssistant, entry: CityVisitorParkingConfigEntry
+) -> bool:
     """Unload a City visitor parking config entry."""
 
     return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
@@ -246,7 +253,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 async def _async_register_frontend(hass: HomeAssistant, _component: str) -> None:
     """Register the frontend assets once."""
 
-    data = hass.data.setdefault(DOMAIN, {})
+    data: dict[str, object] = hass.data.setdefault(DOMAIN, {})
     if data.get("frontend_registered"):
         return
 
@@ -260,7 +267,7 @@ async def _async_register_frontend(hass: HomeAssistant, _component: str) -> None
         return
 
     translations_path = dist_path / "translations"
-    static_paths = [
+    static_paths: list[StaticPathConfig] = [
         StaticPathConfig(
             url_path="/city_visitor_parking",
             path=str(dist_path),
@@ -289,7 +296,7 @@ async def _async_register_lovelace_resources(
 ) -> None:
     """Ensure the Lovelace resources exist for the cards."""
 
-    data = hass.data.setdefault(DOMAIN, {})
+    data: dict[str, object] = hass.data.setdefault(DOMAIN, {})
     if data.get("lovelace_resources_registered") or hass.config.safe_mode:
         return
 
@@ -311,7 +318,7 @@ async def _async_register_lovelace_resources(
     if not dist_path.is_dir():
         _LOGGER.error("Frontend assets directory is missing: %s", dist_path)
         return
-    desired_files = [
+    desired_files: list[str] = [
         "city-visitor-parking-card.js",
         "city-visitor-parking-active-card.js",
     ]

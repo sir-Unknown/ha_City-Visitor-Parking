@@ -134,50 +134,50 @@ import { ensureTranslations } from "./localize";
     static styles = [
       BASE_CARD_STYLES,
       css`
-      ha-textfield,
-      ha-select,
-      ha-selector,
-      ha-date-input,
-      ha-time-input {
-        width: 100%;
-      }
-      .actions {
-        display: flex;
-        gap: var(--ha-space-2);
-        align-items: center;
-        justify-content: space-between;
-      }
-      .favorite-actions {
-        display: flex;
-        align-items: center;
-        gap: var(--ha-space-2);
-      }
-      .remove-favorite {
-        display: flex;
-        align-items: center;
-        gap: var(--ha-space-2);
-      }
-      .leading {
-        width: 48px;
-        min-width: 48px;
-        height: 48px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-      }
-      .leading ha-icon,
-      .leading mwc-icon {
-        width: 24px;
-        height: 24px;
-        transform: translateY(-4px);
-      }
-      .start-button {
-        margin-left: auto;
-      }
-      .start-button.success {
-        --mdc-theme-primary: var(--success-color, #21b365);
-        --mdc-theme-on-primary: var(--text-primary-color, #fff);
-      }
+        ha-textfield,
+        ha-select,
+        ha-selector,
+        ha-date-input,
+        ha-time-input {
+          width: 100%;
+        }
+        .actions {
+          display: flex;
+          gap: var(--ha-space-2);
+          align-items: center;
+          justify-content: space-between;
+        }
+        .favorite-actions {
+          display: flex;
+          align-items: center;
+          gap: var(--ha-space-2);
+        }
+        .remove-favorite {
+          display: flex;
+          align-items: center;
+          gap: var(--ha-space-2);
+        }
+        .leading {
+          width: 48px;
+          min-width: 48px;
+          height: 48px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
+        .leading ha-icon,
+        .leading mwc-icon {
+          width: 24px;
+          height: 24px;
+          transform: translateY(-4px);
+        }
+        .start-button {
+          margin-left: auto;
+        }
+        .start-button.success {
+          --mdc-theme-primary: var(--success-color, #21b365);
+          --mdc-theme-on-primary: var(--text-primary-color, #fff);
+        }
       `,
     ];
     _config: CardConfig | null;
@@ -495,9 +495,10 @@ import { ensureTranslations } from "./localize";
                 secondary,
               };
             })
-            .sort((first, second) =>
-              first.primary.localeCompare(second.primary) ||
-              first.secondary.localeCompare(second.secondary),
+            .sort(
+              (first, second) =>
+                first.primary.localeCompare(second.primary) ||
+                first.secondary.localeCompare(second.secondary),
             );
           this._permitOptionsLoaded = true;
         } catch {
@@ -784,22 +785,20 @@ import { ensureTranslations } from "./localize";
                             <mwc-list-item value=${PERMIT_PLACEHOLDER_VALUE}>
                               ${permitPlaceholderText}
                             </mwc-list-item>
-                            ${this._permitOptions.map(
-                              (entry) => {
-                                const secondaryText = entry.secondary;
-                                return html`<mwc-list-item
-                                  value=${entry.id}
-                                  ?twoline=${Boolean(secondaryText)}
-                                >
-                                  <span>${entry.primary}</span>
-                                  ${secondaryText
-                                    ? html`<span slot="secondary"
-                                        >${secondaryText}</span
-                                      >`
-                                    : nothing}
-                                </mwc-list-item>`;
-                              },
-                            )}
+                            ${this._permitOptions.map((entry) => {
+                              const secondaryText = entry.secondary;
+                              return html`<mwc-list-item
+                                value=${entry.id}
+                                ?twoline=${Boolean(secondaryText)}
+                              >
+                                <span>${entry.primary}</span>
+                                ${secondaryText
+                                  ? html`<span slot="secondary"
+                                      >${secondaryText}</span
+                                    >`
+                                  : nothing}
+                              </mwc-list-item>`;
+                            })}
                           </ha-select>
                         </div>
                       `
@@ -1140,8 +1139,7 @@ import { ensureTranslations } from "./localize";
       const detail = (event as CustomEvent<{ value?: string | null }>).detail;
       const target = event.currentTarget as ValueElement | null;
       const value = detail?.value ?? target?.value ?? "";
-      const nextValue =
-        value === PERMIT_PLACEHOLDER_VALUE ? "" : (value ?? "");
+      const nextValue = value === PERMIT_PLACEHOLDER_VALUE ? "" : (value ?? "");
       this._handlePermitChange(nextValue);
     }
 
@@ -1204,13 +1202,13 @@ import { ensureTranslations } from "./localize";
       this._setupStatusRefresh(value);
     }
 
-  _resetFavoritesState(): void {
-    this._favoritesLoadedFor = null;
-    this._favoritesRetryAfter = 0;
-    this._favoritesError = null;
-    this._favoritesLoading = false;
-    this._setFavorites([]);
-  }
+    _resetFavoritesState(): void {
+      this._favoritesLoadedFor = null;
+      this._favoritesRetryAfter = 0;
+      this._favoritesError = null;
+      this._favoritesLoading = false;
+      this._setFavorites([]);
+    }
 
     _resetDeviceState(): void {
       this._deviceId = null;
@@ -1462,7 +1460,10 @@ import { ensureTranslations } from "./localize";
 
       const { start, end } = this._resolveTimes();
       if (!start || !end) {
-        this._setStatus(this._localize("message.start_end_required"), "warning");
+        this._setStatus(
+          this._localize("message.start_end_required"),
+          "warning",
+        );
         this._startInFlight = false;
         this._requestRender();
         return;
@@ -1513,11 +1514,7 @@ import { ensureTranslations } from "./localize";
       );
     }
 
-    _setStatus(
-      message: string,
-      type: StatusType,
-      clearAfterMs?: number,
-    ): void {
+    _setStatus(message: string, type: StatusType, clearAfterMs?: number): void {
       setStatusState(
         this._statusState,
         message,
@@ -1815,10 +1812,7 @@ import { ensureTranslations } from "./localize";
       }
       if (showEnd) {
         if (force || !this._getInputValue("endDateTime")) {
-          this._setInputValue(
-            "endDateTime",
-            formatDateTimeLocal(defaults.end),
-          );
+          this._setInputValue("endDateTime", formatDateTimeLocal(defaults.end));
         }
       }
     }
@@ -1855,10 +1849,7 @@ import { ensureTranslations } from "./localize";
       const normalizedLocaleLanguage =
         typeof localeLanguage === "string" ? localeLanguage : undefined;
       return (
-        hassLanguage ||
-        normalizedLocaleLanguage ||
-        navigator.language ||
-        "en"
+        hassLanguage || normalizedLocaleLanguage || navigator.language || "en"
       );
     }
 
@@ -1884,18 +1875,16 @@ import { ensureTranslations } from "./localize";
       hass && typeof hass.locale === "object" && hass.locale
         ? (hass.locale as { language?: unknown }).language
         : undefined;
-    return hassLanguage || (typeof localeLanguage === "string"
-      ? localeLanguage
-      : undefined);
+    return (
+      hassLanguage ||
+      (typeof localeLanguage === "string" ? localeLanguage : undefined)
+    );
   };
   const registerCardWithTranslations = (attempt = 0): void => {
     const hass = getGlobalHass<HomeAssistant>();
     void ensureTranslations(hass).then(registerCard);
     if (!getHassLanguage(hass) && attempt < 20) {
-      window.setTimeout(
-        () => registerCardWithTranslations(attempt + 1),
-        500,
-      );
+      window.setTimeout(() => registerCardWithTranslations(attempt + 1), 500);
     }
   };
   registerCardWithTranslations();

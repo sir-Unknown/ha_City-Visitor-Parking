@@ -19,7 +19,7 @@ export const getActiveCardConfigForm = async (
   const localizeTarget =
     hassOrLocalize && typeof hassOrLocalize !== "function"
       ? hassOrLocalize
-      : getGlobalHass<HomeAssistant>() ?? hassOrLocalize;
+      : (getGlobalHass<HomeAssistant>() ?? hassOrLocalize);
   await ensureTranslations(localizeTarget);
   return {
     schema: [

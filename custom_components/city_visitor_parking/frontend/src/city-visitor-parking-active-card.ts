@@ -57,53 +57,53 @@ import { ensureTranslations } from "./localize";
     static styles = [
       BASE_CARD_STYLES,
       css`
-      .active-reservations {
-        display: flex;
-        flex-direction: column;
-        gap: var(--ha-space-2);
-      }
-      .active-reservation {
-        border: 1px solid var(--divider-color);
-        border-radius: var(--ha-card-border-radius, var(--ha-space-2));
-        padding: var(--ha-space-3);
-        display: flex;
-        flex-direction: column;
-        gap: var(--ha-space-2);
-      }
-      .active-reservation-summary {
-        display: flex;
-        flex-direction: column;
-        gap: var(--ha-space-1);
-      }
-      .active-reservation-heading {
-        font-weight: 600;
-      }
-      .active-reservation-label {
-        color: var(--secondary-text-color);
-        font-family: var(--primary-font-family, "Roboto", "Noto", sans-serif);
-        font-size: 14px;
-        font-weight: 400;
-      }
-      .active-reservation-times {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
-        gap: var(--ha-space-2);
-      }
-      .reservation-input {
-        width: 100%;
-      }
-      .active-reservation-actions {
-        display: flex;
-        gap: var(--ha-space-2);
-        flex-wrap: wrap;
-      }
-      .active-reservation-end {
-        margin-left: auto;
-      }
-      .active-reservations-empty {
-        font-size: 0.9rem;
-        color: var(--secondary-text-color);
-      }
+        .active-reservations {
+          display: flex;
+          flex-direction: column;
+          gap: var(--ha-space-2);
+        }
+        .active-reservation {
+          border: 1px solid var(--divider-color);
+          border-radius: var(--ha-card-border-radius, var(--ha-space-2));
+          padding: var(--ha-space-3);
+          display: flex;
+          flex-direction: column;
+          gap: var(--ha-space-2);
+        }
+        .active-reservation-summary {
+          display: flex;
+          flex-direction: column;
+          gap: var(--ha-space-1);
+        }
+        .active-reservation-heading {
+          font-weight: 600;
+        }
+        .active-reservation-label {
+          color: var(--secondary-text-color);
+          font-family: var(--primary-font-family, "Roboto", "Noto", sans-serif);
+          font-size: 14px;
+          font-weight: 400;
+        }
+        .active-reservation-times {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+          gap: var(--ha-space-2);
+        }
+        .reservation-input {
+          width: 100%;
+        }
+        .active-reservation-actions {
+          display: flex;
+          gap: var(--ha-space-2);
+          flex-wrap: wrap;
+        }
+        .active-reservation-end {
+          margin-left: auto;
+        }
+        .active-reservations-empty {
+          font-size: 0.9rem;
+          color: var(--secondary-text-color);
+        }
       `,
     ];
     _config: CardConfig | null;
@@ -515,11 +515,7 @@ import { ensureTranslations } from "./localize";
       showPicker(event, this._isInEditor());
     }
 
-    _setStatus(
-      message: string,
-      type: StatusType,
-      clearAfterMs?: number,
-    ): void {
+    _setStatus(message: string, type: StatusType, clearAfterMs?: number): void {
       setStatusState(
         this._statusState,
         message,
@@ -573,7 +569,10 @@ import { ensureTranslations } from "./localize";
           : formatOptionalDateTimeLocal(reservation.end_time)
         : "";
       if ((allowStart && !startValue) || (allowEnd && !endValue)) {
-        this._setStatus(this._localize("message.start_end_required"), "warning");
+        this._setStatus(
+          this._localize("message.start_end_required"),
+          "warning",
+        );
         this._reservationInFlight.delete(reservationId);
         this._requestRender();
         return;
@@ -592,7 +591,10 @@ import { ensureTranslations } from "./localize";
         ? parseDate(endValue)
         : parseDate(reservation.end_time);
       if ((allowStart && !startDate) || (allowEnd && !endDate)) {
-        this._setStatus(this._localize("message.start_end_required"), "warning");
+        this._setStatus(
+          this._localize("message.start_end_required"),
+          "warning",
+        );
         this._reservationInFlight.delete(reservationId);
         this._requestRender();
         return;
@@ -777,18 +779,16 @@ import { ensureTranslations } from "./localize";
       hass && typeof hass.locale === "object" && hass.locale
         ? (hass.locale as { language?: unknown }).language
         : undefined;
-    return hassLanguage || (typeof localeLanguage === "string"
-      ? localeLanguage
-      : undefined);
+    return (
+      hassLanguage ||
+      (typeof localeLanguage === "string" ? localeLanguage : undefined)
+    );
   };
   const registerCardWithTranslations = (attempt = 0): void => {
     const hass = getGlobalHass<HomeAssistant>();
     void ensureTranslations(hass).then(registerCard);
     if (!getHassLanguage(hass) && attempt < 20) {
-      window.setTimeout(
-        () => registerCardWithTranslations(attempt + 1),
-        500,
-      );
+      window.setTimeout(() => registerCardWithTranslations(attempt + 1), 500);
     }
   };
   registerCardWithTranslations();

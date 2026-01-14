@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import time
 from datetime import datetime, timedelta
+from typing import Final
 
 import voluptuous as vol
 from homeassistant import config_entries
@@ -37,16 +38,16 @@ from .const import (
 from .helpers import get_attr
 from .models import CityVisitorParkingRuntimeData, Favorite, Reservation
 
-SERVICE_START_RESERVATION = "start_reservation"
-SERVICE_UPDATE_RESERVATION = "update_reservation"
-SERVICE_END_RESERVATION = "end_reservation"
-SERVICE_ADD_FAVORITE = "add_favorite"
-SERVICE_UPDATE_FAVORITE = "update_favorite"
-SERVICE_REMOVE_FAVORITE = "remove_favorite"
-SERVICE_LIST_ACTIVE_RESERVATIONS = "list_active_reservations"
-SERVICE_LIST_FAVORITES = "list_favorites"
+SERVICE_START_RESERVATION: Final[str] = "start_reservation"
+SERVICE_UPDATE_RESERVATION: Final[str] = "update_reservation"
+SERVICE_END_RESERVATION: Final[str] = "end_reservation"
+SERVICE_ADD_FAVORITE: Final[str] = "add_favorite"
+SERVICE_UPDATE_FAVORITE: Final[str] = "update_favorite"
+SERVICE_REMOVE_FAVORITE: Final[str] = "remove_favorite"
+SERVICE_LIST_ACTIVE_RESERVATIONS: Final[str] = "list_active_reservations"
+SERVICE_LIST_FAVORITES: Final[str] = "list_favorites"
 
-DEVICE_SELECTOR = selector.DeviceSelector(
+DEVICE_SELECTOR: Final[selector.DeviceSelector] = selector.DeviceSelector(
     selector.DeviceSelectorConfig(integration=DOMAIN)
 )
 
@@ -124,7 +125,7 @@ def _raise_favorite_error(err: PyCityVisitorParkingError) -> None:
     ) from err
 
 
-SERVICE_START_SCHEMA = vol.Schema(
+SERVICE_START_SCHEMA: Final[vol.Schema] = vol.Schema(
     {
         vol.Required(ATTR_DEVICE_ID): DEVICE_SELECTOR,
         vol.Required(ATTR_START_TIME): cv.datetime,
@@ -133,7 +134,7 @@ SERVICE_START_SCHEMA = vol.Schema(
     }
 )
 
-SERVICE_UPDATE_SCHEMA = vol.Schema(
+SERVICE_UPDATE_SCHEMA: Final[vol.Schema] = vol.Schema(
     {
         vol.Required(ATTR_DEVICE_ID): DEVICE_SELECTOR,
         vol.Required(ATTR_RESERVATION_ID): cv.string,
@@ -143,14 +144,14 @@ SERVICE_UPDATE_SCHEMA = vol.Schema(
     }
 )
 
-SERVICE_END_SCHEMA = vol.Schema(
+SERVICE_END_SCHEMA: Final[vol.Schema] = vol.Schema(
     {
         vol.Required(ATTR_DEVICE_ID): DEVICE_SELECTOR,
         vol.Required(ATTR_RESERVATION_ID): cv.string,
     }
 )
 
-SERVICE_ADD_FAVORITE_SCHEMA = vol.Schema(
+SERVICE_ADD_FAVORITE_SCHEMA: Final[vol.Schema] = vol.Schema(
     {
         vol.Required(ATTR_DEVICE_ID): DEVICE_SELECTOR,
         vol.Required(ATTR_LICENSE_PLATE): cv.string,
@@ -158,7 +159,7 @@ SERVICE_ADD_FAVORITE_SCHEMA = vol.Schema(
     }
 )
 
-SERVICE_UPDATE_FAVORITE_SCHEMA = vol.Schema(
+SERVICE_UPDATE_FAVORITE_SCHEMA: Final[vol.Schema] = vol.Schema(
     {
         vol.Required(ATTR_DEVICE_ID): DEVICE_SELECTOR,
         vol.Required(ATTR_FAVORITE_ID): cv.string,
@@ -167,21 +168,21 @@ SERVICE_UPDATE_FAVORITE_SCHEMA = vol.Schema(
     }
 )
 
-SERVICE_REMOVE_FAVORITE_SCHEMA = vol.Schema(
+SERVICE_REMOVE_FAVORITE_SCHEMA: Final[vol.Schema] = vol.Schema(
     {
         vol.Required(ATTR_DEVICE_ID): DEVICE_SELECTOR,
         vol.Required(ATTR_FAVORITE_ID): cv.string,
     }
 )
 
-SERVICE_LIST_ACTIVE_RESERVATIONS_SCHEMA = vol.Schema(
+SERVICE_LIST_ACTIVE_RESERVATIONS_SCHEMA: Final[vol.Schema] = vol.Schema(
     {
         vol.Required(ATTR_DEVICE_ID): DEVICE_SELECTOR,
         vol.Optional("return_response"): cv.boolean,
     }
 )
 
-SERVICE_LIST_FAVORITES_SCHEMA = vol.Schema(
+SERVICE_LIST_FAVORITES_SCHEMA: Final[vol.Schema] = vol.Schema(
     {
         vol.Required(ATTR_DEVICE_ID): DEVICE_SELECTOR,
         vol.Optional("return_response"): cv.boolean,

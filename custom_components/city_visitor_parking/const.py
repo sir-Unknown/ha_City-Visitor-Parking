@@ -9,7 +9,7 @@ from typing import Final
 from homeassistant.const import Platform
 
 DOMAIN: Final = "city_visitor_parking"
-LOGGER = logging.getLogger(__name__)
+LOGGER: Final[logging.Logger] = logging.getLogger(__name__)
 
 PLATFORMS: Final[list[Platform]] = [Platform.SENSOR]
 

@@ -5,7 +5,7 @@ from __future__ import annotations
 import time
 from collections.abc import Iterable
 from datetime import datetime
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Final, cast
 
 import voluptuous as vol
 from homeassistant import config_entries
@@ -25,8 +25,8 @@ from .helpers import get_attr
 from .models import CityVisitorParkingRuntimeData
 from .time_windows import _current_or_next_window_with_overrides
 
-WEBSOCKET_LIST_FAVORITES = "city_visitor_parking/favorites"
-WEBSOCKET_GET_STATUS = "city_visitor_parking/status"
+WEBSOCKET_LIST_FAVORITES: Final[str] = "city_visitor_parking/favorites"
+WEBSOCKET_GET_STATUS: Final[str] = "city_visitor_parking/status"
 
 
 async def async_setup_websocket(hass: HomeAssistant) -> None:

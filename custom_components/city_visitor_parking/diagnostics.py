@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Final
+
 from homeassistant.components.diagnostics import async_redact_data
 from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
 from homeassistant.core import HomeAssistant
@@ -9,7 +11,7 @@ from homeassistant.core import HomeAssistant
 from .const import CONF_AUTO_END, CONF_OPERATING_TIME_OVERRIDES
 from .models import CityVisitorParkingConfigEntry
 
-TO_REDACT = [CONF_PASSWORD, CONF_USERNAME]
+TO_REDACT: Final[list[str]] = [CONF_PASSWORD, CONF_USERNAME]
 
 
 async def async_get_config_entry_diagnostics(

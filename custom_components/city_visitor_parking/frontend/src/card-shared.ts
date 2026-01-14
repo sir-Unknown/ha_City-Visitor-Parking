@@ -175,8 +175,7 @@ export const getInvalidConfigError = (
 export const getLoadingMessage = (
   hass: LocalizeTarget | null | undefined,
 ): string => {
-  const hassLocalize =
-    typeof hass === "function" ? hass : hass?.localize;
+  const hassLocalize = typeof hass === "function" ? hass : hass?.localize;
   const haMessage = hassLocalize?.(HA_STARTING_MESSAGE_KEY);
   if (haMessage && haMessage !== HA_STARTING_MESSAGE_KEY) {
     return haMessage;
@@ -265,13 +264,11 @@ export const formatOptionalDateTimeLocal = (
 
 type HassState = { config?: { state?: string } };
 
-export const isHassRunning = (
-  hass: HassState | null | undefined,
-): boolean => hass?.config?.state === "RUNNING";
+export const isHassRunning = (hass: HassState | null | undefined): boolean =>
+  hass?.config?.state === "RUNNING";
 
-export const isHassStarting = (
-  hass: HassState | null | undefined,
-): boolean => hass?.config?.state === HA_STATE_NOT_RUNNING;
+export const isHassStarting = (hass: HassState | null | undefined): boolean =>
+  hass?.config?.state === HA_STATE_NOT_RUNNING;
 
 export const scheduleRender = (
   handle: number | null,
@@ -314,8 +311,9 @@ export const showPicker = (event: Event, isInEditor: boolean): void => {
   }
   const inputElement =
     target.inputElement ?? target.shadowRoot?.querySelector("input");
-  (inputElement as (HTMLInputElement & { showPicker?: () => void }) | null)
-    ?.showPicker?.();
+  (
+    inputElement as (HTMLInputElement & { showPicker?: () => void }) | null
+  )?.showPicker?.();
 };
 
 export const isInEditor = (startNode: Node): boolean => {

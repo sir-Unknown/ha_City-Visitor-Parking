@@ -21,6 +21,8 @@ from custom_components.city_visitor_parking.config_flow import (
     _parse_time_windows,
 )
 from custom_components.city_visitor_parking.const import (
+    CONF_API_URL,
+    CONF_BASE_URL,
     CONF_DESCRIPTION,
     CONF_MUNICIPALITY,
     CONF_PERMIT_ID,
@@ -288,6 +290,42 @@ async def test_reauth_flow_success(hass, monkeypatch) -> None:
     )
     assert result["type"] == "abort"
     assert result["reason"] == "reauth_successful"
+
+
+async def test_reconfigure_flow_success(hass) -> None:
+    """Reconfigure flow should update endpoint overrides."""
+
+    entry = _create_entry()
+    entry.add_to_hass(hass)
+
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN,
+        context={"source": "reconfigure", "entry_id": entry.entry_id},
+    )
+    assert result["type"] == "form"
+    assert result["step_id"] == "reconfigure"
+
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {CONF_BASE_URL: "https://example.com", CONF_API_URL: "/api"},
+    )
+    await hass.async_block_till_done()
+
+    assert result["type"] == "abort"
+    assert result["reason"] == "reconfigure_successful"
+    assert entry.data[CONF_BASE_URL] == "https://example.com"
+    assert entry.data[CONF_API_URL] == "/api"
+
+
+async def test_reconfigure_missing_entry_aborts(hass) -> None:
+    """Reconfigure should abort when the entry is missing."""
+
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN,
+        context={"source": "reconfigure", "entry_id": "missing"},
+    )
+    assert result["type"] == "abort"
+    assert result["reason"] == "unknown"
 
 
 async def test_reauth_flow_invalid_auth(hass, monkeypatch, pv_library) -> None:

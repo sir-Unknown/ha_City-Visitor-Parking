@@ -1,5 +1,5 @@
 {
   "include": ["custom_components/city_visitor_parking"],
-  "typeCheckingMode": "basic",
+  "typeCheckingMode": "strict",
   "reportMissingImports": "none"
 }

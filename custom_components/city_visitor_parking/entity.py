@@ -14,7 +14,7 @@ from .models import CityVisitorParkingConfigEntry
 class CityVisitorParkingEntity(CoordinatorEntity[CityVisitorParkingCoordinator]):
     """Base entity for the integration."""
 
-    _attr_has_entity_name = True
+    _attr_has_entity_name: bool = True
 
     def __init__(
         self,
@@ -25,7 +25,7 @@ class CityVisitorParkingEntity(CoordinatorEntity[CityVisitorParkingCoordinator])
         """Initialize the entity."""
 
         super().__init__(coordinator)
-        self._entry = entry
+        self._entry: CityVisitorParkingConfigEntry = entry
         municipality = entry.data.get(CONF_MUNICIPALITY)
         permit_id = entry.data.get(CONF_PERMIT_ID)
         device_name = (
@@ -41,6 +41,6 @@ class CityVisitorParkingEntity(CoordinatorEntity[CityVisitorParkingCoordinator])
             model="Visitor parking permit",
             entry_type=DeviceEntryType.SERVICE,
         )
-        self._attr_extra_state_attributes = {
+        self._attr_extra_state_attributes: dict[str, object] = {
             ATTR_ATTRIBUTION: "Data provided by your municipality",
         }

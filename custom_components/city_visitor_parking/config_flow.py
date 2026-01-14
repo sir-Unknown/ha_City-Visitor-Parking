@@ -6,7 +6,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import time
 from importlib import resources
-from typing import cast
+from typing import Final, cast
 
 import voluptuous as vol
 import yaml
@@ -38,10 +38,10 @@ from .const import (
 from .helpers import get_attr, normalize_override_windows
 from .models import ProviderConfig
 
-OTHER_OPTION = "other"
-SECTION_OPERATING_TIMES = "operating_times"
+OTHER_OPTION: Final[str] = "other"
+SECTION_OPERATING_TIMES: Final[str] = "operating_times"
 
-WEEKDAY_LABELS = {
+WEEKDAY_LABELS: Final[dict[str, str]] = {
     "mon": "monday",
     "tue": "tuesday",
     "wed": "wednesday",
@@ -230,6 +230,62 @@ class CityVisitorParkingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self.context["title_placeholders"] = {"name": entry.title}
         return await self.async_step_reauth_confirm()
 
+    async def async_step_reconfigure(
+        self, user_input: dict[str, object] | None = None
+    ) -> config_entries.ConfigFlowResult:
+        """Handle reconfiguration."""
+
+        entry = self.hass.config_entries.async_get_entry(self.context["entry_id"])
+        if entry is None:
+            return self.async_abort(reason="unknown")
+
+        if user_input is None:
+            self.context["title_placeholders"] = {"name": entry.title}
+            schema = vol.Schema(
+                {
+                    vol.Optional(
+                        CONF_BASE_URL,
+                        default=entry.data.get(CONF_BASE_URL, ""),
+                    ): cv.string,
+                    vol.Optional(
+                        CONF_API_URL,
+                        default=entry.data.get(CONF_API_URL, ""),
+                    ): cv.string,
+                }
+            )
+            return self.async_show_form(step_id="reconfigure", data_schema=schema)
+
+        base_url = _normalize_optional_text(user_input.get(CONF_BASE_URL))
+        api_url = _normalize_optional_text(user_input.get(CONF_API_URL))
+
+        provider_id = entry.data.get(CONF_PROVIDER_ID)
+        municipality = entry.data.get(CONF_MUNICIPALITY)
+        permit_id = entry.data.get(CONF_PERMIT_ID)
+        if not provider_id or not municipality or not permit_id:
+            return self.async_abort(reason="unknown")
+
+        await self.async_set_unique_id(
+            _build_unique_id(
+                ProviderConfig(
+                    provider_id=provider_id,
+                    municipality_name=municipality,
+                    base_url=base_url,
+                    api_url=api_url,
+                ),
+                permit_id,
+            )
+        )
+        self._abort_if_unique_id_mismatch(reason="wrong_account")
+
+        return self.async_update_reload_and_abort(
+            entry,
+            data_updates={
+                CONF_BASE_URL: base_url,
+                CONF_API_URL: api_url,
+            },
+            reason="reconfigure_successful",
+        )
+
     async def async_step_reauth_confirm(
         self, user_input: dict[str, object] | None = None
     ) -> config_entries.ConfigFlowResult:
@@ -359,7 +415,7 @@ class CityVisitorParkingOptionsFlow(config_entries.OptionsFlow):
     def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
         """Initialize options flow."""
 
-        self._config_entry = config_entry
+        self._config_entry: config_entries.ConfigEntry = config_entry
 
     async def async_step_init(
         self, user_input: dict[str, object] | None = None
@@ -610,3 +666,12 @@ def _day_windows_key(day: str) -> str:
     """Return the field key for a weekday's window input."""
 
     return f"{WEEKDAY_LABELS[day]}_chargeable_windows"
+
+
+def _normalize_optional_text(value: object) -> str | None:
+    """Normalize optional text input to None or a stripped string."""
+
+    if not isinstance(value, str):
+        return None
+    cleaned = value.strip()
+    return cleaned or None

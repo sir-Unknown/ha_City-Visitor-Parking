@@ -42,3 +42,52 @@ rules:
   integration-owner: done
   docs-installation-parameters: done
   docs-configuration-parameters: done
+
+  # Gold
+  devices: done
+  diagnostics: done
+  discovery-update-info:
+    status: exempt
+    comment: |
+      This integration does not use discovery.
+  discovery:
+    status: exempt
+    comment: |
+      This integration does not support discovery.
+  docs-data-update: todo
+  docs-examples: done
+  docs-known-limitations: todo
+  docs-supported-devices: todo
+  docs-supported-functions: done
+  docs-troubleshooting: done
+  docs-use-cases: todo
+  dynamic-devices:
+    status: exempt
+    comment: |
+      This integration uses a single device per config entry.
+  entity-category: done
+  entity-device-class: done
+  entity-disabled-by-default: done
+  entity-translations: done
+  exception-translations: done
+  icon-translations:
+    status: exempt
+    comment: |
+      This integration does not use dynamic icons.
+  reconfiguration-flow: done
+  repair-issues:
+    status: exempt
+    comment: |
+      There are no actionable repair issues at this time.
+  stale-devices:
+    status: exempt
+    comment: |
+      This integration does not manage dynamic devices.
+
+  # Platinum
+  async-dependency:
+    status: done
+    comment: |
+      The pycityvisitorparking client uses aiohttp/asyncio for network I/O.
+  inject-websession: done
+  strict-typing: done

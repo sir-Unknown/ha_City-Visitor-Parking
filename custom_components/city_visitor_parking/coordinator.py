@@ -75,11 +75,11 @@ class CityVisitorParkingCoordinator(DataUpdateCoordinator[CoordinatorData]):
             update_interval=DEFAULT_UPDATE_INTERVAL,
             config_entry=config_entry,
         )
-        self._entry_title = config_entry.title
-        self._provider = provider
-        self._permit_id = permit_id
-        self._auto_end_state = auto_end_state
-        self._unavailable_logged = False
+        self._entry_title: str = config_entry.title
+        self._provider: ProviderProtocol = provider
+        self._permit_id: str = permit_id
+        self._auto_end_state: AutoEndState = auto_end_state
+        self._unavailable_logged: bool = False
 
     async def _async_update_data(self) -> CoordinatorData:
         """Fetch data from the API and normalize it."""

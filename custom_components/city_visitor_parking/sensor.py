@@ -48,7 +48,7 @@ async def async_setup_entry(
 class ActiveReservationsSensor(CityVisitorParkingEntity, SensorEntity):
     """Sensor for active reservations count."""
 
-    _attr_translation_key = "active_reservations"
+    _attr_translation_key: str = "active_reservations"
 
     def __init__(
         self,
@@ -69,7 +69,7 @@ class ActiveReservationsSensor(CityVisitorParkingEntity, SensorEntity):
 class FutureReservationsSensor(CityVisitorParkingEntity, SensorEntity):
     """Sensor for future reservations count."""
 
-    _attr_translation_key = "future_reservations"
+    _attr_translation_key: str = "future_reservations"
 
     def __init__(
         self,
@@ -95,10 +95,10 @@ class FutureReservationsSensor(CityVisitorParkingEntity, SensorEntity):
 class RemainingTimeSensor(CityVisitorParkingEntity, SensorEntity):
     """Sensor for remaining balance time."""
 
-    _attr_translation_key = "remaining_time"
-    _attr_device_class = SensorDeviceClass.DURATION
-    _attr_native_unit_of_measurement = UnitOfTime.HOURS
-    _attr_suggested_display_precision = 2
+    _attr_translation_key: str = "remaining_time"
+    _attr_device_class: SensorDeviceClass = SensorDeviceClass.DURATION
+    _attr_native_unit_of_measurement: str = UnitOfTime.HOURS
+    _attr_suggested_display_precision: int = 2
 
     def __init__(
         self,
@@ -135,7 +135,7 @@ class RemainingTimeSensor(CityVisitorParkingEntity, SensorEntity):
 class PermitZoneAvailabilitySensor(CityVisitorParkingEntity, SensorEntity):
     """Sensor for permit zone availability."""
 
-    _attr_translation_key = "permit_zone_availability"
+    _attr_translation_key: str = "permit_zone_availability"
 
     def __init__(
         self,
@@ -197,10 +197,10 @@ class PermitZoneAvailabilitySensor(CityVisitorParkingEntity, SensorEntity):
 class ProviderChargeableStartSensor(CityVisitorParkingEntity, SensorEntity):
     """Sensor for the start of the current or next provider chargeable window."""
 
-    _attr_translation_key = "provider_chargeable_start"
-    _attr_device_class = SensorDeviceClass.TIMESTAMP
-    _attr_entity_category = EntityCategory.DIAGNOSTIC
-    _attr_entity_registry_enabled_default = False
+    _attr_translation_key: str = "provider_chargeable_start"
+    _attr_device_class: SensorDeviceClass = SensorDeviceClass.TIMESTAMP
+    _attr_entity_category: EntityCategory = EntityCategory.DIAGNOSTIC
+    _attr_entity_registry_enabled_default: bool = False
 
     def __init__(
         self,
@@ -225,10 +225,10 @@ class ProviderChargeableStartSensor(CityVisitorParkingEntity, SensorEntity):
 class ProviderChargeableEndSensor(CityVisitorParkingEntity, SensorEntity):
     """Sensor for the end of the current or next provider chargeable window."""
 
-    _attr_translation_key = "provider_chargeable_end"
-    _attr_device_class = SensorDeviceClass.TIMESTAMP
-    _attr_entity_category = EntityCategory.DIAGNOSTIC
-    _attr_entity_registry_enabled_default = False
+    _attr_translation_key: str = "provider_chargeable_end"
+    _attr_device_class: SensorDeviceClass = SensorDeviceClass.TIMESTAMP
+    _attr_entity_category: EntityCategory = EntityCategory.DIAGNOSTIC
+    _attr_entity_registry_enabled_default: bool = False
 
     def __init__(
         self,
@@ -253,8 +253,8 @@ class ProviderChargeableEndSensor(CityVisitorParkingEntity, SensorEntity):
 class NextChargeableStartSensor(CityVisitorParkingEntity, SensorEntity):
     """Sensor for the start of the current or next chargeable window."""
 
-    _attr_translation_key = "next_chargeable_start"
-    _attr_device_class = SensorDeviceClass.TIMESTAMP
+    _attr_translation_key: str = "next_chargeable_start"
+    _attr_device_class: SensorDeviceClass = SensorDeviceClass.TIMESTAMP
 
     def __init__(
         self,
@@ -281,8 +281,8 @@ class NextChargeableStartSensor(CityVisitorParkingEntity, SensorEntity):
 class NextChargeableEndSensor(CityVisitorParkingEntity, SensorEntity):
     """Sensor for the end of the current or next chargeable window."""
 
-    _attr_translation_key = "next_chargeable_end"
-    _attr_device_class = SensorDeviceClass.TIMESTAMP
+    _attr_translation_key: str = "next_chargeable_end"
+    _attr_device_class: SensorDeviceClass = SensorDeviceClass.TIMESTAMP
 
     def __init__(
         self,
@@ -309,7 +309,7 @@ class NextChargeableEndSensor(CityVisitorParkingEntity, SensorEntity):
 class FavoritesSensor(CityVisitorParkingEntity, SensorEntity):
     """Sensor for favorites count."""
 
-    _attr_translation_key = "favorites"
+    _attr_translation_key: str = "favorites"
 
     def __init__(
         self,
