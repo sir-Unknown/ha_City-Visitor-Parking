@@ -75,6 +75,43 @@ This integration connects to municipality visitor parking portals (service provi
 Supported providers are defined in:
 - `custom_components/city_visitor_parking/providers.yaml`
 
+Supported municipalities (from `providers.yaml`):
+- Apeldoorn
+- Bloemendaal
+- Delft
+- Den Haag
+- 's-Hertogenbosch
+- Doetinchem (via Buha)
+- Groningen
+- Haarlem
+- Harlingen
+- Heemstede
+- Heerenveen
+- Heerlen
+- Hengelo
+- Katwijk
+- Leiden
+- Leidschendam-Voorburg
+- Middelburg
+- Nissewaard
+- Oldenzaal
+- Rijswijk
+- Roermond
+- Schouwen-Duiveland
+- Sittard-Geleen
+- Smallingerland
+- Súdwest-Fryslân
+- Veere
+- Venlo
+- Vlissingen
+- Waadhoeke
+- Waalwijk
+- Weert
+- Zaanstad
+- Zevenaar
+- Zutphen
+- Zwolle
+
 If your municipality/provider is missing, open an issue and include your municipality name and permit type (no credentials).
 
 ## Supported functionality
