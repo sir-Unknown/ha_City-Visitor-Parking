@@ -1622,9 +1622,11 @@ var getCardConfigForm = async (hassOrLocalize) => {
                                   data-favorite-id=${selectedFavorite?.id || selectedFavorite?.license_plate || ""}
                                   ?disabled=${favoriteRemoveDisabled}
                                 >
-                                  <ha-icon
-                                    icon="mdi:trash-can-outline"
-                                  ></ha-icon>
+                                  <div class="leading">
+                                    <ha-icon
+                                      icon="mdi:trash-can-outline"
+                                    ></ha-icon>
+                                  </div>
                                 </ha-icon-button>
                               </ha-formfield>
                             ` : showAddFavorite ? b2`
@@ -2421,6 +2423,20 @@ var getCardConfigForm = async (hassOrLocalize) => {
         display: flex;
         align-items: center;
         gap: var(--ha-space-2);
+      }
+      .leading {
+        width: 48px;
+        min-width: 48px;
+        height: 48px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .leading ha-icon,
+      .leading mwc-icon {
+        width: 24px;
+        height: 24px;
+        transform: translateY(-4px);
       }
       .start-button {
         margin-left: auto;

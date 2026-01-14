@@ -1,7 +1,5 @@
 import { LitElement, css, html, nothing, type TemplateResult } from "lit";
 import { keyed } from "lit/directives/keyed.js";
-import { getCardConfigForm } from "./city-visitor-parking-card-editor";
-import { ensureTranslations } from "./localize";
 import {
   BASE_CARD_STYLES,
   DOMAIN,
@@ -20,17 +18,19 @@ import {
   isHassRunning,
   isHassStarting,
   isInEditor,
+  registerCustomCard,
   renderCardHeader,
   renderLoadingCard,
   renderStatusAlert,
   setStatusState,
   showPicker,
-  registerCustomCard,
   type DeviceEntry,
   type HomeAssistant,
   type StatusState,
   type StatusType,
 } from "./card-shared";
+import { getCardConfigForm } from "./city-visitor-parking-card-editor";
+import { ensureTranslations } from "./localize";
 
 (() => {
   const CARD_TYPE = "city-visitor-parking-card";
@@ -156,6 +156,20 @@ import {
         display: flex;
         align-items: center;
         gap: var(--ha-space-2);
+      }
+      .leading {
+        width: 48px;
+        min-width: 48px;
+        height: 48px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .leading ha-icon,
+      .leading mwc-icon {
+        width: 24px;
+        height: 24px;
+        transform: translateY(-4px);
       }
       .start-button {
         margin-left: auto;
@@ -947,9 +961,11 @@ import {
                                   ""}
                                   ?disabled=${favoriteRemoveDisabled}
                                 >
-                                  <ha-icon
-                                    icon="mdi:trash-can-outline"
-                                  ></ha-icon>
+                                  <div class="leading">
+                                    <ha-icon
+                                      icon="mdi:trash-can-outline"
+                                    ></ha-icon>
+                                  </div>
                                 </ha-icon-button>
                               </ha-formfield>
                             `
