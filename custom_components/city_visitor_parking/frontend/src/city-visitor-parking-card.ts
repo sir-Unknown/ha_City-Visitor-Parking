@@ -695,9 +695,7 @@ import { ensureTranslations } from "./localize";
         return this._localize("message.select_favorite");
       }
       const favorite = this._findFavoriteByValue(favoriteValue);
-      return (
-        favorite?.name || favorite?.license_plate || favoriteValue || ""
-      );
+      return favorite?.name || favorite?.license_plate || favoriteValue || "";
     }
 
     render(): TemplateResult {
@@ -949,7 +947,7 @@ import { ensureTranslations } from "./localize";
                   <div class="row actions">
                     <div class="favorite-actions">
                       ${showFavorites
-                          ? showRemoveFavorite
+                        ? showRemoveFavorite
                           ? html`
                               <ha-formfield
                                 id="removeFavoriteWrap"

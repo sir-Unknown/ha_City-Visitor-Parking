@@ -4,6 +4,15 @@
 
 ## Released
 
+### 0.1.19
+
+#### Changed
+
+- Expand frontend checks in pre-commit and remove duplicates.
+- Refresh frontend card formatting and build output.
+
+**Full Changelog**: https://github.com/sir-Unknown/ha_City-Visitor-Parking/compare/0.1.18...0.1.19
+
 ### 0.1.18
 
 #### Fixed

@@ -26,9 +26,33 @@ repos:
         entry: pytest
         language: system
         pass_filenames: false
+      - id: frontend-eslint
+        name: frontend eslint
+        entry: yarn --cwd custom_components/city_visitor_parking/frontend lint:eslint
+        language: system
+        files: ^custom_components/city_visitor_parking/frontend/src/.*\.ts$
+        pass_filenames: false
+      - id: frontend-prettier
+        name: frontend prettier
+        entry: yarn --cwd custom_components/city_visitor_parking/frontend lint:prettier --write
+        language: system
+        files: ^custom_components/city_visitor_parking/frontend/src/.*\.(ts|json|md|css)$
+        pass_filenames: false
       - id: frontend-types
         name: frontend types
         entry: yarn --cwd custom_components/city_visitor_parking/frontend lint:types
         language: system
         files: ^custom_components/city_visitor_parking/frontend/.*\.(ts|json)$
+        pass_filenames: false
+      - id: frontend-test
+        name: frontend test
+        entry: yarn --cwd custom_components/city_visitor_parking/frontend test
+        language: system
+        files: ^custom_components/city_visitor_parking/frontend/.*\.(ts|json|md|css)$
+        pass_filenames: false
+      - id: frontend-build
+        name: frontend build
+        entry: yarn --cwd custom_components/city_visitor_parking/frontend build
+        language: system
+        files: ^custom_components/city_visitor_parking/frontend/.*\.(ts|json|md|css)$
         pass_filenames: false
