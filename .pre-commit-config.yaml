@@ -5,6 +5,12 @@ repos:
       - id: ruff
         args: ["--fix"]
       - id: ruff-format
+  - repo: https://github.com/RobertCraigie/pyright-python
+    rev: v1.1.408
+    hooks:
+      - id: pyright
+        args: ["custom_components/city_visitor_parking"]
+        files: ^custom_components/city_visitor_parking/.*\.py$
   - repo: local
     hooks:
       - id: hassfest
@@ -25,4 +31,10 @@ repos:
         name: pytest
         entry: pytest
         language: system
+        pass_filenames: false
+      - id: frontend-types
+        name: frontend types
+        entry: yarn --cwd custom_components/city_visitor_parking/frontend lint:types
+        language: system
+        files: ^custom_components/city_visitor_parking/frontend/.*\.(ts|json)$
         pass_filenames: false
