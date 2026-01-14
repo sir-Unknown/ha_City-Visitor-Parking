@@ -1,6 +1,83 @@
-export const DOMAIN = "city_visitor_parking";
+import { css, type TemplateResult } from "lit";
+import type { LocalizeFunc } from "./localize";
+import { localize } from "./localize";
 
-export const errorMessage = (
+export const DOMAIN = "city_visitor_parking";
+export const RESERVATION_STARTED_EVENT =
+  "city-visitor-parking-reservation-started";
+
+export type HomeAssistant = {
+  callWS: <T = unknown>(msg: Record<string, unknown>) => Promise<T>;
+  callService: <T = unknown>(
+    domain: string,
+    service: string,
+    data: Record<string, unknown>,
+  ) => Promise<T>;
+  config?: { state?: string };
+  localize?: LocalizeFunc;
+  language?: string;
+  locale?: Record<string, unknown>;
+};
+
+export type DeviceEntry = {
+  id: string;
+  identifiers?: Array<[string, string]>;
+  config_entries?: string[];
+};
+
+export type StatusType = "info" | "warning" | "success";
+export type StatusState = {
+  message: string;
+  type: StatusType;
+  clearHandle: number | null;
+};
+
+export const createStatusState = (): StatusState => ({
+  message: "",
+  type: "info",
+  clearHandle: null,
+});
+
+export const BASE_CARD_STYLES = css`
+  :host {
+    display: block;
+  }
+  ha-card {
+    position: relative;
+  }
+  .row {
+    margin: 0;
+  }
+  .card-content {
+    display: flex;
+    flex-direction: column;
+    gap: var(--entities-card-row-gap, var(--card-row-gap, var(--ha-space-2)));
+  }
+  .card-header {
+    display: flex;
+    justify-content: space-between;
+  }
+  .card-header .name {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .icon {
+    padding: 0 var(--ha-space-4) 0 var(--ha-space-2);
+  }
+  ha-alert {
+    margin: 0;
+  }
+  .spinner {
+    display: flex;
+    align-items: center;
+    gap: var(--ha-space-2);
+    color: var(--secondary-text-color);
+    font-size: 0.85rem;
+  }
+`;
+
+const errorMessage = (
   err: unknown,
   fallbackKey: string,
   localizeFn: (key: string, ...args: Array<string | number>) => string,
@@ -27,6 +104,219 @@ export const formatTime = (date: Date): string =>
 
 export const formatDateTimeLocal = (date: Date): string =>
   `${formatDate(date)}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+
+type LocalizeTarget = Parameters<typeof localize>[0];
+export type HtmlRenderer = (
+  strings: TemplateStringsArray,
+  ...values: unknown[]
+) => TemplateResult;
+
+const HA_STARTING_MESSAGE_KEY = "ui.panel.lovelace.warning.starting";
+const HA_STATE_NOT_RUNNING = "NOT_RUNNING";
+
+export const getGlobalHass = <T>(): T | undefined =>
+  (window as Window & { hass?: T }).hass;
+
+export const getCardText = (key: string): string => {
+  const value = localize(getGlobalHass<LocalizeTarget>(), key);
+  return value === key ? "" : value;
+};
+
+export const renderCardHeader = (
+  title: string,
+  icon: string | undefined,
+  html: HtmlRenderer,
+  nothingValue: unknown,
+): unknown => {
+  if (!title && !icon) {
+    return nothingValue;
+  }
+  return html`
+    <h1 class="card-header">
+      <div class="name">
+        ${icon
+          ? html`<ha-icon class="icon" .icon=${icon}></ha-icon>`
+          : nothingValue}
+        ${title}
+      </div>
+    </h1>
+  `;
+};
+
+export const localizeCard = (
+  hass: LocalizeTarget | null | undefined,
+  key: string,
+): string => localize(hass, key);
+
+export const errorMessageFrom = (
+  hass: LocalizeTarget | null | undefined,
+  err: unknown,
+  fallbackKey: string,
+): string => errorMessage(err, fallbackKey, (key) => localize(hass, key));
+
+export const createLocalize = (
+  getHass: () => LocalizeTarget | null | undefined,
+): ((key: string, ...args: Array<string | number>) => string) => {
+  return (key: string, ..._args: Array<string | number>) =>
+    localize(getHass(), key);
+};
+
+export const createErrorMessage = (
+  getHass: () => LocalizeTarget | null | undefined,
+): ((err: unknown, fallbackKey: string) => string) => {
+  return (err: unknown, fallbackKey: string) =>
+    errorMessageFrom(getHass(), err, fallbackKey);
+};
+
+export const getInvalidConfigError = (
+  hass: LocalizeTarget | null | undefined,
+): Error => new Error(localize(hass, "message.invalid_config"));
+
+export const getLoadingMessage = (
+  hass: LocalizeTarget | null | undefined,
+): string => {
+  const hassLocalize =
+    typeof hass === "function" ? hass : hass?.localize;
+  const haMessage = hassLocalize?.(HA_STARTING_MESSAGE_KEY);
+  if (haMessage && haMessage !== HA_STARTING_MESSAGE_KEY) {
+    return haMessage;
+  }
+  const key = "message.home_assistant_loading";
+  const message = localize(hass, key);
+  return message === key ? "" : message;
+};
+
+export const renderLoadingCard = (
+  hass: LocalizeTarget | null | undefined,
+  html: HtmlRenderer,
+): TemplateResult => {
+  const loadingMessage = getLoadingMessage(
+    hass ?? getGlobalHass<LocalizeTarget>(),
+  );
+  return html`
+    <ha-card>
+      <div class="card-content">
+        <ha-alert alert-type="warning">${loadingMessage}</ha-alert>
+      </div>
+    </ha-card>
+  `;
+};
+
+export const setStatusState = (
+  state: StatusState,
+  message: string,
+  type: StatusType,
+  requestRender: () => void,
+  clearAfterMs?: number,
+): void => {
+  if (state.clearHandle !== null) {
+    window.clearTimeout(state.clearHandle);
+    state.clearHandle = null;
+  }
+  state.message = message;
+  state.type = type;
+  if (clearAfterMs) {
+    state.clearHandle = window.setTimeout(() => {
+      state.clearHandle = null;
+      state.message = "";
+      state.type = "info";
+      requestRender();
+    }, clearAfterMs);
+  }
+};
+
+export const clearStatusState = (
+  state: StatusState,
+  requestRender: () => void,
+): void => {
+  if (state.clearHandle !== null) {
+    window.clearTimeout(state.clearHandle);
+    state.clearHandle = null;
+  }
+  if (!state.message && state.type === "info") {
+    return;
+  }
+  state.message = "";
+  state.type = "info";
+  requestRender();
+};
+
+export const renderStatusAlert = (
+  state: StatusState,
+  html: HtmlRenderer,
+  nothingValue: unknown,
+): unknown =>
+  state.message
+    ? html`<ha-alert alert-type=${state.type}>${state.message}</ha-alert>`
+    : nothingValue;
+
+export const formatOptionalDateTimeLocal = (
+  value: string | undefined | null,
+): string => {
+  if (!value) {
+    return "";
+  }
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return "";
+  }
+  return formatDateTimeLocal(date);
+};
+
+type HassState = { config?: { state?: string } };
+
+export const isHassRunning = (
+  hass: HassState | null | undefined,
+): boolean => hass?.config?.state === "RUNNING";
+
+export const isHassStarting = (
+  hass: HassState | null | undefined,
+): boolean => hass?.config?.state === HA_STATE_NOT_RUNNING;
+
+export const scheduleRender = (
+  handle: number | null,
+  setHandle: (handle: number | null) => void,
+  requestUpdate: () => void,
+): void => {
+  if (handle !== null) {
+    return;
+  }
+  const nextHandle = window.requestAnimationFrame(() => {
+    setHandle(null);
+    requestUpdate();
+  });
+  setHandle(nextHandle);
+};
+
+export const createRenderScheduler = (
+  requestUpdate: () => void,
+): (() => void) => {
+  let handle: number | null = null;
+  return () =>
+    scheduleRender(
+      handle,
+      (nextHandle) => {
+        handle = nextHandle;
+      },
+      requestUpdate,
+    );
+};
+
+export const showPicker = (event: Event, isInEditor: boolean): void => {
+  if (isInEditor) {
+    return;
+  }
+  const target = event.currentTarget as
+    | (HTMLElement & { inputElement?: HTMLInputElement })
+    | null;
+  if (!target) {
+    return;
+  }
+  const inputElement =
+    target.inputElement ?? target.shadowRoot?.querySelector("input");
+  (inputElement as (HTMLInputElement & { showPicker?: () => void }) | null)
+    ?.showPicker?.();
+};
 
 export const isInEditor = (startNode: Node): boolean => {
   const selector =

@@ -1,14 +1,32 @@
 import { LitElement, css, html, nothing, type TemplateResult } from "lit";
-import { getActiveCardConfigForm } from "./city-visitor-parking-active-card-editor";
-import type { LocalizeFunc } from "./localize";
-import { ensureTranslations, localize } from "./localize";
 import {
+  BASE_CARD_STYLES,
   DOMAIN,
-  errorMessage,
-  formatDateTimeLocal,
+  RESERVATION_STARTED_EVENT,
+  clearStatusState,
+  createErrorMessage,
+  createLocalize,
+  createRenderScheduler,
+  createStatusState,
+  formatOptionalDateTimeLocal,
+  getCardText,
+  getGlobalHass,
+  getInvalidConfigError,
+  isHassRunning,
   isInEditor,
   registerCustomCard,
+  renderCardHeader,
+  renderLoadingCard,
+  renderStatusAlert,
+  setStatusState,
+  showPicker,
+  type DeviceEntry,
+  type HomeAssistant,
+  type StatusState,
+  type StatusType,
 } from "./card-shared";
+import { getActiveCardConfigForm } from "./city-visitor-parking-active-card-editor";
+import { ensureTranslations } from "./localize";
 
 (() => {
   const CARD_TYPE = "city-visitor-parking-active-card";
@@ -16,21 +34,6 @@ import {
   const SERVICE_UPDATE_RESERVATION = "update_reservation";
   const SERVICE_END_RESERVATION = "end_reservation";
 
-  type HomeAssistant = {
-    callWS: <T = unknown>(msg: Record<string, unknown>) => Promise<T>;
-    callService: <T = unknown>(
-      domain: string,
-      service: string,
-      data: Record<string, unknown>,
-    ) => Promise<T>;
-    localize?: LocalizeFunc;
-    language?: string;
-  };
-  type DeviceEntry = {
-    id: string;
-    identifiers?: Array<[string, string]>;
-    config_entries?: string[];
-  };
   type ActiveReservation = {
     reservation_id: string;
     name?: string;
@@ -51,46 +54,9 @@ import {
   type DisabledElement = HTMLElement & { disabled?: boolean };
 
   class CityVisitorParkingActiveCard extends LitElement {
-    static styles = css`
-      :host {
-        display: block;
-      }
-      ha-card {
-        position: relative;
-      }
-      .row {
-        margin: 0;
-      }
-      .card-content {
-        display: flex;
-        flex-direction: column;
-        gap: var(
-          --entities-card-row-gap,
-          var(--card-row-gap, var(--ha-space-2))
-        );
-      }
-      .card-header {
-        display: flex;
-        justify-content: space-between;
-      }
-      .card-header .name {
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-      }
-      .icon {
-        padding: 0 var(--ha-space-4) 0 var(--ha-space-2);
-      }
-      ha-alert {
-        margin: 0;
-      }
-      .spinner {
-        display: flex;
-        align-items: center;
-        gap: var(--ha-space-2);
-        color: var(--secondary-text-color);
-        font-size: 0.85rem;
-      }
+    static styles = [
+      BASE_CARD_STYLES,
+      css`
       .active-reservations {
         display: flex;
         flex-direction: column;
@@ -113,8 +79,10 @@ import {
         font-weight: 600;
       }
       .active-reservation-label {
-        font-size: 0.85rem;
         color: var(--secondary-text-color);
+        font-family: var(--primary-font-family, "Roboto", "Noto", sans-serif);
+        font-size: 14px;
+        font-weight: 400;
       }
       .active-reservation-times {
         display: grid;
@@ -136,7 +104,8 @@ import {
         font-size: 0.9rem;
         color: var(--secondary-text-color);
       }
-    `;
+      `,
+    ];
     _config: CardConfig | null;
     _hass: HomeAssistant | null;
     _activeReservations: ActiveReservation[];
@@ -145,14 +114,19 @@ import {
     _activeReservationsLoading: boolean;
     _reservationUpdateFieldsByDevice: Record<string, string[]>;
     _devicesPromise: Promise<DeviceEntry[]> | null;
-    _status: string;
-    _statusType: "info" | "warning" | "success";
+    _configEntriesPromise: Promise<Map<string, string>> | null;
+    _configEntryTitleById: Map<string, string>;
+    _permitLabelsByDeviceId: Map<string, string>;
+    _statusState: StatusState;
     _reservationStartedHandler: (() => void) | null;
-    _renderHandle: number | null;
+    _requestRender: () => void;
     _reservationInFlight: Set<string>;
     _reservationInputValues: Map<string, { start?: string; end?: string }>;
+    _localize: (key: string, ...args: Array<string | number>) => string;
+    _errorMessage: (err: unknown, fallbackKey: string) => string;
     _onActionClick: (event: Event) => void;
     _onReservationInput: (event: Event) => void;
+    _onPickerClick: (event: Event) => void;
 
     constructor() {
       super();
@@ -164,15 +138,20 @@ import {
       this._activeReservationsLoading = false;
       this._reservationUpdateFieldsByDevice = {};
       this._devicesPromise = null;
-      this._status = "";
-      this._statusType = "info";
+      this._configEntriesPromise = null;
+      this._configEntryTitleById = new Map();
+      this._permitLabelsByDeviceId = new Map();
+      this._statusState = createStatusState();
       this._reservationStartedHandler = null;
-      this._renderHandle = null;
+      this._requestRender = createRenderScheduler(() => this.requestUpdate());
       this._reservationInFlight = new Set();
       this._reservationInputValues = new Map();
+      this._localize = createLocalize(() => this._hass);
+      this._errorMessage = createErrorMessage(() => this._hass);
       this._onActionClick = (event: Event) => this._handleActionClick(event);
       this._onReservationInput = (event: Event) =>
         this._handleReservationInput(event);
+      this._onPickerClick = (event: Event) => this._handlePickerClick(event);
     }
 
     connectedCallback(): void {
@@ -183,7 +162,7 @@ import {
         };
       }
       window.addEventListener(
-        "city-visitor-parking-reservation-started",
+        RESERVATION_STARTED_EVENT,
         this._reservationStartedHandler,
       );
     }
@@ -191,7 +170,7 @@ import {
     disconnectedCallback(): void {
       if (this._reservationStartedHandler) {
         window.removeEventListener(
-          "city-visitor-parking-reservation-started",
+          RESERVATION_STARTED_EVENT,
           this._reservationStartedHandler,
         );
       }
@@ -213,9 +192,8 @@ import {
 
     setConfig(config: CardConfig): void {
       if (!config || !config.type) {
-        const globalHass = (window as Window & { hass?: HomeAssistant }).hass;
-        throw new Error(
-          localize(this._hass ?? globalHass, "message.invalid_config"),
+        throw getInvalidConfigError(
+          this._hass ?? getGlobalHass<HomeAssistant>(),
         );
       }
       this._config = { ...config };
@@ -236,6 +214,9 @@ import {
 
     async _maybeLoadActiveReservations(force = false): Promise<void> {
       if (!this._hass || !this._config) {
+        return;
+      }
+      if (!isHassRunning(this._hass)) {
         return;
       }
       const target = this._config.config_entry_id ?? "all";
@@ -264,6 +245,8 @@ import {
           this._activeReservationsLoadedFor = target;
           return;
         }
+        this._permitLabelsByDeviceId =
+          await this._getPermitLabelsByDeviceId(devices);
         type ActiveReservationsResult = {
           active_reservations?: ActiveReservation[];
           reservation_update_fields?: string[];
@@ -329,58 +312,27 @@ import {
       }
     }
 
-    _requestRender(): void {
-      if (this._renderHandle !== null) {
-        return;
-      }
-      this._renderHandle = window.requestAnimationFrame(() => {
-        this._renderHandle = null;
-        this.requestUpdate();
-      });
-    }
-
     render(): TemplateResult {
       if (!this._config) {
         return html``;
       }
-      if (!this._hass) {
-        return html`
-          <ha-card>
-            <div class="card-content">
-              <ha-alert alert-type="warning">
-                ${this._getLoadingMessage()}
-              </ha-alert>
-            </div>
-          </ha-card>
-        `;
+      if (!isHassRunning(this._hass)) {
+        return renderLoadingCard(
+          this._hass ?? getGlobalHass<HomeAssistant>(),
+          html,
+        );
       }
 
       const title = this._config.title || "";
       const icon = this._config.icon;
-      const showHeader = Boolean(title || icon);
       const controlsDisabled = this._isInEditor();
 
       return html`
         <ha-card @click=${this._onActionClick}>
-          ${showHeader
-            ? html`
-                <h1 class="card-header">
-                  <div class="name">
-                    ${icon
-                      ? html`<ha-icon class="icon" .icon=${icon}></ha-icon>`
-                      : nothing}
-                    ${title}
-                  </div>
-                </h1>
-              `
-            : nothing}
+          ${renderCardHeader(title, icon, html, nothing)}
           <div class="card-content">
             ${this._renderActiveReservations(controlsDisabled)}
-            ${this._status
-              ? html`<ha-alert alert-type=${this._statusType}
-                  >${this._status}</ha-alert
-                >`
-              : nothing}
+            ${renderStatusAlert(this._statusState, html, nothing)}
           </div>
         </ha-card>
       `;
@@ -432,6 +384,9 @@ import {
       const name = reservation.name ?? reservation.favorite_name;
       const license = reservation.license_plate ?? "";
       const identify = name || license || reservation.reservation_id;
+      const permitLabel = reservation.device_id
+        ? this._permitLabelsByDeviceId.get(reservation.device_id)
+        : null;
       const updateFields =
         reservation.device_id &&
         this._reservationUpdateFieldsByDevice[reservation.device_id]
@@ -449,11 +404,11 @@ import {
       const startValue =
         startOverride !== undefined
           ? startOverride
-          : this._formatReservationDateTime(reservation.start_time);
+          : formatOptionalDateTimeLocal(reservation.start_time);
       const endValue =
         endOverride !== undefined
           ? endOverride
-          : this._formatReservationDateTime(reservation.end_time);
+          : formatOptionalDateTimeLocal(reservation.end_time);
       return html`
         <div class="active-reservation">
           <div class="active-reservation-summary">
@@ -461,6 +416,11 @@ import {
             ${license
               ? html`<div class="active-reservation-label">
                   ${this._localize("field.license_plate")}: ${license}
+                </div>`
+              : nothing}
+            ${permitLabel
+              ? html`<div class="active-reservation-label">
+                  ${this._localize("field.permit")}: ${permitLabel}
                 </div>`
               : nothing}
           </div>
@@ -474,6 +434,7 @@ import {
               .value=${startValue}
               ?disabled=${controlsDisabled || !allowStart || isBusy}
               @input=${this._onReservationInput}
+              @click=${this._onPickerClick}
             ></ha-textfield>
             <ha-textfield
               class="reservation-input active-reservation-end"
@@ -484,6 +445,7 @@ import {
               .value=${endValue}
               ?disabled=${controlsDisabled || !allowEnd || isBusy}
               @input=${this._onReservationInput}
+              @click=${this._onPickerClick}
             ></ha-textfield>
           </div>
           <div class="active-reservation-actions">
@@ -549,6 +511,28 @@ import {
       });
     }
 
+    _handlePickerClick(event: Event): void {
+      showPicker(event, this._isInEditor());
+    }
+
+    _setStatus(
+      message: string,
+      type: StatusType,
+      clearAfterMs?: number,
+    ): void {
+      setStatusState(
+        this._statusState,
+        message,
+        type,
+        () => this._requestRender(),
+        clearAfterMs,
+      );
+    }
+
+    _clearStatus(): void {
+      clearStatusState(this._statusState, () => this._requestRender());
+    }
+
     async _handleActiveReservationUpdate(reservationId: string): Promise<void> {
       if (!this._hass || !reservationId) {
         return;
@@ -581,16 +565,15 @@ import {
       const startValue = allowStart
         ? inputOverrides?.start !== undefined
           ? inputOverrides.start.trim()
-          : this._formatReservationDateTime(reservation.start_time)
+          : formatOptionalDateTimeLocal(reservation.start_time)
         : "";
       const endValue = allowEnd
         ? inputOverrides?.end !== undefined
           ? inputOverrides.end.trim()
-          : this._formatReservationDateTime(reservation.end_time)
+          : formatOptionalDateTimeLocal(reservation.end_time)
         : "";
       if ((allowStart && !startValue) || (allowEnd && !endValue)) {
-        this._status = this._localize("message.start_end_required");
-        this._statusType = "warning";
+        this._setStatus(this._localize("message.start_end_required"), "warning");
         this._reservationInFlight.delete(reservationId);
         this._requestRender();
         return;
@@ -609,15 +592,13 @@ import {
         ? parseDate(endValue)
         : parseDate(reservation.end_time);
       if ((allowStart && !startDate) || (allowEnd && !endDate)) {
-        this._status = this._localize("message.start_end_required");
-        this._statusType = "warning";
+        this._setStatus(this._localize("message.start_end_required"), "warning");
         this._reservationInFlight.delete(reservationId);
         this._requestRender();
         return;
       }
       if (startDate && endDate && endDate <= startDate) {
-        this._status = this._localize("message.end_before_start");
-        this._statusType = "warning";
+        this._setStatus(this._localize("message.end_before_start"), "warning");
         this._reservationInFlight.delete(reservationId);
         this._requestRender();
         return;
@@ -639,17 +620,19 @@ import {
           serviceData,
         );
       } catch (err: unknown) {
-        this._status = this._errorMessage(
-          err,
-          "message.reservation_update_failed",
+        this._setStatus(
+          this._errorMessage(err, "message.reservation_update_failed"),
+          "warning",
         );
-        this._statusType = "warning";
         this._reservationInFlight.delete(reservationId);
         this._requestRender();
         return;
       }
-      this._status = this._localize("message.reservation_updated");
-      this._statusType = "success";
+      this._setStatus(
+        this._localize("message.reservation_updated"),
+        "success",
+        5000,
+      );
       this._reservationInputValues.delete(reservationId);
       this._reservationInFlight.delete(reservationId);
       this._activeReservationsLoadedFor = null;
@@ -678,48 +661,75 @@ import {
           reservation_id: reservationId,
         });
       } catch (err: unknown) {
-        this._status = this._errorMessage(
-          err,
-          "message.reservation_end_failed",
+        this._setStatus(
+          this._errorMessage(err, "message.reservation_end_failed"),
+          "warning",
         );
-        this._statusType = "warning";
         this._reservationInFlight.delete(reservationId);
         this._requestRender();
         return;
       }
-      this._status = this._localize("message.reservation_ended");
-      this._statusType = "success";
+      this._setStatus(
+        this._localize("message.reservation_ended"),
+        "success",
+        5000,
+      );
       this._reservationInputValues.delete(reservationId);
       this._reservationInFlight.delete(reservationId);
       this._activeReservationsLoadedFor = null;
       await this._maybeLoadActiveReservations(true);
     }
 
-    _formatReservationDateTime(value: string | undefined | null): string {
-      if (!value) {
-        return "";
+    async _getPermitLabelsByDeviceId(
+      devices: DeviceEntry[],
+    ): Promise<Map<string, string>> {
+      const entryTitles = await this._getConfigEntryTitles();
+      const labels = new Map<string, string>();
+      for (const device of devices) {
+        const entryIds = Array.isArray(device.config_entries)
+          ? device.config_entries
+          : [];
+        const entryId =
+          entryIds.find((id) => entryTitles.has(id)) ?? entryIds[0];
+        if (!entryId) {
+          continue;
+        }
+        labels.set(device.id, entryTitles.get(entryId) ?? entryId);
       }
-      const date = new Date(value);
-      if (Number.isNaN(date.getTime())) {
-        return "";
+      return labels;
+    }
+
+    async _getConfigEntryTitles(): Promise<Map<string, string>> {
+      if (!this._hass) {
+        return new Map();
       }
-      return formatDateTimeLocal(date);
-    }
-
-    _localize(key: string, ..._args: Array<string | number>): string {
-      return localize(this._hass, key);
-    }
-
-    _errorMessage(err: unknown, fallbackKey: string): string {
-      return errorMessage(err, fallbackKey, this._localize.bind(this));
-    }
-
-    _getLoadingMessage(): string {
-      const key = "message.home_assistant_loading";
-      const message = localize(this._hass, key);
-      return message === key
-        ? "Home Assistant is loading. Not all data is available yet."
-        : message;
+      if (this._configEntriesPromise) {
+        return this._configEntriesPromise;
+      }
+      const promise = this._hass
+        .callWS<Array<{ entry_id: string; title?: string | null }>>({
+          type: "config_entries/get",
+          type_filter: ["device", "hub", "service"],
+          domain: DOMAIN,
+        })
+        .then((entries) => {
+          this._configEntryTitleById = new Map(
+            entries.map((entry) => [
+              entry.entry_id,
+              entry.title || entry.entry_id,
+            ]),
+          );
+          return this._configEntryTitleById;
+        })
+        .catch(() => {
+          this._configEntryTitleById = new Map();
+          return this._configEntryTitleById;
+        })
+        .finally(() => {
+          this._configEntriesPromise = null;
+        });
+      this._configEntriesPromise = promise;
+      return promise;
     }
 
     async _getDomainDevices(): Promise<DeviceEntry[]> {
@@ -729,7 +739,7 @@ import {
       if (this._devicesPromise) {
         return this._devicesPromise;
       }
-      this._devicesPromise = this._hass
+      const devicesPromise = this._hass
         .callWS<DeviceEntry[]>({ type: "config/device_registry/list" })
         .then((devices) =>
           devices.filter((device) =>
@@ -741,7 +751,8 @@ import {
         .finally(() => {
           this._devicesPromise = null;
         });
-      return this._devicesPromise;
+      this._devicesPromise = devicesPromise;
+      return devicesPromise;
     }
 
     _isInEditor(): boolean {
@@ -749,13 +760,6 @@ import {
     }
   }
 
-  const globalHass = (window as Window & {
-    hass?: { localize?: LocalizeFunc };
-  }).hass;
-  const getCardText = (key: string): string => {
-    const value = localize(globalHass, key);
-    return value === key ? "" : value;
-  };
   const registerCard = (): void => {
     registerCustomCard(
       CARD_TYPE,
@@ -764,5 +768,5 @@ import {
       getCardText("active_description"),
     );
   };
-  void ensureTranslations(globalHass).then(registerCard);
+  void ensureTranslations(getGlobalHass<HomeAssistant>()).then(registerCard);
 })();

@@ -43,6 +43,7 @@
   "status.free": "Free",
   "status.unknown": "Unknown",
   "message.invalid_config": "Your card configuration is invalid.",
+  "message.select_permit": "Select your permit",
   "message.select_favorite": "Select your favorite",
   "message.loading_favorites": "Loading your favorites",
   "message.loading_active_reservations": "Loading your active reservations",
