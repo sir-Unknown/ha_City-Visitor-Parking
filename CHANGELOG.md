@@ -4,6 +4,14 @@
 
 ## Released
 
+### 0.1.18
+
+#### Fixed
+
+- Align the remove favorite label styling with add favorite.
+
+**Full Changelog**: https://github.com/sir-Unknown/ha_City-Visitor-Parking/compare/0.1.17...0.1.18
+
 ### 0.1.17
 
 #### Changed

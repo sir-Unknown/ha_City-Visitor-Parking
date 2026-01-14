@@ -77,6 +77,7 @@ import { ensureTranslations } from "./localize";
   };
   type ValueElement = HTMLElement & { value?: string };
   type CheckedElement = HTMLElement & { checked: boolean; disabled?: boolean };
+  type SelectElement = HTMLElement & { selectedText?: string };
   type FavoriteActionState = {
     showAddFavorite: boolean;
     showRemoveFavorite: boolean;
@@ -151,15 +152,6 @@ import { ensureTranslations } from "./localize";
           display: flex;
           align-items: center;
           gap: var(--ha-space-2);
-        }
-        .remove-favorite {
-          display: flex;
-          align-items: center;
-          gap: var(--ha-space-2);
-        }
-        .favorite-label {
-          color: var(--secondary-text-color);
-          font-size: 0.875rem;
         }
         .leading {
           width: 48px;
@@ -692,6 +684,22 @@ import { ensureTranslations } from "./localize";
       };
     }
 
+    _getFavoriteSelectedText(
+      favoriteValue: string,
+      hasTarget: boolean,
+    ): string {
+      if (!hasTarget) {
+        return "";
+      }
+      if (!favoriteValue || favoriteValue === FAVORITE_PLACEHOLDER_VALUE) {
+        return this._localize("message.select_favorite");
+      }
+      const favorite = this._findFavoriteByValue(favoriteValue);
+      return (
+        favorite?.name || favorite?.license_plate || favoriteValue || ""
+      );
+    }
+
     render(): TemplateResult {
       if (!this._config) {
         return html``;
@@ -750,18 +758,10 @@ import { ensureTranslations } from "./localize";
       const favoriteRemoveDisabled =
         controlsDisabled || this._favoriteRemoveInFlight;
       const favoritesOptions = this._favorites;
-      const selectedFavoriteForText = hasTarget
-        ? favoriteValue === FAVORITE_PLACEHOLDER_VALUE || !favoriteValue
-          ? null
-          : this._findFavoriteByValue(favoriteValue)
-        : null;
-      const favoriteSelectedText = hasTarget
-        ? favoriteValue === FAVORITE_PLACEHOLDER_VALUE || !favoriteValue
-          ? localize("message.select_favorite")
-          : selectedFavoriteForText?.name ||
-            selectedFavoriteForText?.license_plate ||
-            favoriteValue
-        : "";
+      const favoriteSelectedText = this._getFavoriteSelectedText(
+        favoriteValue,
+        hasTarget,
+      );
       const favoriteSelectDisabled = controlsDisabled || this._favoritesLoading;
       const startDisabled =
         controlsDisabled || !hasDevice || this._startInFlight;
@@ -951,10 +951,10 @@ import { ensureTranslations } from "./localize";
                       ${showFavorites
                           ? showRemoveFavorite
                           ? html`
-                              <div class="remove-favorite">
-                                <span class="favorite-label">
-                                  ${localize("action.remove_favorite")}
-                                </span>
+                              <ha-formfield
+                                id="removeFavoriteWrap"
+                                .label=${localize("action.remove_favorite")}
+                              >
                                 <ha-icon-button
                                   id="removeFavorite"
                                   title=${localize("action.remove_favorite")}
@@ -972,7 +972,7 @@ import { ensureTranslations } from "./localize";
                                     ></ha-icon>
                                   </div>
                                 </ha-icon-button>
-                              </div>
+                              </ha-formfield>
                             `
                           : showAddFavorite
                             ? html`
@@ -1020,6 +1020,28 @@ import { ensureTranslations } from "./localize";
         if (!showAddFavorite) {
           this._addFavoriteChecked = false;
           this._requestRender();
+        }
+      }
+
+      if (this._config.show_favorites && this._translationsReady) {
+        const favoriteSelect =
+          this.renderRoot?.querySelector<SelectElement>("#favorite");
+        if (favoriteSelect) {
+          const activeEntryId = this._getActiveEntryId();
+          const hasTarget = Boolean(activeEntryId);
+          const priorFavorite = this._getInputValue("favorite");
+          const favoriteValue = hasTarget
+            ? priorFavorite && priorFavorite !== FAVORITE_PLACEHOLDER_VALUE
+              ? priorFavorite
+              : FAVORITE_PLACEHOLDER_VALUE
+            : "";
+          const selectedText = this._getFavoriteSelectedText(
+            favoriteValue,
+            hasTarget,
+          );
+          if (favoriteSelect.selectedText !== selectedText) {
+            favoriteSelect.selectedText = selectedText;
+          }
         }
       }
     }

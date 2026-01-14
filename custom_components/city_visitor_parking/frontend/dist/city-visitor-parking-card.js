@@ -1402,6 +1402,16 @@ var getCardConfigForm = async (hassOrLocalize) => {
         selectedFavorite
       };
     }
+    _getFavoriteSelectedText(favoriteValue, hasTarget) {
+      if (!hasTarget) {
+        return "";
+      }
+      if (!favoriteValue || favoriteValue === FAVORITE_PLACEHOLDER_VALUE) {
+        return this._localize("message.select_favorite");
+      }
+      const favorite = this._findFavoriteByValue(favoriteValue);
+      return favorite?.name || favorite?.license_plate || favoriteValue || "";
+    }
     render() {
       if (!this._config) {
         return b2``;
@@ -1447,8 +1457,10 @@ var getCardConfigForm = async (hassOrLocalize) => {
       const { showAddFavorite, showRemoveFavorite, selectedFavorite } = this._getFavoriteActionState();
       const favoriteRemoveDisabled = controlsDisabled || this._favoriteRemoveInFlight;
       const favoritesOptions = this._favorites;
-      const selectedFavoriteForText = hasTarget ? favoriteValue === FAVORITE_PLACEHOLDER_VALUE || !favoriteValue ? null : this._findFavoriteByValue(favoriteValue) : null;
-      const favoriteSelectedText = hasTarget ? favoriteValue === FAVORITE_PLACEHOLDER_VALUE || !favoriteValue ? localize2("message.select_favorite") : selectedFavoriteForText?.name || selectedFavoriteForText?.license_plate || favoriteValue : "";
+      const favoriteSelectedText = this._getFavoriteSelectedText(
+        favoriteValue,
+        hasTarget
+      );
       const favoriteSelectDisabled = controlsDisabled || this._favoritesLoading;
       const startDisabled = controlsDisabled || !hasDevice || this._startInFlight;
       return b2`
@@ -1606,10 +1618,10 @@ var getCardConfigForm = async (hassOrLocalize) => {
                   <div class="row actions">
                     <div class="favorite-actions">
                       ${showFavorites ? showRemoveFavorite ? b2`
-                              <div class="remove-favorite">
-                                <span class="favorite-label">
-                                  ${localize2("action.remove_favorite")}
-                                </span>
+                              <ha-formfield
+                                id="removeFavoriteWrap"
+                                .label=${localize2("action.remove_favorite")}
+                              >
                                 <ha-icon-button
                                   id="removeFavorite"
                                   title=${localize2("action.remove_favorite")}
@@ -1625,7 +1637,7 @@ var getCardConfigForm = async (hassOrLocalize) => {
                                     ></ha-icon>
                                   </div>
                                 </ha-icon-button>
-                              </div>
+                              </ha-formfield>
                             ` : showAddFavorite ? b2`
                                 <ha-formfield
                                   id="addFavoriteWrap"
@@ -1663,6 +1675,22 @@ var getCardConfigForm = async (hassOrLocalize) => {
         if (!showAddFavorite) {
           this._addFavoriteChecked = false;
           this._requestRender();
+        }
+      }
+      if (this._config.show_favorites && this._translationsReady) {
+        const favoriteSelect = this.renderRoot?.querySelector("#favorite");
+        if (favoriteSelect) {
+          const activeEntryId = this._getActiveEntryId();
+          const hasTarget = Boolean(activeEntryId);
+          const priorFavorite = this._getInputValue("favorite");
+          const favoriteValue = hasTarget ? priorFavorite && priorFavorite !== FAVORITE_PLACEHOLDER_VALUE ? priorFavorite : FAVORITE_PLACEHOLDER_VALUE : "";
+          const selectedText = this._getFavoriteSelectedText(
+            favoriteValue,
+            hasTarget
+          );
+          if (favoriteSelect.selectedText !== selectedText) {
+            favoriteSelect.selectedText = selectedText;
+          }
         }
       }
     }
@@ -2416,15 +2444,6 @@ var getCardConfigForm = async (hassOrLocalize) => {
           display: flex;
           align-items: center;
           gap: var(--ha-space-2);
-        }
-        .remove-favorite {
-          display: flex;
-          align-items: center;
-          gap: var(--ha-space-2);
-        }
-        .favorite-label {
-          color: var(--secondary-text-color);
-          font-size: 0.875rem;
         }
         .leading {
           width: 48px;
