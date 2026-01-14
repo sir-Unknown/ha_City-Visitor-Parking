@@ -74,9 +74,7 @@ def _windows_for_today(
             start_local = datetime.combine(
                 local_date, start_time, tzinfo=local_now.tzinfo
             )
-            end_local = datetime.combine(
-                local_date, end_time, tzinfo=local_now.tzinfo
-            )
+            end_local = datetime.combine(local_date, end_time, tzinfo=local_now.tzinfo)
             ranges.append(
                 TimeRange(
                     start=dt_util.as_utc(start_local),
@@ -86,9 +84,7 @@ def _windows_for_today(
         if ranges:
             return ranges
 
-    local_start = datetime.combine(
-        local_date, time.min, tzinfo=local_now.tzinfo
-    )
+    local_start = datetime.combine(local_date, time.min, tzinfo=local_now.tzinfo)
     local_end = local_start + timedelta(days=1)
     utc_start = dt_util.as_utc(local_start)
     utc_end = dt_util.as_utc(local_end)
