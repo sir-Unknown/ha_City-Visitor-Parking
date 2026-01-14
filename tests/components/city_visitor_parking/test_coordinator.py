@@ -20,7 +20,6 @@ from custom_components.city_visitor_parking.const import (
 )
 from custom_components.city_visitor_parking.coordinator import (
     CityVisitorParkingCoordinator,
-    _as_time,
     _as_utc_datetime,
     _compute_zone_availability,
     _normalize_favorites,
@@ -28,7 +27,6 @@ from custom_components.city_visitor_parking.coordinator import (
     _normalize_reservations,
     _normalize_zone_validity,
     _should_attempt_auto_end,
-    _windows_for_today,
 )
 from custom_components.city_visitor_parking.helpers import (
     get_attr,
@@ -41,6 +39,10 @@ from custom_components.city_visitor_parking.models import (
     Reservation,
     TimeRange,
     ZoneAvailability,
+)
+from custom_components.city_visitor_parking.time_windows import (
+    _as_time,
+    _windows_for_today,
 )
 
 

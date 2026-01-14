@@ -2,8 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
-from datetime import datetime, timedelta
+from datetime import datetime
 
 from homeassistant.components.sensor import SensorDeviceClass, SensorEntity
 from homeassistant.const import UnitOfTime
@@ -12,10 +11,15 @@ from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.util import dt as dt_util
 
-from .const import CONF_OPERATING_TIME_OVERRIDES, STATE_CHARGEABLE, STATE_FREE
-from .coordinator import CityVisitorParkingCoordinator, _windows_for_today
+from .const import STATE_CHARGEABLE, STATE_FREE
+from .coordinator import CityVisitorParkingCoordinator
 from .entity import CityVisitorParkingEntity
 from .models import CityVisitorParkingConfigEntry, CoordinatorData, TimeRange
+from .time_windows import (
+    _current_or_next_window,
+    _current_or_next_window_with_overrides,
+    _windows_for_today,
+)
 
 
 async def async_setup_entry(
@@ -353,39 +357,3 @@ def _as_utc_iso(value: datetime | None) -> str:
     if value is None:
         return ""
     return dt_util.as_utc(value).isoformat()
-
-
-def _current_or_next_window(
-    windows: list[TimeRange], now: datetime
-) -> TimeRange | None:
-    """Return the current or next chargeable window."""
-
-    for window in sorted(windows, key=lambda item: item.start):
-        if window.end <= now:
-            continue
-        return window
-    return None
-
-
-def _current_or_next_window_with_overrides(
-    zone_validity: list[TimeRange],
-    options: Mapping[str, object],
-    now: datetime,
-) -> TimeRange | None:
-    """Return the current or next chargeable window, honoring overrides."""
-
-    overrides = options.get(CONF_OPERATING_TIME_OVERRIDES, {})
-    if not isinstance(overrides, Mapping) or not overrides:
-        return _current_or_next_window(zone_validity, now)
-
-    windows: list[TimeRange] = []
-    # Look ahead one week to apply weekday overrides for upcoming windows.
-    for offset in range(7):
-        windows.extend(
-            _windows_for_today(zone_validity, options, now + timedelta(days=offset))
-        )
-
-    if not windows:
-        return _current_or_next_window(zone_validity, now)
-
-    return _current_or_next_window(windows, now)

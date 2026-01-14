@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Iterable, Mapping
-from datetime import UTC, datetime, time, timedelta
+from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Protocol
 
 from homeassistant.config_entries import ConfigEntry
@@ -41,15 +41,8 @@ else:
     Permit = object
     ProviderReservation = object
 
-from .const import (
-    AUTO_END_COOLDOWN,
-    CONF_AUTO_END,
-    CONF_OPERATING_TIME_OVERRIDES,
-    DEFAULT_UPDATE_INTERVAL,
-    LOGGER,
-    WEEKDAY_KEYS,
-)
-from .helpers import get_attr, normalize_override_windows
+from .const import AUTO_END_COOLDOWN, CONF_AUTO_END, DEFAULT_UPDATE_INTERVAL, LOGGER
+from .helpers import get_attr
 from .models import (
     AutoEndState,
     CoordinatorData,
@@ -58,6 +51,7 @@ from .models import (
     TimeRange,
     ZoneAvailability,
 )
+from .time_windows import _windows_for_today
 
 
 class CityVisitorParkingCoordinator(DataUpdateCoordinator[CoordinatorData]):
@@ -81,6 +75,7 @@ class CityVisitorParkingCoordinator(DataUpdateCoordinator[CoordinatorData]):
             update_interval=DEFAULT_UPDATE_INTERVAL,
             config_entry=config_entry,
         )
+        self._entry_title = config_entry.title
         self._provider = provider
         self._permit_id = permit_id
         self._auto_end_state = auto_end_state
@@ -92,7 +87,7 @@ class CityVisitorParkingCoordinator(DataUpdateCoordinator[CoordinatorData]):
         try:
             LOGGER.debug(
                 "Fetching permit, reservations, and favorites for %s (permit %s)",
-                self.config_entry.title,
+                self._entry_title,
                 self._permit_id,
             )
             permit, reservations, favorites = await asyncio.gather(
@@ -102,7 +97,7 @@ class CityVisitorParkingCoordinator(DataUpdateCoordinator[CoordinatorData]):
             )
             LOGGER.debug(
                 "Fetched data for %s (permit %s): reservations=%s favorites=%s",
-                self.config_entry.title,
+                self._entry_title,
                 self._permit_id,
                 len(reservations or []),
                 len(favorites or []),
@@ -117,7 +112,7 @@ class CityVisitorParkingCoordinator(DataUpdateCoordinator[CoordinatorData]):
             self._log_unavailable_once()
             LOGGER.debug(
                 "Coordinator fetch failed for %s (permit %s): %s: %s",
-                self.config_entry.title,
+                self._entry_title,
                 self._permit_id,
                 type(err).__name__,
                 err,
@@ -127,7 +122,7 @@ class CityVisitorParkingCoordinator(DataUpdateCoordinator[CoordinatorData]):
             self._log_unavailable_once()
             LOGGER.debug(
                 "Coordinator fetch failed unexpectedly for %s (permit %s): %s: %s",
-                self.config_entry.title,
+                self._entry_title,
                 self._permit_id,
                 type(err).__name__,
                 err,
@@ -349,60 +344,6 @@ def _compute_zone_availability(
     )
 
 
-def _windows_for_today(
-    zone_validity: list[TimeRange],
-    options: Mapping[str, object],
-    now: datetime,
-) -> list[TimeRange]:
-    """Return chargeable windows for today, applying overrides if present."""
-
-    local_now = dt_util.as_local(now)
-    local_date = local_now.date()
-    local_day = WEEKDAY_KEYS[local_now.weekday()]
-
-    overrides = options.get(CONF_OPERATING_TIME_OVERRIDES, {})
-    if not isinstance(overrides, Mapping):
-        overrides = {}
-    override = overrides.get(local_day)
-    override_windows = normalize_override_windows(override)
-    if override_windows:
-        ranges: list[TimeRange] = []
-        for window in override_windows:
-            start_time = _as_time(window.get("start"))
-            end_time = _as_time(window.get("end"))
-            if start_time is None or end_time is None or start_time >= end_time:
-                continue
-            start_local = datetime.combine(
-                local_date, start_time, tzinfo=local_now.tzinfo
-            )
-            end_local = datetime.combine(local_date, end_time, tzinfo=local_now.tzinfo)
-            ranges.append(
-                TimeRange(
-                    start=dt_util.as_utc(start_local),
-                    end=dt_util.as_utc(end_local),
-                )
-            )
-        if ranges:
-            return ranges
-
-    local_start = datetime.combine(local_date, time.min, tzinfo=local_now.tzinfo)
-    local_end = local_start + timedelta(days=1)
-    utc_start = dt_util.as_utc(local_start)
-    utc_end = dt_util.as_utc(local_end)
-
-    windows: list[TimeRange] = []
-    for block in zone_validity:
-        if block.end <= utc_start or block.start >= utc_end:
-            continue
-        windows.append(
-            TimeRange(
-                start=max(block.start, utc_start),
-                end=min(block.end, utc_end),
-            )
-        )
-    return windows
-
-
 def _should_attempt_auto_end(
     state: AutoEndState, reservation_id: str, now: datetime
 ) -> bool:
@@ -431,13 +372,3 @@ def _as_utc_datetime(value: object) -> datetime:
         return parsed.replace(tzinfo=UTC)
 
     raise ValueError("Unsupported datetime value")
-
-
-def _as_time(value: object) -> time | None:
-    """Convert a stored override value into a time object."""
-
-    if isinstance(value, time):
-        return value
-    if isinstance(value, str):
-        return time.fromisoformat(value)
-    return None
