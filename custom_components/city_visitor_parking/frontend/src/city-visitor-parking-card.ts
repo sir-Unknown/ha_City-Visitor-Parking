@@ -1826,17 +1826,17 @@ import {
     }
 
     _getTranslationLanguage(hass: HomeAssistant | null): string {
+      const hassLanguage =
+        typeof hass?.language === "string" ? hass.language : undefined;
       const localeLanguage =
         hass && typeof hass.locale === "object" && hass.locale
           ? (hass.locale as { language?: unknown }).language
           : undefined;
       const normalizedLocaleLanguage =
         typeof localeLanguage === "string" ? localeLanguage : undefined;
-      const hassLanguage =
-        typeof hass?.language === "string" ? hass.language : undefined;
       return (
-        normalizedLocaleLanguage ||
         hassLanguage ||
+        normalizedLocaleLanguage ||
         navigator.language ||
         "en"
       );

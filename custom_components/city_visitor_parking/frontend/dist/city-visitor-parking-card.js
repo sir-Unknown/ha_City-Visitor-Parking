@@ -598,12 +598,21 @@ var getGlobalHass = () => {
   }
   return null;
 };
+var getStoredLanguage = () => {
+  try {
+    return localStorage.getItem("selectedLanguage") ?? void 0;
+  } catch {
+    return void 0;
+  }
+};
 var getLanguage = (target) => {
   const globalHass = getGlobalHass();
+  const documentLanguage = document.documentElement.lang || void 0;
+  const storedLanguage = getStoredLanguage();
   if (!target || typeof target === "function") {
-    return globalHass?.locale?.language || globalHass?.language || navigator.language || DEFAULT_LANGUAGE;
+    return globalHass?.language || globalHass?.locale?.language || documentLanguage || storedLanguage || navigator.language || DEFAULT_LANGUAGE;
   }
-  return target.locale?.language || target.language || globalHass?.locale?.language || globalHass?.language || DEFAULT_LANGUAGE;
+  return target.language || target.locale?.language || globalHass?.language || globalHass?.locale?.language || documentLanguage || storedLanguage || DEFAULT_LANGUAGE;
 };
 var getBaseUrl = () => new URL(".", import.meta.url).toString().replace(/\/$/, "");
 var fetchTranslations = async (baseUrl, language) => {
@@ -900,7 +909,8 @@ var getFieldKey = (prefix, name) => {
   return `${prefix}.${fieldName}`;
 };
 var getCardConfigForm = async (hassOrLocalize) => {
-  await ensureTranslations(hassOrLocalize);
+  const localizeTarget = hassOrLocalize && typeof hassOrLocalize !== "function" ? hassOrLocalize : getGlobalHass2() ?? hassOrLocalize;
+  await ensureTranslations(localizeTarget);
   return {
     schema: [
       {
@@ -936,12 +946,12 @@ var getCardConfigForm = async (hassOrLocalize) => {
     ],
     computeLabel: (schema) => {
       const key = getFieldKey("editor.field", schema.name);
-      const label = localize(hassOrLocalize, key);
+      const label = localize(localizeTarget, key);
       return label === key ? "" : label;
     },
     computeHelper: (schema) => {
       const key = getFieldKey("editor.description", schema.name);
-      const helper = localize(hassOrLocalize, key);
+      const helper = localize(localizeTarget, key);
       return helper === key ? "" : helper;
     }
   };
@@ -1826,16 +1836,6 @@ var getCardConfigForm = async (hassOrLocalize) => {
         this._requestRender();
       }
     }
-    _setFavoritePlaceholder() {
-      if (!this._config?.show_favorites) {
-        return;
-      }
-      const value = this._getInputValue("favorite");
-      if (value && value !== FAVORITE_PLACEHOLDER_VALUE) {
-        return;
-      }
-      this._setInputValue("favorite", FAVORITE_PLACEHOLDER_VALUE);
-    }
     _applyZoneStatusCache(entryId) {
       if (!entryId) {
         this._setZoneStatus(null);
@@ -2387,10 +2387,10 @@ var getCardConfigForm = async (hassOrLocalize) => {
       return this._splitDateTimeSupport;
     }
     _getTranslationLanguage(hass) {
+      const hassLanguage = typeof hass?.language === "string" ? hass.language : void 0;
       const localeLanguage = hass && typeof hass.locale === "object" && hass.locale ? hass.locale.language : void 0;
       const normalizedLocaleLanguage = typeof localeLanguage === "string" ? localeLanguage : void 0;
-      const hassLanguage = typeof hass?.language === "string" ? hass.language : void 0;
-      return normalizedLocaleLanguage || hassLanguage || navigator.language || "en";
+      return hassLanguage || normalizedLocaleLanguage || navigator.language || "en";
     }
     _isInEditor() {
       return isInEditor(this);

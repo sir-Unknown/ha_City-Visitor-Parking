@@ -560,12 +560,21 @@ var getGlobalHass = () => {
   }
   return null;
 };
+var getStoredLanguage = () => {
+  try {
+    return localStorage.getItem("selectedLanguage") ?? void 0;
+  } catch {
+    return void 0;
+  }
+};
 var getLanguage = (target) => {
   const globalHass = getGlobalHass();
+  const documentLanguage = document.documentElement.lang || void 0;
+  const storedLanguage = getStoredLanguage();
   if (!target || typeof target === "function") {
-    return globalHass?.locale?.language || globalHass?.language || navigator.language || DEFAULT_LANGUAGE;
+    return globalHass?.language || globalHass?.locale?.language || documentLanguage || storedLanguage || navigator.language || DEFAULT_LANGUAGE;
   }
-  return target.locale?.language || target.language || globalHass?.locale?.language || globalHass?.language || DEFAULT_LANGUAGE;
+  return target.language || target.locale?.language || globalHass?.language || globalHass?.locale?.language || documentLanguage || storedLanguage || DEFAULT_LANGUAGE;
 };
 var getBaseUrl = () => new URL(".", import.meta.url).toString().replace(/\/$/, "");
 var fetchTranslations = async (baseUrl, language) => {
@@ -869,7 +878,8 @@ var getFieldKey = (prefix, name) => {
   return `${prefix}.${fieldName}`;
 };
 var getActiveCardConfigForm = async (hassOrLocalize) => {
-  await ensureTranslations(hassOrLocalize);
+  const localizeTarget = hassOrLocalize && typeof hassOrLocalize !== "function" ? hassOrLocalize : getGlobalHass2() ?? hassOrLocalize;
+  await ensureTranslations(localizeTarget);
   return {
     schema: [
       {
@@ -890,12 +900,12 @@ var getActiveCardConfigForm = async (hassOrLocalize) => {
     ],
     computeLabel: (schema) => {
       const key = getFieldKey("active_editor.field", schema.name);
-      const label = localize(hassOrLocalize, key);
+      const label = localize(localizeTarget, key);
       return label === key ? "" : label;
     },
     computeHelper: (schema) => {
       const key = getFieldKey("active_editor.description", schema.name);
-      const helper = localize(hassOrLocalize, key);
+      const helper = localize(localizeTarget, key);
       return helper === key ? "" : helper;
     }
   };

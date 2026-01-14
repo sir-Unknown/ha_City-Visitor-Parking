@@ -35,21 +35,35 @@ const getGlobalHass = (): HassLanguageContext | null => {
   return null;
 };
 
+const getStoredLanguage = (): string | undefined => {
+  try {
+    return localStorage.getItem("selectedLanguage") ?? undefined;
+  } catch {
+    return undefined;
+  }
+};
+
 const getLanguage = (target: LocalizeTarget): string => {
   const globalHass = getGlobalHass();
+  const documentLanguage = document.documentElement.lang || undefined;
+  const storedLanguage = getStoredLanguage();
   if (!target || typeof target === "function") {
     return (
-      globalHass?.locale?.language ||
       globalHass?.language ||
+      globalHass?.locale?.language ||
+      documentLanguage ||
+      storedLanguage ||
       navigator.language ||
       DEFAULT_LANGUAGE
     );
   }
   return (
-    target.locale?.language ||
     target.language ||
-    globalHass?.locale?.language ||
+    target.locale?.language ||
     globalHass?.language ||
+    globalHass?.locale?.language ||
+    documentLanguage ||
+    storedLanguage ||
     DEFAULT_LANGUAGE
   );
 };

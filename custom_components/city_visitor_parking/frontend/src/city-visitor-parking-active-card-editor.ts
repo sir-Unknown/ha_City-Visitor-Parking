@@ -1,6 +1,6 @@
 import type { LocalizeFunc } from "./localize";
 import { ensureTranslations, localize } from "./localize";
-import { DOMAIN } from "./card-shared";
+import { DOMAIN, getGlobalHass, type HomeAssistant } from "./card-shared";
 
 type FormSchema = { name: string };
 
@@ -10,13 +10,17 @@ const getFieldKey = (prefix: string, name: string): string => {
 };
 
 export const getActiveCardConfigForm = async (
-  hassOrLocalize?: { localize?: LocalizeFunc } | LocalizeFunc,
+  hassOrLocalize?: HomeAssistant | LocalizeFunc,
 ): Promise<{
   readonly schema: ReadonlyArray<Record<string, unknown>>;
   readonly computeLabel: (schema: FormSchema) => string;
   readonly computeHelper: (schema: FormSchema) => string;
 }> => {
-  await ensureTranslations(hassOrLocalize);
+  const localizeTarget =
+    hassOrLocalize && typeof hassOrLocalize !== "function"
+      ? hassOrLocalize
+      : getGlobalHass<HomeAssistant>() ?? hassOrLocalize;
+  await ensureTranslations(localizeTarget);
   return {
     schema: [
       {
@@ -37,12 +41,12 @@ export const getActiveCardConfigForm = async (
     ],
     computeLabel: (schema) => {
       const key = getFieldKey("active_editor.field", schema.name);
-      const label = localize(hassOrLocalize, key);
+      const label = localize(localizeTarget, key);
       return label === key ? "" : label;
     },
     computeHelper: (schema) => {
       const key = getFieldKey("active_editor.description", schema.name);
-      const helper = localize(hassOrLocalize, key);
+      const helper = localize(localizeTarget, key);
       return helper === key ? "" : helper;
     },
   };
