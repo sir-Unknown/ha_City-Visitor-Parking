@@ -16,6 +16,9 @@ import {
 (() => {
   const CARD_TYPE = "city-visitor-parking-card";
   const WS_LIST_FAVORITES = "city_visitor_parking/favorites";
+  const WS_GET_STATUS = "city_visitor_parking/status";
+  const STATUS_THROTTLE_MS = 15000;
+  const STATUS_REFRESH_MS = 60000;
   const FAVORITE_PLACEHOLDER_VALUE = "__favorite_placeholder__";
 
   type HassState = {
@@ -44,6 +47,18 @@ import {
     license_plate?: string;
     name?: string;
     [key: string]: unknown;
+  };
+  type ZoneStatus = {
+    state: "chargeable" | "free" | null;
+    kind: "current" | "next" | null;
+    start: string | null;
+    end: string | null;
+  };
+  type ZoneStatusResponse = {
+    state?: string | null;
+    window_kind?: string | null;
+    window_start?: string | null;
+    window_end?: string | null;
   };
   type CardConfig = {
     type: string;
@@ -197,9 +212,15 @@ import {
     _favoriteRemoveInFlight: boolean;
     _addFavoriteChecked: boolean;
     _suppressFavoriteClear: boolean;
-    _payWindowEndEntityId: string | null;
-    _payWindowEndEntityDeviceId: string | null;
-    _payWindowEndEntityByDeviceId: Map<string, string | null>;
+    _zoneState: "chargeable" | "free" | null;
+    _windowKind: "current" | "next" | null;
+    _windowStartIso: string | null;
+    _windowEndIso: string | null;
+    _zoneStatusTsByEntryId: Map<string, number>;
+    _zoneStatusInFlightByEntryId: Map<string, Promise<void>>;
+    _zoneStatusByEntryId: Map<string, ZoneStatus>;
+    _pendingPermitDefaultsEntryId: string | null;
+    _statusRefreshHandle: number | null;
     _status: string;
     _statusType: "info" | "warning" | "success";
     _renderHandle: number | null;
@@ -235,9 +256,15 @@ import {
       this._favoriteRemoveInFlight = false;
       this._addFavoriteChecked = false;
       this._suppressFavoriteClear = false;
-      this._payWindowEndEntityId = null;
-      this._payWindowEndEntityDeviceId = null;
-      this._payWindowEndEntityByDeviceId = new Map();
+      this._zoneState = null;
+      this._windowKind = null;
+      this._windowStartIso = null;
+      this._windowEndIso = null;
+      this._zoneStatusTsByEntryId = new Map();
+      this._zoneStatusInFlightByEntryId = new Map();
+      this._zoneStatusByEntryId = new Map();
+      this._pendingPermitDefaultsEntryId = null;
+      this._statusRefreshHandle = null;
       this._status = "";
       this._statusType = "info";
       this._renderHandle = null;
@@ -291,15 +318,21 @@ import {
       if (this._config.device_id) {
         this._deviceId = this._config.device_id;
         this._deviceEntryId = this._config.config_entry_id || null;
-        this._resetPayWindowEndCache();
         if (entryChanged) {
           this._resetFavoritesState();
         }
       } else if (entryChanged) {
         this._resetDeviceState();
       }
+      const entryId = this._getActiveEntryId();
+      this._applyZoneStatusCache(entryId);
+      this._setPendingDefaultsForFixedEntry(entryId);
       this._requestRender();
       this._ensureDeviceId();
+      if (entryId) {
+        void this._loadZoneStatusForEntry(entryId);
+      }
+      this._setupStatusRefresh(entryId);
       void this._loadData();
     }
 
@@ -311,7 +344,19 @@ import {
       });
       this._requestRender();
       this._ensureDeviceId();
+      const entryId = this._getActiveEntryId();
+      this._applyZoneStatusCache(entryId);
+      this._setPendingDefaultsForFixedEntry(entryId);
+      if (entryId) {
+        void this._loadZoneStatusForEntry(entryId);
+      }
+      this._setupStatusRefresh(entryId);
       void this._loadData();
+    }
+
+    disconnectedCallback(): void {
+      super.disconnectedCallback();
+      this._clearStatusRefresh();
     }
 
     getCardSize(): number {
@@ -329,7 +374,6 @@ import {
       if (this._config?.device_id) {
         this._deviceId = this._config.device_id;
         this._deviceEntryId = this._config.config_entry_id || entryId;
-        this._resetPayWindowEndCache();
         return;
       }
       if (this._deviceEntryId === entryId && this._deviceId) {
@@ -339,7 +383,6 @@ import {
       if (cachedDeviceId !== undefined) {
         this._deviceId = cachedDeviceId;
         this._deviceEntryId = entryId;
-        this._resetPayWindowEndCache();
         this._requestRender();
         return;
       }
@@ -368,12 +411,10 @@ import {
             this._deviceIdByEntryId.set(entryId, deviceId);
           }
           this._deviceEntryId = entryId;
-          this._resetPayWindowEndCache();
         })
         .catch(() => {
           this._deviceId = null;
           this._deviceEntryId = entryId;
-          this._resetPayWindowEndCache();
         })
         .finally(() => {
           this._deviceLoadPromise = null;
@@ -445,6 +486,57 @@ import {
         }
         this._requestRender();
       }
+    }
+
+    async _loadZoneStatusForEntry(entryId: string): Promise<void> {
+      if (!this._hass || !entryId) {
+        return;
+      }
+      const hass = this._hass;
+      const force = this._pendingPermitDefaultsEntryId === entryId;
+      const now = Date.now();
+      const lastTs = this._zoneStatusTsByEntryId.get(entryId);
+      if (!force && lastTs !== undefined && now - lastTs < STATUS_THROTTLE_MS) {
+        return;
+      }
+      const inFlight = this._zoneStatusInFlightByEntryId.get(entryId);
+      if (inFlight) {
+        return inFlight;
+      }
+
+      const loadPromise = (async () => {
+        const emptyStatus: ZoneStatus = {
+          state: null,
+          kind: null,
+          start: null,
+          end: null,
+        };
+        try {
+          const result = await hass.callWS<ZoneStatusResponse>({
+            type: WS_GET_STATUS,
+            config_entry_id: entryId,
+          });
+          const normalized = this._normalizeZoneStatus(result);
+          this._zoneStatusByEntryId.set(entryId, normalized);
+          if (entryId === this._getActiveEntryId()) {
+            this._setZoneStatus(normalized);
+            this._applyPendingPermitDefaults(entryId);
+          }
+        } catch {
+          this._zoneStatusByEntryId.set(entryId, emptyStatus);
+          if (entryId === this._getActiveEntryId()) {
+            this._setZoneStatus(emptyStatus);
+            this._applyPendingPermitDefaults(entryId);
+          }
+        } finally {
+          this._zoneStatusTsByEntryId.set(entryId, Date.now());
+          this._zoneStatusInFlightByEntryId.delete(entryId);
+          this._requestRender();
+        }
+      })();
+
+      this._zoneStatusInFlightByEntryId.set(entryId, loadPromise);
+      return loadPromise;
     }
 
     _requestRender(): void {
@@ -546,7 +638,6 @@ import {
       const favoriteSelectDisabled = controlsDisabled || this._favoritesLoading;
       const startDisabled =
         controlsDisabled || !hasDevice || this._startInFlight;
-
       return html`
         <ha-card
           @click=${this._onClick}
@@ -791,48 +882,6 @@ import {
       const controlsDisabled = this._isInEditor();
       this.toggleAttribute("data-preview", controlsDisabled);
 
-      const showStart = this._config.show_start_time;
-      const showEnd = this._config.show_end_time;
-      const useSplitDateTime = this._useSplitDateTime();
-
-      const now = new Date();
-      const startDefault = new Date(now.getTime() + 60 * 1000);
-      const payWindowEnd = this._getCachedPayWindowEnd();
-      let defaultsUpdated = false;
-      if (useSplitDateTime) {
-        if (showStart && !this._getInputValue("startDate")) {
-          this._formValues.startDate = formatDate(startDefault);
-          defaultsUpdated = true;
-        }
-        if (showStart && !this._getInputValue("startTime")) {
-          this._formValues.startTime = formatTime(startDefault);
-          defaultsUpdated = true;
-        }
-        if (showEnd && !this._getInputValue("endDate") && payWindowEnd) {
-          this._formValues.endDate = formatDate(payWindowEnd);
-          defaultsUpdated = true;
-        }
-        if (showEnd && !this._getInputValue("endTime") && payWindowEnd) {
-          this._formValues.endTime = formatTime(payWindowEnd);
-          defaultsUpdated = true;
-        }
-        void this._applyEndDefaultFromPayWindow(true);
-      } else {
-        if (showStart && !this._getInputValue("startDateTime")) {
-          this._formValues.startDateTime = formatDateTimeLocal(startDefault);
-          defaultsUpdated = true;
-        }
-        if (showEnd && !this._getInputValue("endDateTime") && payWindowEnd) {
-          this._formValues.endDateTime = formatDateTimeLocal(payWindowEnd);
-          defaultsUpdated = true;
-        }
-        void this._applyEndDefaultFromPayWindow(false);
-      }
-
-      if (defaultsUpdated) {
-        this._requestRender();
-      }
-
       if (this._addFavoriteChecked) {
         const { showAddFavorite } = this._getFavoriteActionState();
         if (!showAddFavorite) {
@@ -983,6 +1032,8 @@ import {
     _handlePermitChange(value: string): void {
       if (!value) {
         this._selectedEntryId = null;
+        this._pendingPermitDefaultsEntryId = null;
+        this._clearStatusRefresh();
         this._resetDeviceState();
         this._status = "";
         this._statusType = "info";
@@ -997,12 +1048,16 @@ import {
         return;
       }
       this._selectedEntryId = value;
+      this._pendingPermitDefaultsEntryId = value;
       this._resetDeviceState();
+      this._applyZoneStatusCache(value);
       this._status = "";
       this._statusType = "info";
       this._requestRender();
       this._ensureDeviceId();
       this._maybeLoadFavorites();
+      void this._loadZoneStatusForEntry(value);
+      this._setupStatusRefresh(value);
     }
 
     _resetFavoritesState(): void {
@@ -1013,13 +1068,78 @@ import {
     _resetDeviceState(): void {
       this._deviceId = null;
       this._deviceEntryId = null;
-      this._resetPayWindowEndCache();
+      this._setZoneStatus(null);
       this._resetFavoritesState();
+    }
+
+    _applyZoneStatusCache(entryId: string | null): void {
+      if (!entryId) {
+        this._setZoneStatus(null);
+        return;
+      }
+      const cached = this._zoneStatusByEntryId.get(entryId);
+      if (!cached) {
+        this._setZoneStatus(null);
+        return;
+      }
+      this._setZoneStatus(cached);
+    }
+
+    _setPendingDefaultsForFixedEntry(entryId: string | null): void {
+      if (!this._config?.config_entry_id || !entryId) {
+        return;
+      }
+      this._pendingPermitDefaultsEntryId = entryId;
+    }
+
+    _setupStatusRefresh(entryId: string | null): void {
+      this._clearStatusRefresh();
+      if (
+        !this._config?.config_entry_id ||
+        !this._config.show_reservation_form ||
+        !entryId
+      ) {
+        return;
+      }
+      this._statusRefreshHandle = window.setInterval(() => {
+        if (!this._hass) {
+          return;
+        }
+        const activeEntryId = this._getActiveEntryId();
+        if (!activeEntryId || activeEntryId !== entryId) {
+          return;
+        }
+        this._pendingPermitDefaultsEntryId = entryId;
+        void this._loadZoneStatusForEntry(entryId);
+      }, STATUS_REFRESH_MS);
+    }
+
+    _clearStatusRefresh(): void {
+      if (this._statusRefreshHandle === null) {
+        return;
+      }
+      window.clearInterval(this._statusRefreshHandle);
+      this._statusRefreshHandle = null;
     }
 
     _setFavorites(favorites: FavoriteItem[]): void {
       this._favorites = favorites;
       this._rebuildFavoriteIndex();
+    }
+
+    _setZoneStatus(status: ZoneStatus | null): void {
+      this._zoneState = status?.state ?? null;
+      this._windowKind = status?.kind ?? null;
+      this._windowStartIso = status?.start ?? null;
+      this._windowEndIso = status?.end ?? null;
+    }
+
+    _applyPendingPermitDefaults(entryId: string): void {
+      if (this._pendingPermitDefaultsEntryId !== entryId) {
+        return;
+      }
+      this._applyStatusDefaultsToForm();
+      this._pendingPermitDefaultsEntryId = null;
     }
 
     _rebuildFavoriteIndex(): void {
@@ -1068,6 +1188,26 @@ import {
         return null;
       }
       return this._favoritesByValue.get(favoriteValue) ?? null;
+    }
+
+    _normalizeZoneStatus(
+      payload: ZoneStatusResponse | null | undefined,
+    ): ZoneStatus {
+      const rawState = payload?.state;
+      const state =
+        rawState === "chargeable" || rawState === "free" ? rawState : null;
+      const rawKind = payload?.window_kind;
+      const kind = rawKind === "current" || rawKind === "next" ? rawKind : null;
+      const rawStart = payload?.window_start;
+      const rawEnd = payload?.window_end;
+      const start = typeof rawStart === "string" && rawStart ? rawStart : null;
+      const end = typeof rawEnd === "string" && rawEnd ? rawEnd : null;
+      return {
+        state: state,
+        kind: kind,
+        start: kind ? start : null,
+        end: kind ? end : null,
+      };
     }
 
     _selectedFavoriteMatchesLicense(
@@ -1326,7 +1466,6 @@ import {
         return;
       }
       const offsetMs = 60 * 1000;
-      const payWindowEnd = this._getCachedPayWindowEnd();
       if (useSplitDateTime) {
         const startDateValue = this._getInputValue("startDate");
         const startTimeValue = this._getInputValue("startTime");
@@ -1339,7 +1478,7 @@ import {
         if (Number.isNaN(start.getTime())) {
           return;
         }
-        const end = this._resolveDefaultEnd(start, payWindowEnd, offsetMs);
+        const end = this._resolveDefaultEnd(start, offsetMs);
         this._setInputValue("endDate", formatDate(end));
         this._setInputValue("endTime", formatTime(end));
         return;
@@ -1352,53 +1491,66 @@ import {
       if (Number.isNaN(start.getTime())) {
         return;
       }
-      const end = this._resolveDefaultEnd(start, payWindowEnd, offsetMs);
+      const end = this._resolveDefaultEnd(start, offsetMs);
       this._setInputValue("endDateTime", formatDateTimeLocal(end));
     }
 
-    async _applyEndDefaultFromPayWindow(
-      useSplitDateTime: boolean,
-    ): Promise<void> {
-      if (!this._config?.show_end_time) {
-        return;
-      }
-      const endValue = useSplitDateTime
-        ? this._getInputValue("endDate")
-        : this._getInputValue("endDateTime");
-      if (endValue) {
-        return;
-      }
-      const payWindowEnd = await this._getPayWindowEnd();
-      if (!payWindowEnd) {
-        const now = new Date();
-        const dayEnd = new Date(now);
-        dayEnd.setHours(23, 59, 0, 0);
-        if (useSplitDateTime) {
-          this._setInputValue("endDate", formatDate(dayEnd));
-          this._setInputValue("endTime", formatTime(dayEnd));
-          return;
+    _getStatusDefaultTimes(now: Date): { start: Date; end: Date } {
+      const startDefault = new Date(now.getTime() + 60 * 1000);
+      const endDefault = new Date(now);
+      endDefault.setHours(23, 59, 0, 0);
+      const window = this._getRelevantWindowTimes();
+      if (this._zoneState === "chargeable") {
+        if (window) {
+          return { start: startDefault, end: window.end };
         }
-        this._setInputValue("endDateTime", formatDateTimeLocal(dayEnd));
-        return;
+        return { start: startDefault, end: endDefault };
       }
-      if (useSplitDateTime) {
-        this._setInputValue("endDate", formatDate(payWindowEnd));
-        this._setInputValue("endTime", formatTime(payWindowEnd));
-        return;
+      if (this._zoneState === "free") {
+        if (window) {
+          return { start: window.start, end: window.end };
+        }
+        return { start: startDefault, end: endDefault };
       }
-      this._setInputValue("endDateTime", formatDateTimeLocal(payWindowEnd));
+      return { start: startDefault, end: endDefault };
     }
 
-    _resolveDefaultEnd(
-      start: Date,
-      payWindowEnd: Date | null,
-      offsetMs: number,
-    ): Date {
-      if (payWindowEnd && payWindowEnd > start) {
-        return payWindowEnd;
+    _getRelevantWindowTimes(): { start: Date; end: Date } | null {
+      if (this._zoneState === "chargeable" && this._windowKind !== "current") {
+        return null;
+      }
+      if (this._zoneState === "free" && this._windowKind !== "next") {
+        return null;
+      }
+      if (this._zoneState !== "chargeable" && this._zoneState !== "free") {
+        return null;
+      }
+      const start = this._parseIsoDate(this._windowStartIso);
+      const end = this._parseIsoDate(this._windowEndIso);
+      if (!start || !end || end <= start) {
+        return null;
+      }
+      return { start, end };
+    }
+
+    _parseIsoDate(value: string | null): Date | null {
+      if (!value) {
+        return null;
+      }
+      const parsed = new Date(value);
+      if (Number.isNaN(parsed.getTime())) {
+        return null;
+      }
+      return parsed;
+    }
+
+    _resolveDefaultEnd(start: Date, offsetMs: number): Date {
+      const window = this._getRelevantWindowTimes();
+      if (window && window.end > start) {
+        return window.end;
       }
       const fallback = new Date(start.getTime() + offsetMs);
-      if (payWindowEnd === null) {
+      if (!window) {
         const dayEnd = new Date(start);
         dayEnd.setHours(23, 59, 0, 0);
         return dayEnd > start ? dayEnd : fallback;
@@ -1406,76 +1558,72 @@ import {
       return fallback;
     }
 
-    _resetPayWindowEndCache(): void {
-      this._payWindowEndEntityId = null;
-      this._payWindowEndEntityDeviceId = null;
-    }
-
-    _getCachedPayWindowEnd(): Date | null {
-      if (!this._hass || !this._deviceId) {
-        return null;
+    _applyStatusDefaultsToForm(): void {
+      if (!this._config) {
+        return;
       }
-      if (
-        !this._payWindowEndEntityId ||
-        this._payWindowEndEntityDeviceId !== this._deviceId
-      ) {
-        return null;
-      }
-      const state = this._hass.states?.[this._payWindowEndEntityId];
-      if (!state || !state.state) {
-        return null;
-      }
-      const parsed = new Date(state.state);
-      if (Number.isNaN(parsed.getTime())) {
-        return null;
-      }
-      return parsed;
-    }
-
-    async _getPayWindowEnd(): Promise<Date | null> {
-      if (!this._hass || !this._deviceId) {
-        return null;
-      }
-      const cachedEntityId = this._payWindowEndEntityByDeviceId.get(
-        this._deviceId,
-      );
-      if (cachedEntityId !== undefined) {
-        this._payWindowEndEntityId = cachedEntityId;
-        this._payWindowEndEntityDeviceId = this._deviceId;
-        return this._getCachedPayWindowEnd();
-      }
-      if (
-        !this._payWindowEndEntityId ||
-        this._payWindowEndEntityDeviceId !== this._deviceId
-      ) {
-        try {
-          const entities = await this._hass.callWS<
-            Array<{
-              entity_id: string;
-              device_id?: string;
-              unique_id?: string;
-              platform?: string;
-              domain?: string;
-            }>
-          >({ type: "config/entity_registry/list" });
-          const match = entities.find(
-            (entity) =>
-              entity.device_id === this._deviceId &&
-              entity.domain === "sensor" &&
-              entity.unique_id?.endsWith(":next_chargeable_end"),
-          );
-          const entityId = match?.entity_id ?? null;
-          if (entityId) {
-            this._payWindowEndEntityByDeviceId.set(this._deviceId, entityId);
+      const showStart = this._config.show_start_time;
+      const showEnd = this._config.show_end_time;
+      const useSplitDateTime = this._useSplitDateTime();
+      const now = new Date();
+      const defaults = this._getStatusDefaultTimes(now);
+      const minStart = new Date(now.getTime() + 60 * 1000);
+      if (useSplitDateTime) {
+        if (showStart) {
+          const startDateValue = this._getInputValue("startDate");
+          const startTimeValue = this._getInputValue("startTime");
+          if (!startDateValue || !startTimeValue) {
+            if (!startDateValue) {
+              this._setInputValue("startDate", formatDate(defaults.start));
+            }
+            if (!startTimeValue) {
+              this._setInputValue("startTime", formatTime(defaults.start));
+            }
+          } else {
+            const start = new Date(
+              `${startDateValue}T${normalizeTimeValue(startTimeValue)}`,
+            );
+            if (Number.isNaN(start.getTime())) {
+              this._setInputValue("startDate", formatDate(defaults.start));
+              this._setInputValue("startTime", formatTime(defaults.start));
+            } else if (start <= now) {
+              this._setInputValue("startDate", formatDate(minStart));
+              this._setInputValue("startTime", formatTime(minStart));
+            }
           }
-          this._payWindowEndEntityId = entityId;
-          this._payWindowEndEntityDeviceId = this._deviceId;
-        } catch {
-          this._payWindowEndEntityId = null;
-          this._payWindowEndEntityDeviceId = this._deviceId;
+        }
+        if (showEnd) {
+          if (!this._getInputValue("endDate")) {
+            this._setInputValue("endDate", formatDate(defaults.end));
+          }
+          if (!this._getInputValue("endTime")) {
+            this._setInputValue("endTime", formatTime(defaults.end));
+          }
+        }
+        return;
+      }
+      if (showStart) {
+        const startValue = this._getInputValue("startDateTime");
+        if (!startValue) {
+          this._setInputValue(
+            "startDateTime",
+            formatDateTimeLocal(defaults.start),
+          );
+        } else {
+          const start = new Date(startValue);
+          if (Number.isNaN(start.getTime())) {
+            this._setInputValue(
+              "startDateTime",
+              formatDateTimeLocal(defaults.start),
+            );
+          } else if (start <= now) {
+            this._setInputValue("startDateTime", formatDateTimeLocal(minStart));
+          }
         }
       }
-      return this._getCachedPayWindowEnd();
+      if (showEnd && !this._getInputValue("endDateTime")) {
+        this._setInputValue("endDateTime", formatDateTimeLocal(defaults.end));
+      }
     }
 
     async _applyFavoriteSelection(plate: string, name: string): Promise<void> {

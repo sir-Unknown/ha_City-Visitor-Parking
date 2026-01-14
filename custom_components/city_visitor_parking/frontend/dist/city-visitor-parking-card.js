@@ -795,6 +795,9 @@ var getCardConfigForm = async (hassOrLocalize) => {
 (() => {
   const CARD_TYPE = "city-visitor-parking-card";
   const WS_LIST_FAVORITES = "city_visitor_parking/favorites";
+  const WS_GET_STATUS = "city_visitor_parking/status";
+  const STATUS_THROTTLE_MS = 15e3;
+  const STATUS_REFRESH_MS = 6e4;
   const FAVORITE_PLACEHOLDER_VALUE = "__favorite_placeholder__";
   const CONFIG_ENTRY_SELECTOR = {
     config_entry: { integration: DOMAIN }
@@ -850,9 +853,15 @@ var getCardConfigForm = async (hassOrLocalize) => {
       this._favoriteRemoveInFlight = false;
       this._addFavoriteChecked = false;
       this._suppressFavoriteClear = false;
-      this._payWindowEndEntityId = null;
-      this._payWindowEndEntityDeviceId = null;
-      this._payWindowEndEntityByDeviceId = /* @__PURE__ */ new Map();
+      this._zoneState = null;
+      this._windowKind = null;
+      this._windowStartIso = null;
+      this._windowEndIso = null;
+      this._zoneStatusTsByEntryId = /* @__PURE__ */ new Map();
+      this._zoneStatusInFlightByEntryId = /* @__PURE__ */ new Map();
+      this._zoneStatusByEntryId = /* @__PURE__ */ new Map();
+      this._pendingPermitDefaultsEntryId = null;
+      this._statusRefreshHandle = null;
       this._status = "";
       this._statusType = "info";
       this._renderHandle = null;
@@ -899,15 +908,21 @@ var getCardConfigForm = async (hassOrLocalize) => {
       if (this._config.device_id) {
         this._deviceId = this._config.device_id;
         this._deviceEntryId = this._config.config_entry_id || null;
-        this._resetPayWindowEndCache();
         if (entryChanged) {
           this._resetFavoritesState();
         }
       } else if (entryChanged) {
         this._resetDeviceState();
       }
+      const entryId = this._getActiveEntryId();
+      this._applyZoneStatusCache(entryId);
+      this._setPendingDefaultsForFixedEntry(entryId);
       this._requestRender();
       this._ensureDeviceId();
+      if (entryId) {
+        void this._loadZoneStatusForEntry(entryId);
+      }
+      this._setupStatusRefresh(entryId);
       void this._loadData();
     }
     set hass(hass) {
@@ -918,7 +933,18 @@ var getCardConfigForm = async (hassOrLocalize) => {
       });
       this._requestRender();
       this._ensureDeviceId();
+      const entryId = this._getActiveEntryId();
+      this._applyZoneStatusCache(entryId);
+      this._setPendingDefaultsForFixedEntry(entryId);
+      if (entryId) {
+        void this._loadZoneStatusForEntry(entryId);
+      }
+      this._setupStatusRefresh(entryId);
       void this._loadData();
+    }
+    disconnectedCallback() {
+      super.disconnectedCallback();
+      this._clearStatusRefresh();
     }
     getCardSize() {
       return 4;
@@ -934,7 +960,6 @@ var getCardConfigForm = async (hassOrLocalize) => {
       if (this._config?.device_id) {
         this._deviceId = this._config.device_id;
         this._deviceEntryId = this._config.config_entry_id || entryId;
-        this._resetPayWindowEndCache();
         return;
       }
       if (this._deviceEntryId === entryId && this._deviceId) {
@@ -944,7 +969,6 @@ var getCardConfigForm = async (hassOrLocalize) => {
       if (cachedDeviceId !== void 0) {
         this._deviceId = cachedDeviceId;
         this._deviceEntryId = entryId;
-        this._resetPayWindowEndCache();
         this._requestRender();
         return;
       }
@@ -966,11 +990,9 @@ var getCardConfigForm = async (hassOrLocalize) => {
           this._deviceIdByEntryId.set(entryId, deviceId);
         }
         this._deviceEntryId = entryId;
-        this._resetPayWindowEndCache();
       }).catch(() => {
         this._deviceId = null;
         this._deviceEntryId = entryId;
-        this._resetPayWindowEndCache();
       }).finally(() => {
         this._deviceLoadPromise = null;
         this._requestRender();
@@ -1034,6 +1056,53 @@ var getCardConfigForm = async (hassOrLocalize) => {
         }
         this._requestRender();
       }
+    }
+    async _loadZoneStatusForEntry(entryId) {
+      if (!this._hass || !entryId) {
+        return;
+      }
+      const force = this._pendingPermitDefaultsEntryId === entryId;
+      const now = Date.now();
+      const lastTs = this._zoneStatusTsByEntryId.get(entryId);
+      if (!force && lastTs !== void 0 && now - lastTs < STATUS_THROTTLE_MS) {
+        return;
+      }
+      const inFlight = this._zoneStatusInFlightByEntryId.get(entryId);
+      if (inFlight) {
+        return inFlight;
+      }
+      const loadPromise = (async () => {
+        const emptyStatus = {
+          state: null,
+          kind: null,
+          start: null,
+          end: null
+        };
+        try {
+          const result = await this._hass.callWS({
+            type: WS_GET_STATUS,
+            config_entry_id: entryId
+          });
+          const normalized = this._normalizeZoneStatus(result);
+          this._zoneStatusByEntryId.set(entryId, normalized);
+          if (entryId === this._getActiveEntryId()) {
+            this._setZoneStatus(normalized);
+            this._applyPendingPermitDefaults(entryId);
+          }
+        } catch {
+          this._zoneStatusByEntryId.set(entryId, emptyStatus);
+          if (entryId === this._getActiveEntryId()) {
+            this._setZoneStatus(emptyStatus);
+            this._applyPendingPermitDefaults(entryId);
+          }
+        } finally {
+          this._zoneStatusTsByEntryId.set(entryId, Date.now());
+          this._zoneStatusInFlightByEntryId.delete(entryId);
+          this._requestRender();
+        }
+      })();
+      this._zoneStatusInFlightByEntryId.set(entryId, loadPromise);
+      return loadPromise;
     }
     _requestRender() {
       if (this._renderHandle !== null) {
@@ -1313,45 +1382,6 @@ var getCardConfigForm = async (hassOrLocalize) => {
       }
       const controlsDisabled = this._isInEditor();
       this.toggleAttribute("data-preview", controlsDisabled);
-      const showStart = this._config.show_start_time;
-      const showEnd = this._config.show_end_time;
-      const useSplitDateTime = this._useSplitDateTime();
-      const now = /* @__PURE__ */ new Date();
-      const startDefault = new Date(now.getTime() + 60 * 1e3);
-      const payWindowEnd = this._getCachedPayWindowEnd();
-      let defaultsUpdated = false;
-      if (useSplitDateTime) {
-        if (showStart && !this._getInputValue("startDate")) {
-          this._formValues.startDate = formatDate(startDefault);
-          defaultsUpdated = true;
-        }
-        if (showStart && !this._getInputValue("startTime")) {
-          this._formValues.startTime = formatTime(startDefault);
-          defaultsUpdated = true;
-        }
-        if (showEnd && !this._getInputValue("endDate") && payWindowEnd) {
-          this._formValues.endDate = formatDate(payWindowEnd);
-          defaultsUpdated = true;
-        }
-        if (showEnd && !this._getInputValue("endTime") && payWindowEnd) {
-          this._formValues.endTime = formatTime(payWindowEnd);
-          defaultsUpdated = true;
-        }
-        void this._applyEndDefaultFromPayWindow(true);
-      } else {
-        if (showStart && !this._getInputValue("startDateTime")) {
-          this._formValues.startDateTime = formatDateTimeLocal(startDefault);
-          defaultsUpdated = true;
-        }
-        if (showEnd && !this._getInputValue("endDateTime") && payWindowEnd) {
-          this._formValues.endDateTime = formatDateTimeLocal(payWindowEnd);
-          defaultsUpdated = true;
-        }
-        void this._applyEndDefaultFromPayWindow(false);
-      }
-      if (defaultsUpdated) {
-        this._requestRender();
-      }
       if (this._addFavoriteChecked) {
         const { showAddFavorite } = this._getFavoriteActionState();
         if (!showAddFavorite) {
@@ -1473,6 +1503,8 @@ var getCardConfigForm = async (hassOrLocalize) => {
     _handlePermitChange(value) {
       if (!value) {
         this._selectedEntryId = null;
+        this._pendingPermitDefaultsEntryId = null;
+        this._clearStatusRefresh();
         this._resetDeviceState();
         this._status = "";
         this._statusType = "info";
@@ -1483,12 +1515,16 @@ var getCardConfigForm = async (hassOrLocalize) => {
         return;
       }
       this._selectedEntryId = value;
+      this._pendingPermitDefaultsEntryId = value;
       this._resetDeviceState();
+      this._applyZoneStatusCache(value);
       this._status = "";
       this._statusType = "info";
       this._requestRender();
       this._ensureDeviceId();
       this._maybeLoadFavorites();
+      void this._loadZoneStatusForEntry(value);
+      this._setupStatusRefresh(value);
     }
     _resetFavoritesState() {
       this._favoritesLoadedFor = null;
@@ -1497,12 +1533,67 @@ var getCardConfigForm = async (hassOrLocalize) => {
     _resetDeviceState() {
       this._deviceId = null;
       this._deviceEntryId = null;
-      this._resetPayWindowEndCache();
+      this._setZoneStatus(null);
       this._resetFavoritesState();
+    }
+    _applyZoneStatusCache(entryId) {
+      if (!entryId) {
+        this._setZoneStatus(null);
+        return;
+      }
+      const cached = this._zoneStatusByEntryId.get(entryId);
+      if (!cached) {
+        this._setZoneStatus(null);
+        return;
+      }
+      this._setZoneStatus(cached);
+    }
+    _setPendingDefaultsForFixedEntry(entryId) {
+      if (!this._config?.config_entry_id || !entryId) {
+        return;
+      }
+      this._pendingPermitDefaultsEntryId = entryId;
+    }
+    _setupStatusRefresh(entryId) {
+      this._clearStatusRefresh();
+      if (!this._config?.config_entry_id || !this._config.show_reservation_form || !entryId) {
+        return;
+      }
+      this._statusRefreshHandle = window.setInterval(() => {
+        if (!this._hass) {
+          return;
+        }
+        const activeEntryId = this._getActiveEntryId();
+        if (!activeEntryId || activeEntryId !== entryId) {
+          return;
+        }
+        this._pendingPermitDefaultsEntryId = entryId;
+        void this._loadZoneStatusForEntry(entryId);
+      }, STATUS_REFRESH_MS);
+    }
+    _clearStatusRefresh() {
+      if (this._statusRefreshHandle === null) {
+        return;
+      }
+      window.clearInterval(this._statusRefreshHandle);
+      this._statusRefreshHandle = null;
     }
     _setFavorites(favorites) {
       this._favorites = favorites;
       this._rebuildFavoriteIndex();
+    }
+    _setZoneStatus(status) {
+      this._zoneState = status?.state ?? null;
+      this._windowKind = status?.kind ?? null;
+      this._windowStartIso = status?.start ?? null;
+      this._windowEndIso = status?.end ?? null;
+    }
+    _applyPendingPermitDefaults(entryId) {
+      if (this._pendingPermitDefaultsEntryId !== entryId) {
+        return;
+      }
+      this._applyStatusDefaultsToForm();
+      this._pendingPermitDefaultsEntryId = null;
     }
     _rebuildFavoriteIndex() {
       const byPlate = /* @__PURE__ */ new Map();
@@ -1548,6 +1639,22 @@ var getCardConfigForm = async (hassOrLocalize) => {
         return null;
       }
       return this._favoritesByValue.get(favoriteValue) ?? null;
+    }
+    _normalizeZoneStatus(payload) {
+      const rawState = payload?.state;
+      const state = rawState === "chargeable" || rawState === "free" ? rawState : null;
+      const rawKind = payload?.window_kind;
+      const kind = rawKind === "current" || rawKind === "next" ? rawKind : null;
+      const rawStart = payload?.window_start;
+      const rawEnd = payload?.window_end;
+      const start = typeof rawStart === "string" && rawStart ? rawStart : null;
+      const end = typeof rawEnd === "string" && rawEnd ? rawEnd : null;
+      return {
+        state,
+        kind,
+        start: kind ? start : null,
+        end: kind ? end : null
+      };
     }
     _selectedFavoriteMatchesLicense(favorite, license) {
       const favoriteLicense = normalizePlateValue(
@@ -1773,7 +1880,6 @@ var getCardConfigForm = async (hassOrLocalize) => {
         return;
       }
       const offsetMs = 60 * 1e3;
-      const payWindowEnd = this._getCachedPayWindowEnd();
       if (useSplitDateTime) {
         const startDateValue = this._getInputValue("startDate");
         const startTimeValue = this._getInputValue("startTime");
@@ -1786,7 +1892,7 @@ var getCardConfigForm = async (hassOrLocalize) => {
         if (Number.isNaN(start2.getTime())) {
           return;
         }
-        const end2 = this._resolveDefaultEnd(start2, payWindowEnd, offsetMs);
+        const end2 = this._resolveDefaultEnd(start2, offsetMs);
         this._setInputValue("endDate", formatDate(end2));
         this._setInputValue("endTime", formatTime(end2));
         return;
@@ -1799,100 +1905,134 @@ var getCardConfigForm = async (hassOrLocalize) => {
       if (Number.isNaN(start.getTime())) {
         return;
       }
-      const end = this._resolveDefaultEnd(start, payWindowEnd, offsetMs);
+      const end = this._resolveDefaultEnd(start, offsetMs);
       this._setInputValue("endDateTime", formatDateTimeLocal(end));
     }
-    async _applyEndDefaultFromPayWindow(useSplitDateTime) {
-      if (!this._config?.show_end_time) {
-        return;
-      }
-      const endValue = useSplitDateTime ? this._getInputValue("endDate") : this._getInputValue("endDateTime");
-      if (endValue) {
-        return;
-      }
-      const payWindowEnd = await this._getPayWindowEnd();
-      if (!payWindowEnd) {
-        const now = /* @__PURE__ */ new Date();
-        const dayEnd = new Date(now);
-        dayEnd.setHours(23, 59, 0, 0);
-        if (useSplitDateTime) {
-          this._setInputValue("endDate", formatDate(dayEnd));
-          this._setInputValue("endTime", formatTime(dayEnd));
-          return;
+    _getStatusDefaultTimes(now) {
+      const startDefault = new Date(now.getTime() + 60 * 1e3);
+      const endDefault = new Date(now);
+      endDefault.setHours(23, 59, 0, 0);
+      const window2 = this._getRelevantWindowTimes();
+      if (this._zoneState === "chargeable") {
+        if (window2) {
+          return { start: startDefault, end: window2.end };
         }
-        this._setInputValue("endDateTime", formatDateTimeLocal(dayEnd));
-        return;
+        return { start: startDefault, end: endDefault };
       }
-      if (useSplitDateTime) {
-        this._setInputValue("endDate", formatDate(payWindowEnd));
-        this._setInputValue("endTime", formatTime(payWindowEnd));
-        return;
+      if (this._zoneState === "free") {
+        if (window2) {
+          return { start: window2.start, end: window2.end };
+        }
+        return { start: startDefault, end: endDefault };
       }
-      this._setInputValue("endDateTime", formatDateTimeLocal(payWindowEnd));
+      return { start: startDefault, end: endDefault };
     }
-    _resolveDefaultEnd(start, payWindowEnd, offsetMs) {
-      if (payWindowEnd && payWindowEnd > start) {
-        return payWindowEnd;
+    _getRelevantWindowTimes() {
+      if (this._zoneState === "chargeable" && this._windowKind !== "current") {
+        return null;
+      }
+      if (this._zoneState === "free" && this._windowKind !== "next") {
+        return null;
+      }
+      if (this._zoneState !== "chargeable" && this._zoneState !== "free") {
+        return null;
+      }
+      const start = this._parseIsoDate(this._windowStartIso);
+      const end = this._parseIsoDate(this._windowEndIso);
+      if (!start || !end || end <= start) {
+        return null;
+      }
+      return { start, end };
+    }
+    _parseIsoDate(value) {
+      if (!value) {
+        return null;
+      }
+      const parsed = new Date(value);
+      if (Number.isNaN(parsed.getTime())) {
+        return null;
+      }
+      return parsed;
+    }
+    _resolveDefaultEnd(start, offsetMs) {
+      const window2 = this._getRelevantWindowTimes();
+      if (window2 && window2.end > start) {
+        return window2.end;
       }
       const fallback = new Date(start.getTime() + offsetMs);
-      if (payWindowEnd === null) {
+      if (!window2) {
         const dayEnd = new Date(start);
         dayEnd.setHours(23, 59, 0, 0);
         return dayEnd > start ? dayEnd : fallback;
       }
       return fallback;
     }
-    _resetPayWindowEndCache() {
-      this._payWindowEndEntityId = null;
-      this._payWindowEndEntityDeviceId = null;
-    }
-    _getCachedPayWindowEnd() {
-      if (!this._hass || !this._deviceId) {
-        return null;
+    _applyStatusDefaultsToForm() {
+      if (!this._config) {
+        return;
       }
-      if (!this._payWindowEndEntityId || this._payWindowEndEntityDeviceId !== this._deviceId) {
-        return null;
-      }
-      const state = this._hass.states?.[this._payWindowEndEntityId];
-      if (!state || !state.state) {
-        return null;
-      }
-      const parsed = new Date(state.state);
-      if (Number.isNaN(parsed.getTime())) {
-        return null;
-      }
-      return parsed;
-    }
-    async _getPayWindowEnd() {
-      if (!this._hass || !this._deviceId) {
-        return null;
-      }
-      const cachedEntityId = this._payWindowEndEntityByDeviceId.get(
-        this._deviceId
-      );
-      if (cachedEntityId !== void 0) {
-        this._payWindowEndEntityId = cachedEntityId;
-        this._payWindowEndEntityDeviceId = this._deviceId;
-        return this._getCachedPayWindowEnd();
-      }
-      if (!this._payWindowEndEntityId || this._payWindowEndEntityDeviceId !== this._deviceId) {
-        try {
-          const entities = await this._hass.callWS({ type: "config/entity_registry/list" });
-          const match = entities.find(
-            (entity) => entity.device_id === this._deviceId && entity.domain === "sensor" && entity.unique_id?.endsWith(":next_chargeable_end")
-          );
-          const entityId = match?.entity_id ?? null;
-          if (entityId) {
-            this._payWindowEndEntityByDeviceId.set(this._deviceId, entityId);
+      const showStart = this._config.show_start_time;
+      const showEnd = this._config.show_end_time;
+      const useSplitDateTime = this._useSplitDateTime();
+      const now = /* @__PURE__ */ new Date();
+      const defaults = this._getStatusDefaultTimes(now);
+      const minStart = new Date(now.getTime() + 60 * 1e3);
+      if (useSplitDateTime) {
+        if (showStart) {
+          const startDateValue = this._getInputValue("startDate");
+          const startTimeValue = this._getInputValue("startTime");
+          if (!startDateValue || !startTimeValue) {
+            if (!startDateValue) {
+              this._setInputValue("startDate", formatDate(defaults.start));
+            }
+            if (!startTimeValue) {
+              this._setInputValue("startTime", formatTime(defaults.start));
+            }
+          } else {
+            const start = /* @__PURE__ */ new Date(
+              `${startDateValue}T${normalizeTimeValue(startTimeValue)}`
+            );
+            if (Number.isNaN(start.getTime())) {
+              this._setInputValue("startDate", formatDate(defaults.start));
+              this._setInputValue("startTime", formatTime(defaults.start));
+            } else if (start <= now) {
+              this._setInputValue("startDate", formatDate(minStart));
+              this._setInputValue("startTime", formatTime(minStart));
+            }
           }
-          this._payWindowEndEntityId = entityId;
-          this._payWindowEndEntityDeviceId = this._deviceId;
-        } catch {
-          this._payWindowEndEntityId = null;
-          this._payWindowEndEntityDeviceId = this._deviceId;
+        }
+        if (showEnd) {
+          if (!this._getInputValue("endDate")) {
+            this._setInputValue("endDate", formatDate(defaults.end));
+          }
+          if (!this._getInputValue("endTime")) {
+            this._setInputValue("endTime", formatTime(defaults.end));
+          }
+        }
+        return;
+      }
+      if (showStart) {
+        const startValue = this._getInputValue("startDateTime");
+        if (!startValue) {
+          this._setInputValue(
+            "startDateTime",
+            formatDateTimeLocal(defaults.start)
+          );
+        } else {
+          const start = new Date(startValue);
+          if (Number.isNaN(start.getTime())) {
+            this._setInputValue(
+              "startDateTime",
+              formatDateTimeLocal(defaults.start)
+            );
+          } else if (start <= now) {
+            this._setInputValue("startDateTime", formatDateTimeLocal(minStart));
+          }
         }
       }
-      return this._getCachedPayWindowEnd();
+      if (showEnd && !this._getInputValue("endDateTime")) {
+        this._setInputValue("endDateTime", formatDateTimeLocal(defaults.end));
+      }
     }
     async _applyFavoriteSelection(plate, name) {
       this._setInputValue("visitorName", name);
