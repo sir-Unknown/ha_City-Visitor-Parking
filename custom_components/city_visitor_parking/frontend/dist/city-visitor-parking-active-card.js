@@ -1507,7 +1507,22 @@ var getActiveCardConfigForm = async (hassOrLocalize) => {
       getCardText("active_description")
     );
   };
-  void ensureTranslations(getGlobalHass2()).then(registerCard);
+  const getHassLanguage = (hass) => {
+    const hassLanguage = typeof hass?.language === "string" ? hass.language : void 0;
+    const localeLanguage = hass && typeof hass.locale === "object" && hass.locale ? hass.locale.language : void 0;
+    return hassLanguage || (typeof localeLanguage === "string" ? localeLanguage : void 0);
+  };
+  const registerCardWithTranslations = (attempt = 0) => {
+    const hass = getGlobalHass2();
+    void ensureTranslations(hass).then(registerCard);
+    if (!getHassLanguage(hass) && attempt < 20) {
+      window.setTimeout(
+        () => registerCardWithTranslations(attempt + 1),
+        500
+      );
+    }
+  };
+  registerCardWithTranslations();
 })();
 /*! Bundled license information:
 

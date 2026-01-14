@@ -1,8 +1,8 @@
 {
-  "name": "Bezoekersparkeren",
-  "description": "Start je bezoekersparkeerreservering.",
-  "active_name": "Reserveringen",
-  "active_description": "Toon je actieve reserveringen.",
+  "name": "Bezoekersparkeren: Reservering maken",
+  "description": "Start je bezoekersparkeerreservering en beheer je favorieten.",
+  "active_name": "Bezoekersparkeren: Actieve reserveringen",
+  "active_description": "Toon en wijzig je actieve reserveringen.",
   "editor.field.config_entry": "Vergunning",
   "editor.field.title": "Titel",
   "editor.field.icon": "Pictogram",

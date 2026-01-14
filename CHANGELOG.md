@@ -6,6 +6,14 @@
 
 ### 0.1.15
 
+#### Fixed
+
+- Register the Lovelace cards after translations load when Home Assistant language is not ready.
+
+#### Changed
+
+- Update the Lovelace card names and descriptions in the frontend translations.
+
 **Full Changelog**: https://github.com/sir-Unknown/ha_City-Visitor-Parking/compare/v0.1.14...v0.1.15
 
 ### 0.1.14

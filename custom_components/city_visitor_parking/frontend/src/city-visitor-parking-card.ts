@@ -1871,5 +1871,28 @@ import { ensureTranslations } from "./localize";
       getCardText("description"),
     );
   };
-  void ensureTranslations(getGlobalHass<HomeAssistant>()).then(registerCard);
+  const getHassLanguage = (
+    hass: HomeAssistant | null | undefined,
+  ): string | undefined => {
+    const hassLanguage =
+      typeof hass?.language === "string" ? hass.language : undefined;
+    const localeLanguage =
+      hass && typeof hass.locale === "object" && hass.locale
+        ? (hass.locale as { language?: unknown }).language
+        : undefined;
+    return hassLanguage || (typeof localeLanguage === "string"
+      ? localeLanguage
+      : undefined);
+  };
+  const registerCardWithTranslations = (attempt = 0): void => {
+    const hass = getGlobalHass<HomeAssistant>();
+    void ensureTranslations(hass).then(registerCard);
+    if (!getHassLanguage(hass) && attempt < 20) {
+      window.setTimeout(
+        () => registerCardWithTranslations(attempt + 1),
+        500,
+      );
+    }
+  };
+  registerCardWithTranslations();
 })();
