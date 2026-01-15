@@ -1573,7 +1573,7 @@ import { ensureTranslations } from "./localize";
       const showEnd = this._config.show_end_time;
       const fallbackStart = new Date(now.getTime() + 60 * 1000);
       const useSplitDateTime = this._useSplitDateTime();
-      let start = fallbackStart;
+      let start: Date;
       let end: Date;
       if (useSplitDateTime) {
         const startDateValue = showStart

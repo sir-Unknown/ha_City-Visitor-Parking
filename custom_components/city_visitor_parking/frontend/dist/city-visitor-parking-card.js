@@ -2153,7 +2153,7 @@ var getCardConfigForm = async (hassOrLocalize) => {
       const showEnd = this._config.show_end_time;
       const fallbackStart = new Date(now.getTime() + 60 * 1e3);
       const useSplitDateTime = this._useSplitDateTime();
-      let start = fallbackStart;
+      let start;
       let end;
       if (useSplitDateTime) {
         const startDateValue = showStart ? this._getInputValue("startDate") : "";
