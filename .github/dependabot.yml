@@ -4,6 +4,9 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Europe/Amsterdam"
     open-pull-requests-limit: 5
     labels:
       - "dependencies"
@@ -16,6 +19,9 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Europe/Amsterdam"
     open-pull-requests-limit: 5
     labels:
       - "dependencies"
@@ -28,6 +34,9 @@ updates:
     directory: "/custom_components/city_visitor_parking/frontend"
     schedule:
       interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Europe/Amsterdam"
     open-pull-requests-limit: 5
     labels:
       - "dependencies"
