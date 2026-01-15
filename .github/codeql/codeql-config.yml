@@ -1,0 +1,8 @@
+paths-ignore:
+  # Ignore generated frontend assets to reduce noise.
+  - "custom_components/city_visitor_parking/frontend/dist/**"
+  - "docs/**"
+  - "**/*.md"
+  - "**/*.png"
+  - "**/*.jpg"
+  - "**/*.svg"
