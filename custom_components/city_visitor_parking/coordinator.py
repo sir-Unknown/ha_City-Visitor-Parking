@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from collections.abc import Iterable, Mapping
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Protocol
@@ -25,23 +26,27 @@ else:
     class ProviderProtocol(Protocol):
         """Protocol for runtime provider behavior."""
 
-        async def get_permit(self) -> object: ...
+        async def get_permit(self) -> object:
+            raise NotImplementedError
 
-        async def list_reservations(self) -> list[object]: ...
+        async def list_reservations(self) -> list[object]:
+            raise NotImplementedError
 
-        async def list_favorites(self) -> list[object]: ...
+        async def list_favorites(self) -> list[object]:
+            raise NotImplementedError
 
         async def end_reservation(
             self,
             reservation_id: str,
             end_time: datetime,
-        ) -> object: ...
+        ) -> object:
+            raise NotImplementedError
 
     ProviderFavorite = object
     Permit = object
     ProviderReservation = object
 
-from .const import AUTO_END_COOLDOWN, CONF_AUTO_END, DEFAULT_UPDATE_INTERVAL, LOGGER
+from .const import AUTO_END_COOLDOWN, CONF_AUTO_END, DEFAULT_UPDATE_INTERVAL
 from .helpers import get_attr
 from .models import (
     AutoEndState,
@@ -52,6 +57,8 @@ from .models import (
     ZoneAvailability,
 )
 from .time_windows import _windows_for_today
+
+_LOGGER = logging.getLogger(__name__)
 
 
 class CityVisitorParkingCoordinator(DataUpdateCoordinator[CoordinatorData]):
@@ -70,7 +77,7 @@ class CityVisitorParkingCoordinator(DataUpdateCoordinator[CoordinatorData]):
 
         super().__init__(
             hass,
-            logger=LOGGER,
+            logger=_LOGGER,
             name=config_entry.title,
             update_interval=DEFAULT_UPDATE_INTERVAL,
             config_entry=config_entry,
@@ -85,7 +92,7 @@ class CityVisitorParkingCoordinator(DataUpdateCoordinator[CoordinatorData]):
         """Fetch data from the API and normalize it."""
 
         try:
-            LOGGER.debug(
+            _LOGGER.debug(
                 "Fetching permit, reservations, and favorites for %s (permit %s)",
                 self._entry_title,
                 self._permit_id,
@@ -95,7 +102,7 @@ class CityVisitorParkingCoordinator(DataUpdateCoordinator[CoordinatorData]):
                 self._provider.list_reservations(),
                 self._provider.list_favorites(),
             )
-            LOGGER.debug(
+            _LOGGER.debug(
                 "Fetched data for %s (permit %s): reservations=%s favorites=%s",
                 self._entry_title,
                 self._permit_id,
@@ -103,14 +110,14 @@ class CityVisitorParkingCoordinator(DataUpdateCoordinator[CoordinatorData]):
                 len(favorites or []),
             )
             if self._unavailable_logged:
-                LOGGER.info("Visitor parking data is available again")
+                _LOGGER.info("Visitor parking data is available again")
                 self._unavailable_logged = False
         except AuthError as err:
             self._log_unavailable_once()
             raise ConfigEntryAuthFailed from err
         except (NetworkError, PyCityVisitorParkingError) as err:
             self._log_unavailable_once()
-            LOGGER.debug(
+            _LOGGER.debug(
                 "Coordinator fetch failed for %s (permit %s): %s: %s",
                 self._entry_title,
                 self._permit_id,
@@ -120,7 +127,7 @@ class CityVisitorParkingCoordinator(DataUpdateCoordinator[CoordinatorData]):
             raise UpdateFailed("API communication error") from err
         except Exception as err:  # Allowed in background tasks
             self._log_unavailable_once()
-            LOGGER.debug(
+            _LOGGER.debug(
                 "Coordinator fetch failed unexpectedly for %s (permit %s): %s: %s",
                 self._entry_title,
                 self._permit_id,
@@ -182,7 +189,9 @@ class CityVisitorParkingCoordinator(DataUpdateCoordinator[CoordinatorData]):
                     dt_util.as_utc(now),
                 )
             except PyCityVisitorParkingError:
-                LOGGER.debug("Auto-end failed for an active reservation", exc_info=True)
+                _LOGGER.debug(
+                    "Auto-end failed for an active reservation", exc_info=True
+                )
 
     def _prune_auto_end_attempts(self, now: datetime) -> None:
         """Remove stale auto-end attempts to keep memory usage small."""
@@ -209,7 +218,7 @@ class CityVisitorParkingCoordinator(DataUpdateCoordinator[CoordinatorData]):
 
         if self._unavailable_logged:
             return
-        LOGGER.info("Visitor parking data is unavailable")
+        _LOGGER.info("Visitor parking data is unavailable")
         self._unavailable_logged = True
 
 

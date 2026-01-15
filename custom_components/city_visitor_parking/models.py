@@ -7,12 +7,11 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from pycityvisitorparking import Client
 
 if TYPE_CHECKING:
     from pycityvisitorparking.provider.base import BaseProvider
-
-    from .coordinator import CityVisitorParkingCoordinator
 else:
 
     class BaseProvider:  # pragma: no cover - runtime typing fallback
@@ -95,7 +94,7 @@ class CityVisitorParkingRuntimeData:
     client: Client
     provider: BaseProvider
     provider_config: ProviderConfig
-    coordinator: CityVisitorParkingCoordinator
+    coordinator: DataUpdateCoordinator[CoordinatorData]
     permit_id: str
     auto_end_state: AutoEndState
     operating_time_overrides: OperatingTimeOverrides

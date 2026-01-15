@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import inspect
+import logging
 import time
 from collections.abc import Callable, Mapping
 from pathlib import Path
@@ -41,9 +42,6 @@ from .const import (
     PLATFORMS,
     WEEKDAY_KEYS,
 )
-from .const import (
-    LOGGER as _LOGGER,
-)
 from .coordinator import CityVisitorParkingCoordinator
 from .helpers import normalize_override_windows
 from .models import (
@@ -55,6 +53,8 @@ from .models import (
 )
 from .services import async_setup_services
 from .websocket_api import async_setup_websocket
+
+_LOGGER = logging.getLogger(__name__)
 
 CONFIG_SCHEMA: Final[vol.Schema] = cv.config_entry_only_config_schema(DOMAIN)
 

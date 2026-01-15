@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 from datetime import UTC, datetime, time, timedelta
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
@@ -74,13 +73,12 @@ async def test_ws_list_favorites_success(hass) -> None:
     entry.runtime_data = _runtime(provider, None)
 
     connection = _FakeConnection()
-    result = _ws_list_favorites(
+    _ws_list_favorites(
         hass,
         connection,
         {"id": 1, "config_entry_id": entry.entry_id},
     )
-    if asyncio.iscoroutine(result):
-        await result
+    await hass.async_block_till_done()
 
     assert connection.results[0]["result"]["favorites"][0]["id"] == "fav1"
     assert connection.results[0]["result"]["favorites"][0]["license_plate"] == "AB-1234"
@@ -91,13 +89,12 @@ async def test_ws_list_favorites_invalid_target(hass) -> None:
     """Websocket should reject invalid targets."""
 
     connection = _FakeConnection()
-    result = _ws_list_favorites(
+    _ws_list_favorites(
         hass,
         connection,
         {"id": 1, "config_entry_id": "missing"},
     )
-    if asyncio.iscoroutine(result):
-        await result
+    await hass.async_block_till_done()
 
     assert connection.errors[0]["code"] == "invalid_target"
 
@@ -106,13 +103,12 @@ async def test_ws_get_status_invalid_target(hass) -> None:
     """Websocket should reject invalid targets for status."""
 
     connection = _FakeConnection()
-    result = _ws_get_status(
+    _ws_get_status(
         hass,
         connection,
         {"id": 1, "config_entry_id": "missing"},
     )
-    if asyncio.iscoroutine(result):
-        await result
+    await hass.async_block_till_done()
 
     assert connection.errors[0]["code"] == "invalid_target"
 
@@ -129,13 +125,12 @@ async def test_ws_list_favorites_provider_error(hass) -> None:
     entry.runtime_data = _runtime(provider, None)
 
     connection = _FakeConnection()
-    result = _ws_list_favorites(
+    _ws_list_favorites(
         hass,
         connection,
         {"id": 1, "config_entry_id": entry.entry_id},
     )
-    if asyncio.iscoroutine(result):
-        await result
+    await hass.async_block_till_done()
 
     assert connection.errors[0]["code"] == "favorites_failed"
 
@@ -169,13 +164,12 @@ async def test_ws_get_status_current_window(hass) -> None:
 
     connection = _FakeConnection()
     with freeze_time(now):
-        result = _ws_get_status(
+        _ws_get_status(
             hass,
             connection,
             {"id": 1, "config_entry_id": entry.entry_id},
         )
-        if asyncio.iscoroutine(result):
-            await result
+        await hass.async_block_till_done()
 
     response = connection.results[0]["result"]
     assert response["state"] == STATE_CHARGEABLE
@@ -213,13 +207,12 @@ async def test_ws_get_status_next_window_override(hass) -> None:
 
     connection = _FakeConnection()
     with freeze_time(now):
-        result = _ws_get_status(
+        _ws_get_status(
             hass,
             connection,
             {"id": 1, "config_entry_id": entry.entry_id},
         )
-        if asyncio.iscoroutine(result):
-            await result
+        await hass.async_block_till_done()
 
     response = connection.results[0]["result"]
     assert response["state"] == STATE_FREE
@@ -246,13 +239,12 @@ async def test_ws_get_status_failure_response(hass) -> None:
     entry.runtime_data = _runtime(AsyncMock(), None)
 
     connection = _FakeConnection()
-    result = _ws_get_status(
+    _ws_get_status(
         hass,
         connection,
         {"id": 1, "config_entry_id": entry.entry_id},
     )
-    if asyncio.iscoroutine(result):
-        await result
+    await hass.async_block_till_done()
 
     assert connection.errors[0]["code"] == "status_failed"
 

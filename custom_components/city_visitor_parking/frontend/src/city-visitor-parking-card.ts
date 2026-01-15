@@ -1574,7 +1574,7 @@ import { ensureTranslations } from "./localize";
       const fallbackStart = new Date(now.getTime() + 60 * 1000);
       const useSplitDateTime = this._useSplitDateTime();
       let start = fallbackStart;
-      let end = new Date(start.getTime() + 60 * 60 * 1000);
+      let end: Date;
       if (useSplitDateTime) {
         const startDateValue = showStart
           ? this._getInputValue("startDate")

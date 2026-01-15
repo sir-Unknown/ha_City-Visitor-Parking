@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import time
 from collections.abc import Iterable
 from datetime import datetime
@@ -20,13 +21,15 @@ if TYPE_CHECKING:
 else:
     ProviderFavorite = object
 
-from .const import DOMAIN, LOGGER, STATE_CHARGEABLE, STATE_FREE
+from .const import DOMAIN, STATE_CHARGEABLE, STATE_FREE
 from .helpers import get_attr
 from .models import CityVisitorParkingRuntimeData
 from .time_windows import _current_or_next_window_with_overrides
 
 WEBSOCKET_LIST_FAVORITES: Final[str] = "city_visitor_parking/favorites"
 WEBSOCKET_GET_STATUS: Final[str] = "city_visitor_parking/status"
+
+_LOGGER = logging.getLogger(__name__)
 
 
 async def async_setup_websocket(hass: HomeAssistant) -> None:
@@ -70,7 +73,7 @@ async def _ws_list_favorites(
         return
 
     connection.send_result(msg_id, {"favorites": _normalize_favorites(favorites)})
-    LOGGER.debug(
+    _LOGGER.debug(
         "Favorites websocket response for %s (permit %s): %s favorites "
         "(duration=%.3fs)",
         entry.title,
@@ -145,7 +148,7 @@ async def _ws_get_status(
             "window_end": window_end,
         },
     )
-    LOGGER.debug(
+    _LOGGER.debug(
         "Status websocket response for %s (permit %s): state=%s window_kind=%s "
         "(duration=%.3fs)",
         entry.title,

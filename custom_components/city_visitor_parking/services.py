@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import time
 from datetime import datetime, timedelta
 from typing import Final
@@ -33,10 +34,11 @@ from .const import (
     ATTR_START_TIME,
     CONF_PERMIT_ID,
     DOMAIN,
-    LOGGER,
 )
 from .helpers import get_attr
 from .models import CityVisitorParkingRuntimeData, Favorite, Reservation
+
+_LOGGER = logging.getLogger(__name__)
 
 SERVICE_START_RESERVATION: Final[str] = "start_reservation"
 SERVICE_UPDATE_RESERVATION: Final[str] = "update_reservation"
@@ -106,7 +108,7 @@ def _favorite_error_key(err: PyCityVisitorParkingError, detail_present: bool) ->
 def _raise_reservation_error(err: PyCityVisitorParkingError) -> None:
     """Raise a translated Home Assistant error for reservation failures."""
     detail = _error_detail(err)
-    LOGGER.debug("Reservation request failed: %s: %s", type(err).__name__, err)
+    _LOGGER.debug("Reservation request failed: %s: %s", type(err).__name__, err)
     raise HomeAssistantError(
         translation_domain=DOMAIN,
         translation_key=_reservation_error_key(err, detail is not None),
@@ -117,7 +119,7 @@ def _raise_reservation_error(err: PyCityVisitorParkingError) -> None:
 def _raise_favorite_error(err: PyCityVisitorParkingError) -> None:
     """Raise a translated Home Assistant error for favorite failures."""
     detail = _error_detail(err)
-    LOGGER.debug("Favorite request failed: %s: %s", type(err).__name__, err)
+    _LOGGER.debug("Favorite request failed: %s: %s", type(err).__name__, err)
     raise HomeAssistantError(
         translation_domain=DOMAIN,
         translation_key=_favorite_error_key(err, detail is not None),
@@ -254,13 +256,13 @@ async def _async_handle_start_reservation(call: ServiceCall) -> None:
     now = dt_util.utcnow()
     min_start = now + timedelta(minutes=1)
     if start < min_start:
-        LOGGER.debug(
+        _LOGGER.debug(
             "Start time %s is before minimum %s, adjusting to minimum",
             start,
             min_start,
         )
         start = min_start
-    LOGGER.debug(
+    _LOGGER.debug(
         "Starting reservation with start=%s end=%s now=%s start_local=%s end_local=%s",
         start,
         end,
@@ -283,7 +285,7 @@ async def _async_handle_start_reservation(call: ServiceCall) -> None:
     except PyCityVisitorParkingError as err:
         _raise_reservation_error(err)
     else:
-        LOGGER.debug(
+        _LOGGER.debug(
             "Reservation start requested for device %s (start=%s end=%s)",
             call.data[ATTR_DEVICE_ID],
             start,
@@ -328,12 +330,12 @@ async def _async_handle_update_reservation(call: ServiceCall) -> None:
     start_dt = start_dt_raw if start_dt_raw and allow_start else None
     end_dt = end_dt_raw if end_dt_raw and allow_end else None
     if start is not None and not allow_start:
-        LOGGER.debug(
+        _LOGGER.debug(
             "Ignoring start_time update for device %s (unsupported by provider)",
             call.data[ATTR_DEVICE_ID],
         )
     if end is not None and not allow_end:
-        LOGGER.debug(
+        _LOGGER.debug(
             "Ignoring end_time update for device %s (unsupported by provider)",
             call.data[ATTR_DEVICE_ID],
         )
@@ -365,7 +367,7 @@ async def _async_handle_update_reservation(call: ServiceCall) -> None:
     except PyCityVisitorParkingError as err:
         _raise_reservation_error(err)
     else:
-        LOGGER.debug(
+        _LOGGER.debug(
             "Reservation update requested for device %s reservation %s "
             "(start_changed=%s end_changed=%s license_changed=%s)",
             call.data[ATTR_DEVICE_ID],
@@ -388,7 +390,7 @@ async def _async_handle_end_reservation(call: ServiceCall) -> None:
     except PyCityVisitorParkingError as err:
         _raise_reservation_error(err)
     else:
-        LOGGER.debug(
+        _LOGGER.debug(
             "Reservation end requested for device %s reservation %s",
             call.data[ATTR_DEVICE_ID],
             call.data[ATTR_RESERVATION_ID],
@@ -406,7 +408,7 @@ async def _async_handle_add_favorite(call: ServiceCall) -> None:
             payload[ATTR_NAME] = name
         await runtime.provider.add_favorite(**payload)
     except (TypeError, PyCityVisitorParkingError) as err:
-        LOGGER.debug(
+        _LOGGER.debug(
             "Add favorite failed for device %s: %s: %s",
             call.data[ATTR_DEVICE_ID],
             type(err).__name__,
@@ -441,7 +443,7 @@ async def _async_handle_update_favorite(call: ServiceCall) -> None:
             runtime, call.data[ATTR_FAVORITE_ID], license_plate, name
         )
     except (TypeError, PyCityVisitorParkingError) as err:
-        LOGGER.debug(
+        _LOGGER.debug(
             "Update favorite failed for device %s favorite %s: %s: %s",
             call.data[ATTR_DEVICE_ID],
             call.data[ATTR_FAVORITE_ID],
@@ -456,12 +458,12 @@ async def _async_handle_remove_favorite(call: ServiceCall) -> None:
 
     runtime = _runtime_from_call(call)
     try:
-        LOGGER.debug("Removing favorite for device %s", call.data[ATTR_DEVICE_ID])
+        _LOGGER.debug("Removing favorite for device %s", call.data[ATTR_DEVICE_ID])
         favorite_id = call.data[ATTR_FAVORITE_ID]
         await runtime.provider.remove_favorite(favorite_id)
-        LOGGER.debug("Removed favorite for device %s", call.data[ATTR_DEVICE_ID])
+        _LOGGER.debug("Removed favorite for device %s", call.data[ATTR_DEVICE_ID])
     except PyCityVisitorParkingError as err:
-        LOGGER.warning("Failed to remove favorite (%s)", err.__class__.__name__)
+        _LOGGER.warning("Failed to remove favorite (%s)", err.__class__.__name__)
         _raise_favorite_error(err)
 
 
@@ -477,7 +479,7 @@ async def _async_handle_list_active_reservations(
     try:
         await runtime.coordinator.async_refresh()
     except Exception as err:  # pragma: no cover - defensive
-        LOGGER.debug(
+        _LOGGER.debug(
             "Active reservations refresh raised for device %s: %s: %s",
             call.data[ATTR_DEVICE_ID],
             type(err).__name__,
@@ -492,7 +494,7 @@ async def _async_handle_list_active_reservations(
             ) from err
     if not runtime.coordinator.last_update_success:
         reason = runtime.coordinator.last_exception
-        LOGGER.debug(
+        _LOGGER.debug(
             "Active reservations refresh failed for device %s: %s: %s",
             call.data[ATTR_DEVICE_ID],
             type(reason).__name__ if reason else "Unknown",
@@ -523,7 +525,7 @@ async def _async_handle_list_active_reservations(
         for favorite in favorites
         if favorite.license_plate
     }
-    LOGGER.debug(
+    _LOGGER.debug(
         "Active reservations response for %s (permit %s): %s active, %s future of %s "
         "(duration=%.3fs)",
         runtime.coordinator.config_entry.title,
@@ -575,7 +577,7 @@ async def _async_handle_list_favorites(call: ServiceCall) -> dict[str, JsonValue
             payload[ATTR_NAME] = str(name)
         normalized.append(payload)
 
-    LOGGER.debug(
+    _LOGGER.debug(
         "List favorites response for %s (permit %s): %s favorites",
         runtime.coordinator.config_entry.title,
         runtime.permit_id,
@@ -599,7 +601,7 @@ async def _fallback_update_reservation(
             translation_key="update_requires_full_details",
         )
 
-    LOGGER.debug(
+    _LOGGER.debug(
         "Fallback update: cancel and recreate reservation %s "
         "for device %s (start=%s end=%s plate=%s)",
         reservation_id,
@@ -619,7 +621,7 @@ async def _fallback_update_reservation(
             end_time=end_time,
         )
     except PyCityVisitorParkingError as err:
-        LOGGER.debug(
+        _LOGGER.debug(
             "Fallback reservation update failed for %s: %s: %s",
             reservation_id,
             type(err).__name__,
@@ -627,7 +629,7 @@ async def _fallback_update_reservation(
         )
         _raise_reservation_error(err)
     else:
-        LOGGER.debug("Fallback reservation update succeeded for %s", reservation_id)
+        _LOGGER.debug("Fallback reservation update succeeded for %s", reservation_id)
 
 
 async def _fallback_update_favorite(
@@ -643,7 +645,7 @@ async def _fallback_update_favorite(
             translation_domain=DOMAIN,
             translation_key="update_requires_license_plate",
         )
-    LOGGER.debug(
+    _LOGGER.debug(
         "Fallback favorite update: remove and recreate favorite %s "
         "for device %s (plate=%s name=%s)",
         favorite_id,
@@ -663,7 +665,7 @@ async def _fallback_update_favorite(
                 name=name,
             )
     except (TypeError, PyCityVisitorParkingError) as err:
-        LOGGER.debug(
+        _LOGGER.debug(
             "Fallback favorite update failed for %s: %s: %s",
             favorite_id,
             type(err).__name__,
@@ -671,7 +673,7 @@ async def _fallback_update_favorite(
         )
         _raise_favorite_error(err)
     else:
-        LOGGER.debug("Fallback favorite update succeeded for %s", favorite_id)
+        _LOGGER.debug("Fallback favorite update succeeded for %s", favorite_id)
 
 
 def _runtime_from_call(call: ServiceCall) -> CityVisitorParkingRuntimeData:
@@ -690,7 +692,7 @@ def _runtime_from_call(call: ServiceCall) -> CityVisitorParkingRuntimeData:
     if entry.state is not config_entries.ConfigEntryState.LOADED:
         _raise_invalid_target()
 
-    LOGGER.debug(
+    _LOGGER.debug(
         "Resolved runtime for %s (permit %s) from device %s (data keys=%s)",
         entry.title,
         entry.data.get(CONF_PERMIT_ID),

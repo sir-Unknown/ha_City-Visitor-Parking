@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import time
@@ -32,7 +33,6 @@ from .const import (
     CONF_PERMIT_ID,
     CONF_PROVIDER_ID,
     DOMAIN,
-    LOGGER,
     WEEKDAY_KEYS,
 )
 from .helpers import get_attr, normalize_override_windows
@@ -50,6 +50,8 @@ WEEKDAY_LABELS: Final[dict[str, str]] = {
     "sat": "saturday",
     "sun": "sunday",
 }
+
+_LOGGER = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -121,7 +123,7 @@ class CityVisitorParkingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 errors["base"] = "cannot_connect"
             # Allowed in config flow
             except Exception as err:  # noqa: BLE001
-                LOGGER.debug(
+                _LOGGER.debug(
                     "Unexpected error while listing providers: %s",
                     type(err).__name__,
                 )
@@ -366,7 +368,7 @@ class CityVisitorParkingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             errors["base"] = "cannot_connect"
             return []
         except PyCityVisitorParkingError as err:
-            LOGGER.debug(
+            _LOGGER.debug(
                 "Provider error during login for %s: %s",
                 self._provider_config.provider_id,
                 type(err).__name__,
@@ -375,7 +377,7 @@ class CityVisitorParkingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             return []
         # Allowed in config flow
         except Exception as err:  # noqa: BLE001
-            LOGGER.debug(
+            _LOGGER.debug(
                 "Unexpected error during login for %s: %s",
                 self._provider_config.provider_id,
                 type(err).__name__,

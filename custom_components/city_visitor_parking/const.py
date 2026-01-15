@@ -2,14 +2,12 @@
 
 from __future__ import annotations
 
-import logging
 from datetime import timedelta
 from typing import Final
 
 from homeassistant.const import Platform
 
 DOMAIN: Final = "city_visitor_parking"
-LOGGER: Final[logging.Logger] = logging.getLogger(__name__)
 
 PLATFORMS: Final[list[Platform]] = [Platform.SENSOR]
 
