@@ -29,7 +29,7 @@
 - Update active reservation edits immediately on field changes with quieter reloads.
 - Improve the remove favorite action label styling.
 
-**Full Changelog**: https://github.com/sir-Unknown/ha_City-Visitor-Parking/compare/v0.1.16...0.1.17
+**Full Changelog**: https://github.com/sir-Unknown/ha_City-Visitor-Parking/compare/0.1.16...0.1.17
 
 ### 0.1.16
 
@@ -38,7 +38,7 @@
 - Keep the favorites dropdown from closing on Home Assistant updates.
 - Read the favorite selection from the event detail value.
 
-**Full Changelog**: https://github.com/sir-Unknown/ha_City-Visitor-Parking/compare/v0.1.15...v0.1.16
+**Full Changelog**: https://github.com/sir-Unknown/ha_City-Visitor-Parking/compare/0.1.15...0.1.16
 
 ### 0.1.15
 
@@ -50,7 +50,7 @@
 
 - Update the Lovelace card names and descriptions in the frontend translations.
 
-**Full Changelog**: https://github.com/sir-Unknown/ha_City-Visitor-Parking/compare/v0.1.14...v0.1.15
+**Full Changelog**: https://github.com/sir-Unknown/ha_City-Visitor-Parking/compare/0.1.14...0.1.15
 
 ### 0.1.14
 
@@ -58,7 +58,7 @@
 
 - Restore the release workflow as `release.yml`.
 
-**Full Changelog**: https://github.com/sir-Unknown/ha_City-Visitor-Parking/compare/v0.1.13...v0.1.14
+**Full Changelog**: https://github.com/sir-Unknown/ha_City-Visitor-Parking/compare/0.1.13...0.1.14
 
 ### 0.1.13
 
@@ -66,7 +66,7 @@
 
 - Use `export-ignore` to exclude frontend sources, tooling files, and `AGENTS.md` from the release zip.
 
-**Full Changelog**: https://github.com/sir-Unknown/ha_City-Visitor-Parking/compare/v0.1.12...v0.1.13
+**Full Changelog**: https://github.com/sir-Unknown/ha_City-Visitor-Parking/compare/0.1.12...0.1.13
 
 ### 0.1.12
 
@@ -74,7 +74,7 @@
 
 - Exclude frontend sources and tooling files from the HACS release zip.
 
-**Full Changelog**: https://github.com/sir-Unknown/ha_City-Visitor-Parking/compare/v0.1.11...v0.1.12
+**Full Changelog**: https://github.com/sir-Unknown/ha_City-Visitor-Parking/compare/0.1.11...0.1.12
 
 ### 0.1.11
 
@@ -82,7 +82,7 @@
 
 - Add hassfest pre-commit hook and keep manifest key order compliant.
 
-**Full Changelog**: https://github.com/sir-Unknown/ha_City-Visitor-Parking/compare/v0.1.10...v0.1.11
+**Full Changelog**: https://github.com/sir-Unknown/ha_City-Visitor-Parking/compare/0.1.10...0.1.11
 
 ### 0.1.10
 
@@ -90,7 +90,7 @@
 
 - Add `lovelace` as an `after_dependencies` entry to satisfy hassfest.
 
-**Full Changelog**: https://github.com/sir-Unknown/ha_City-Visitor-Parking/compare/v0.1.9...v0.1.10
+**Full Changelog**: https://github.com/sir-Unknown/ha_City-Visitor-Parking/compare/0.1.9...0.1.10
 
 ### 0.1.9
 
@@ -98,7 +98,7 @@
 
 - Ensure the release workflow builds and packages frontend `dist` assets for HACS installs.
 
-**Full Changelog**: https://github.com/sir-Unknown/ha_City-Visitor-Parking/compare/v0.1.8...v0.1.9
+**Full Changelog**: https://github.com/sir-Unknown/ha_City-Visitor-Parking/compare/0.1.8...0.1.9
 
 ### 0.1.8
 
@@ -106,7 +106,7 @@
 
 - Package the HACS release asset so the integration installs without a nested `custom_components` folder.
 
-**Full Changelog**: https://github.com/sir-Unknown/ha_City-Visitor-Parking/compare/v0.1.7...v0.1.8
+**Full Changelog**: https://github.com/sir-Unknown/ha_City-Visitor-Parking/compare/0.1.7...0.1.8
 
 ### 0.1.7
 
@@ -115,24 +115,13 @@
 - Use localized titles for the Lovelace card stubs and labels.
 - Update the active card name and description translations.
 - Remove tracked frontend build outputs and the migration guide.
-- Loosen the documentation requirement for migration steps in .
-
-**Full Changelog**: https://github.com/sir-Unknown/ha_City-Visitor-Parking/compare/v0.1.6...v0.1.7
-
-### v0.1.7
-
-#### Changed
-
-- Use localized titles for the Lovelace card stubs and labels.
-- Update the active card name and description translations.
-- Remove tracked frontend build outputs and the migration guide.
 - Loosen the documentation requirement for migration steps in `AGENTS.md`.
 
-**Full Changelog**: https://github.com/sir-Unknown/ha_City-Visitor-Parking/compare/v0.1.6...v0.1.7
+**Full Changelog**: https://github.com/sir-Unknown/ha_City-Visitor-Parking/compare/0.1.6...0.1.7
 
-### v0.1.6
+### 0.1.6
 
-**Full Changelog**: https://github.com/sir-Unknown/ha_City-Visitor-Parking/compare/0.1.5...v0.1.6
+**Full Changelog**: https://github.com/sir-Unknown/ha_City-Visitor-Parking/compare/0.1.5...0.1.6
 
 ### 0.1.3
 
