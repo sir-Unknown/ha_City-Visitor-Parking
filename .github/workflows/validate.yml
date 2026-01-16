@@ -85,6 +85,8 @@ jobs:
         uses: hacs/action@d556e736723344f83838d08488c983a15381059a # 22.5.0
         with:
           category: integration
+        env:
+          REPOSITORY_REF: ${{ github.event_name == 'pull_request' && github.head_ref || github.ref_name }}
 
   tests:
     name: Pytest
