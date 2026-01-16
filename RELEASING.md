@@ -1,48 +1,41 @@
-# Release stappen
+# Release steps
 
-## 1) Versies bijwerken
+## 1) Update versions
 
-1. Werk de versie bij in `custom_components/city_visitor_parking/manifest.json`.
-2. Werk `CHANGELOG.md` bij met de release-notities.
+1. Update the version in `custom_components/city_visitor_parking/manifest.json`.
 
-## 2) GitHub Release publiceren
+## 2) Publish a GitHub release
 
-1. Ga naar **Releases** op GitHub.
-2. Klik op **Draft a new release**.
-3. Gebruik een tag die exact overeenkomt met de versie (bijvoorbeeld `1.2.3`).
-4. Vul de titel en release-notities in (bij voorkeur op basis van `CHANGELOG.md`).
-5. Klik op **Publish release**.
+1. Go to **Releases** on GitHub.
+2. Click **Draft a new release**.
+3. Use a tag that exactly matches the version (for example `1.2.3`).
+4. Fill in the title and release notes.
+5. Click **Publish release**.
 
-## 2a) Automatische release-notities (Release Drafter)
+## 2a) Automatic release notes (Release Drafter)
 
-Deze repository gebruikt Release Drafter om release-notities automatisch te verzamelen in een draft release.
+This repository uses Release Drafter to automatically collect release notes in a draft release.
 
-1. Zorg dat pull requests labels hebben zoals `bug`, `feature`, of `documentation`.
-2. Ga naar **Releases** op GitHub en open de conceptrelease die Release Drafter heeft aangemaakt.
-3. Controleer en verfijn de release-notities.
-4. Publiceer de release met een tag die exact overeenkomt met de versie.
+1. Make sure pull requests have labels such as `bug`, `feature`, or `documentation`.
+2. Go to **Releases** on GitHub and open the draft release created by Release Drafter.
+3. Review and refine the release notes.
+4. Publish the release with a tag that exactly matches the version.
 
-## 2b) GitHub Release publiceren via CLI
+## 2b) Publish a GitHub release via CLI
 
-Voorwaarde: je bent ingelogd met GitHub CLI (`gh auth login`).
+Prerequisite: you are logged in with GitHub CLI (`gh auth login`).
 
-1. Maak een tag die exact overeenkomt met de versie:
+1. Create a tag that exactly matches the version:
    ```bash
    git tag 1.2.3
    git push origin 1.2.3
    ```
-2. Publiceer de release met automatisch gegenereerde notes:
+2. Publish the release with automatically generated notes:
    ```bash
    gh release create 1.2.3 --title "1.2.3" --generate-notes
    ```
 
-Alternatief: gebruik de notes uit `CHANGELOG.md` (kopieer de relevante sectie):
+## 3) Verify release asset
 
-```bash
-gh release create 1.2.3 --title "1.2.3" --notes "Plak hier de releasenotes uit CHANGELOG.md"
-```
-
-## 3) Release-asset controleren
-
-Na het publiceren start de workflow `.github/workflows/release.yaml` automatisch en uploadt `city_visitor_parking.zip` als release-asset.
-Controleer op de releasepagina of het bestand aanwezig is.
+After publishing, the `.github/workflows/release.yaml` workflow starts automatically and uploads `city_visitor_parking.zip` as a release asset.
+Check on the release page that the file is present.

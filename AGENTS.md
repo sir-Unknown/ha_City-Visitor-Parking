@@ -40,7 +40,6 @@ If any rule is not implemented, document an explicit exemption and rationale.
   - update `manifest.json` `version` to the new release version,
   - publish a GitHub Release (not just a tag),
   - use a tag name matching the integration version (recommend: `v1.2.3`).
-- Keep `CHANGELOG.md` in sync with releases.
 
 ## 5) CI requirements (must use these actions)
 
@@ -310,8 +309,7 @@ Minimum required tests:
 - Coordinator: auth failures trigger ConfigEntryAuthFailed; network failures handled without log spam.
 - Translations: en/nl exist and parse.
 
-## 16) Documentation & changelog
+## 16) Documentation
 
 - README: installation (HACS/manual), UI setup, options, services reference, troubleshooting, privacy notes.
-- CHANGELOG: keep “Unreleased”; move entries on release.
 - MIGRATION.md: concrete steps to migrate the integration into Home Assistant Core.
