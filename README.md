@@ -7,8 +7,8 @@ Manage Dutch municipality visitor parking permits from Home Assistant. Start, up
 ## Screenshots
 
 <p align="center">
-  <img src="docs/new_reservation.png" alt="Visitor parking card" width="320">
-  <img src="docs/active_reservations.png" alt="Active reservations card" width="320">
+  <img src="https://github.com/sir-Unknown/ha_City-Visitor-Parking/blob/main/docs/new_reservation.png" alt="Visitor parking card" width="320">
+  <img src="https://github.com/sir-Unknown/ha_City-Visitor-Parking/blob/main/docs/active_reservations.png" alt="Active reservations card" width="320">
 </p>
 <p align="center">
   Visitor parking card and active reservations overview
