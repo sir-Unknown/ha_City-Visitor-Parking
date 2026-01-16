@@ -5,14 +5,13 @@
 Manage Dutch municipality visitor parking permits from Home Assistant. Start, update, and end sessions, see paid or free status, and keep favorite license plates ready.
 
 ## Screenshots
+Visitor parking card
 
-<p align="center">
-  <img src="https://github.com/sir-Unknown/ha_City-Visitor-Parking/blob/main/docs/new_reservation.png" alt="Visitor parking card" width="320">
-  <img src="https://github.com/sir-Unknown/ha_City-Visitor-Parking/blob/main/docs/active_reservations.png" alt="Active reservations card" width="320">
-</p>
-<p align="center">
-  Visitor parking card and active reservations overview
-</p>
+![Visitor parking card](https://raw.githubusercontent.com/sir-Unknown/ha_City-Visitor-Parking/main/docs/new_reservation.png)
+
+Active reservations overview
+
+![Active reservations card](https://raw.githubusercontent.com/sir-Unknown/ha_City-Visitor-Parking/main/docs/active_reservations.png)
 
 More screenshots: [docs/screenshots.md](docs/screenshots.md)
 
@@ -31,30 +30,7 @@ Quick links:
 - Privacy: [docs/privacy.md](docs/privacy.md)
 - Examples: [docs/examples/automations.md](docs/examples/automations.md)
 
-## Installation
 
-### Install with HACS
-
-1. Add this repository in HACS as a custom repository (category: Integration).
-2. Install **City Visitor Parking**.
-3. Restart Home Assistant.
-
-### Install manually
-
-1. Copy `custom_components/city_visitor_parking/` to your Home Assistant `custom_components/` folder.
-2. Restart Home Assistant.
-
-Minimum supported Home Assistant version is defined in `custom_components/city_visitor_parking/manifest.json`.
-
-## Configuration
-
-1. Go to **Settings** > **Devices & services**.
-2. Select **Add integration**.
-3. Search for **City Visitor Parking**.
-4. Select your municipality, sign in, and select your permit.
-5. Optional: Set a description to distinguish multiple entries.
-
-To add multiple permits, add the integration multiple times.
 
 ## Use cases
 
@@ -176,6 +152,31 @@ More details: [docs/cards.md](docs/cards.md)
 
 This integration provides services for automations and scripts.
 See: [docs/services.md](docs/services.md)
+
+## Installation
+
+### Install with HACS
+
+1. Add this repository in HACS as a custom repository (category: Integration).
+2. Install **City Visitor Parking**.
+3. Restart Home Assistant.
+
+### Install manually
+
+1. Copy `custom_components/city_visitor_parking/` to your Home Assistant `custom_components/` folder.
+2. Restart Home Assistant.
+
+Minimum supported Home Assistant version is defined in `custom_components/city_visitor_parking/manifest.json`.
+
+## Configuration
+
+1. Go to **Settings** > **Devices & services**.
+2. Select **Add integration**.
+3. Search for **City Visitor Parking**.
+4. Select your municipality, sign in, and select your permit.
+5. Optional: Set a description to distinguish multiple entries.
+
+To add multiple permits, add the integration multiple times.
 
 ## Privacy
 
