@@ -39,7 +39,7 @@ If any rule is not implemented, document an explicit exemption and rationale.
 - For every version bump:
   - update `manifest.json` `version` to the new release version,
   - publish a GitHub Release (not just a tag),
-  - use a tag name matching the integration version (recommend: `1.2.3`).
+  - use a tag name matching the integration version (recommend: `v1.2.3`).
 - Keep `CHANGELOG.md` in sync with releases.
 
 ## 5) CI requirements (must use these actions)
