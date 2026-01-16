@@ -9,7 +9,65 @@ permissions:
   contents: write
 
 jobs:
+  validate:
+    name: Check validate status
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+    outputs:
+      release_sha: ${{ steps.resolve_tag.outputs.sha }}
+    steps:
+      - name: Resolve release tag to commit
+        id: resolve_tag
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
+        with:
+          script: |
+            const tag = context.payload.release.tag_name;
+            const { data: ref } = await github.rest.git.getRef({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              ref: `tags/${tag}`,
+            });
+            core.setOutput("sha", ref.object.sha);
+
+      - name: Verify Validate workflow success
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
+        with:
+          script: |
+            const workflowName = "Validate";
+            const sha = "${{ steps.resolve_tag.outputs.sha }}";
+            const { data: workflows } = await github.rest.actions.listRepoWorkflows({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+            });
+            const workflow = workflows.workflows.find((item) => item.name === workflowName);
+            if (!workflow) {
+              core.setFailed(`Workflow not found: ${workflowName}`);
+              return;
+            }
+
+            const { data: runs } = await github.rest.actions.listWorkflowRuns({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: workflow.id,
+              head_sha: sha,
+              per_page: 100,
+            });
+            const successful = runs.workflow_runs.find(
+              (run) => run.status === "completed" && run.conclusion === "success",
+            );
+            if (!successful) {
+              const summary = runs.workflow_runs
+                .map((run) => `${run.status}/${run.conclusion || "none"} (${run.html_url})`)
+                .join(", ");
+              core.setFailed(
+                `No successful Validate run found for ${sha}. Runs: ${summary || "none"}`,
+              );
+            }
+
   build-release:
+    needs: [validate]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8
