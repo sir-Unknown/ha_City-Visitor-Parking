@@ -26,10 +26,8 @@ Document any migration steps in project docs when needed.
 
 ## 3) Quality scale target
 
-- `manifest.json` MUST declare `quality_scale: "silver"`.
 - Maintain:
   - `custom_components/city_visitor_parking/quality_scale.yaml` (rule-by-rule, implemented/exempt)
-  - `docs/QUALITY_SCALE.md` (human checklist with file references)
 
 If any rule is not implemented, document an explicit exemption and rationale.
 
