@@ -371,5 +371,6 @@ def test_sensor_helpers() -> None:
     assert _timerange_to_dict(window)["start"].endswith("+00:00")
     assert current_or_next_window([window], datetime(2025, 1, 1, 7, 0, tzinfo=UTC))
     assert (
-        current_or_next_window([window], datetime(2025, 1, 1, 9, 0, tzinfo=UTC)) is None
+        current_or_next_window([window], datetime(2025, 1, 1, 9, 0, tzinfo=UTC))
+        is None
     )

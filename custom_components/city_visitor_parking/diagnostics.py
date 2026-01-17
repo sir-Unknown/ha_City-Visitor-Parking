@@ -22,7 +22,7 @@ class _DiagnosticsModule(Protocol):
         self, data: Mapping[str, object], to_redact: Iterable[str]
     ) -> dict[str, object]:
         """Redact sensitive data."""
-        raise NotImplementedError
+        ...
 
 
 _async_redact_data = cast(_DiagnosticsModule, diagnostics_util).async_redact_data

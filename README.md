@@ -5,6 +5,7 @@
 Manage Dutch municipality visitor parking permits from Home Assistant. Start, update, and end sessions, see paid or free status, and keep favorite license plates ready.
 
 ## Screenshots
+
 Visitor parking card
 
 ![Visitor parking card](docs/new_reservation.png)

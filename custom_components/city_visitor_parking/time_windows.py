@@ -33,6 +33,7 @@ def current_or_next_window_with_overrides(
     overrides = options.get(CONF_OPERATING_TIME_OVERRIDES)
     if not isinstance(overrides, Mapping) or not overrides:
         return current_or_next_window(zone_validity, now)
+    overrides = cast(Mapping[str, object], overrides)
 
     windows: list[TimeRange] = []
     # Look ahead one week to apply weekday overrides for upcoming windows.

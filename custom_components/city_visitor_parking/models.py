@@ -4,6 +4,19 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime
+from typing import TYPE_CHECKING
+
+from homeassistant.config_entries import ConfigEntry
+from pycityvisitorparking import Client
+
+if TYPE_CHECKING:
+    from pycityvisitorparking.provider.base import BaseProvider
+
+    from .coordinator import CityVisitorParkingCoordinator
+else:
+
+    class BaseProvider:  # pragma: no cover - runtime typing fallback
+        pass
 
 
 @dataclass(frozen=True)
@@ -79,3 +92,19 @@ class AutoEndState:
 
 
 type OperatingTimeOverrides = dict[str, tuple[tuple[str, str], ...]]
+
+
+@dataclass
+class CityVisitorParkingRuntimeData:
+    """Runtime data stored on the config entry."""
+
+    client: Client
+    provider: BaseProvider
+    provider_config: ProviderConfig
+    coordinator: CityVisitorParkingCoordinator
+    permit_id: str
+    auto_end_state: AutoEndState
+    operating_time_overrides: OperatingTimeOverrides
+
+
+type CityVisitorParkingConfigEntry = ConfigEntry[CityVisitorParkingRuntimeData]

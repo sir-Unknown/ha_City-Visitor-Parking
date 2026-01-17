@@ -23,7 +23,7 @@ else:
 
 from .const import DOMAIN, STATE_CHARGEABLE, STATE_FREE
 from .helpers import get_attr
-from .runtime_data import CityVisitorParkingRuntimeData
+from .models import CityVisitorParkingRuntimeData
 from .time_windows import current_or_next_window_with_overrides
 
 WEBSOCKET_LIST_FAVORITES: Final[str] = "city_visitor_parking/favorites"
