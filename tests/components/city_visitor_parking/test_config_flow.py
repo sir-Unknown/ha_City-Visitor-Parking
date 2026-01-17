@@ -24,7 +24,6 @@ from custom_components.city_visitor_parking.config_flow import (
 from custom_components.city_visitor_parking.const import (
     CONF_API_URL,
     CONF_BASE_URL,
-    CONF_DESCRIPTION,
     CONF_MUNICIPALITY,
     CONF_PERMIT_ID,
     CONF_PROVIDER_ID,
@@ -179,11 +178,11 @@ async def test_config_flow_success(hass, monkeypatch) -> None:
 
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"],
-        {CONF_PERMIT_ID: "PERMIT1", CONF_DESCRIPTION: "Home"},
+        {CONF_PERMIT_ID: "PERMIT1"},
     )
 
     assert result["type"] == "create_entry"
-    assert result["title"] == "Home - PERMIT1"
+    assert result["title"] == "Apeldoorn - PERMIT1"
     assert result["data"][CONF_PERMIT_ID] == "PERMIT1"
 
 
@@ -350,6 +349,18 @@ async def test_reconfigure_missing_entry_aborts(hass) -> None:
     assert result["reason"] == "unknown"
 
 
+async def test_reconfigure_missing_entry_id_aborts(hass) -> None:
+    """Reconfigure should abort when entry ID is missing from context."""
+
+    flow = CityVisitorParkingConfigFlow()
+    flow.hass = hass
+    flow.context = {"source": "reconfigure"}
+
+    result = await flow.async_step_reconfigure()
+    assert result["type"] == "abort"
+    assert result["reason"] == "unknown"
+
+
 async def test_reauth_flow_invalid_auth(hass, monkeypatch, pv_library) -> None:
     """Reauth should surface invalid credentials."""
 
@@ -383,6 +394,18 @@ async def test_reauth_missing_entry_aborts(hass) -> None:
         DOMAIN,
         context={"source": "reauth", "entry_id": "missing"},
     )
+    assert result["type"] == "abort"
+    assert result["reason"] == "unknown"
+
+
+async def test_reauth_missing_entry_id_aborts(hass) -> None:
+    """Reauth should abort when entry ID is missing from context."""
+
+    flow = CityVisitorParkingConfigFlow()
+    flow.hass = hass
+    flow.context = {"source": "reauth"}
+
+    result = await flow.async_step_reauth()
     assert result["type"] == "abort"
     assert result["reason"] == "unknown"
 

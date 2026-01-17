@@ -10,7 +10,6 @@ from custom_components.city_visitor_parking.config_flow import (
 )
 from custom_components.city_visitor_parking.const import (
     CONF_AUTO_END,
-    CONF_DESCRIPTION,
     CONF_MUNICIPALITY,
     CONF_OPERATING_TIME_OVERRIDES,
     CONF_PERMIT_ID,
@@ -32,7 +31,6 @@ async def test_options_flow_save_overrides(hass) -> None:
         result["flow_id"],
         {
             CONF_AUTO_END: True,
-            CONF_DESCRIPTION: "Home",
             "operating_times": {
                 "monday_chargeable_windows": "09:00-13:00, 14:00-17:30",
             },
@@ -46,8 +44,7 @@ async def test_options_flow_save_overrides(hass) -> None:
     assert overrides["mon"][0]["end"] == "13:00"
     assert overrides["mon"][1]["start"] == "14:00"
     assert overrides["mon"][1]["end"] == "17:30"
-    assert entry.data[CONF_DESCRIPTION] == "Home"
-    assert entry.title == "Home - PERMIT1"
+    assert entry.title == "Mock Title"
 
 
 async def test_options_flow_invalid_range(hass) -> None:
@@ -132,42 +129,7 @@ async def test_options_flow_expands_with_overrides(hass) -> None:
     assert result["type"] == "form"
 
 
-async def test_options_flow_clears_description(hass) -> None:
-    """Options flow should clear the description when blank."""
-
-    entry = _create_entry(description="Home", title="Home - PERMIT1")
-    entry.add_to_hass(hass)
-
-    result = await hass.config_entries.options.async_init(entry.entry_id)
-    result = await hass.config_entries.options.async_configure(
-        result["flow_id"],
-        {
-            CONF_AUTO_END: False,
-            CONF_DESCRIPTION: " ",
-            "operating_times": {},
-        },
-    )
-
-    assert result["type"] == "create_entry"
-    assert CONF_DESCRIPTION not in entry.data
-    assert entry.title == "Apeldoorn - PERMIT1"
-
-
-async def test_options_flow_title_fallback(hass) -> None:
-    """Options flow should fall back to the existing title."""
-
-    entry = MockConfigEntry(domain=DOMAIN, data={}, title="Existing title")
-    entry.add_to_hass(hass)
-    flow = CityVisitorParkingOptionsFlow(entry)
-    flow.hass = hass
-
-    flow._update_description("New description")
-
-    assert entry.title == "Existing title"
-
-
 def _create_entry(
-    description: str | None = None,
     title: str | None = None,
     options: dict[str, object] | None = None,
 ):
@@ -180,8 +142,6 @@ def _create_entry(
         CONF_USERNAME: "user",
         CONF_PASSWORD: "pass",
     }
-    if description is not None:
-        data[CONF_DESCRIPTION] = description
 
     return MockConfigEntry(
         domain=DOMAIN,

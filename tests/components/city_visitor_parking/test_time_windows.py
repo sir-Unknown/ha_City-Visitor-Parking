@@ -11,7 +11,7 @@ from custom_components.city_visitor_parking.const import (
 )
 from custom_components.city_visitor_parking.models import TimeRange
 from custom_components.city_visitor_parking.time_windows import (
-    _current_or_next_window_with_overrides,
+    current_or_next_window_with_overrides,
 )
 
 
@@ -29,7 +29,7 @@ def test_current_or_next_window_with_overrides_prefers_override() -> None:
         CONF_OPERATING_TIME_OVERRIDES: {"mon": [{"start": "10:00", "end": "12:00"}]}
     }
 
-    window = _current_or_next_window_with_overrides(zone_validity, options, now)
+    window = current_or_next_window_with_overrides(zone_validity, options, now)
 
     local_now = dt_util.as_local(now)
     expected_start = dt_util.as_utc(
@@ -54,7 +54,7 @@ def test_current_or_next_window_with_overrides_fallback() -> None:
         )
     ]
 
-    window = _current_or_next_window_with_overrides(
+    window = current_or_next_window_with_overrides(
         zone_validity, {CONF_OPERATING_TIME_OVERRIDES: {}}, now
     )
 
@@ -70,6 +70,6 @@ def test_current_or_next_window_with_overrides_no_windows() -> None:
         CONF_OPERATING_TIME_OVERRIDES: {"mon": [{"start": "12:00", "end": "11:00"}]}
     }
 
-    window = _current_or_next_window_with_overrides(zone_validity, options, now)
+    window = current_or_next_window_with_overrides(zone_validity, options, now)
 
     assert window is None

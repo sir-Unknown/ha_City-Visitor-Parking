@@ -14,7 +14,9 @@ from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from homeassistant.helpers import device_registry as dr
 from pycityvisitorparking import AuthError, NetworkError, ProviderError, ValidationError
 from pycityvisitorparking.exceptions import PyCityVisitorParkingError
-from pytest_homeassistant_custom_component.common import MockConfigEntry
+from pytest_homeassistant_custom_component.common import (  # type: ignore[import-untyped]
+    MockConfigEntry,
+)
 
 from custom_components.city_visitor_parking.const import (
     ATTR_END_TIME,
@@ -27,12 +29,14 @@ from custom_components.city_visitor_parking.const import (
 )
 from custom_components.city_visitor_parking.models import (
     AutoEndState,
-    CityVisitorParkingRuntimeData,
     CoordinatorData,
     Favorite,
     ProviderConfig,
     Reservation,
     ZoneAvailability,
+)
+from custom_components.city_visitor_parking.runtime_data import (
+    CityVisitorParkingRuntimeData,
 )
 from custom_components.city_visitor_parking.services import (
     SERVICE_ADD_FAVORITE,

@@ -453,7 +453,6 @@ rules:
   - `ConfigEntryAuthFailed`: Authentication problems
   - `ConfigEntryError`: Permanent setup issues
 - **Try/Catch Best Practices**:
-
   - Only wrap code that can throw exceptions
   - Keep try blocks minimal - process data after the try/catch
   - **Avoid bare exceptions** except in specific cases:

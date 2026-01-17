@@ -24,13 +24,36 @@ More screenshots: [docs/screenshots.md](docs/screenshots.md)
 - PyPI: [pycityvisitorparking](https://pypi.org/project/pycityvisitorparking/)
 
 Quick links:
+
 - Lovelace cards: [docs/cards.md](docs/cards.md)
 - Services: [docs/services.md](docs/services.md)
 - Troubleshooting: [docs/troubleshooting.md](docs/troubleshooting.md)
 - Privacy: [docs/privacy.md](docs/privacy.md)
 - Examples: [docs/examples/automations.md](docs/examples/automations.md)
 
+## Installation
 
+### Install with HACS
+
+1. Add this repository in HACS as a custom repository (category: Integration).
+2. Install **City Visitor Parking**.
+3. Restart Home Assistant.
+
+### Install manually
+
+1. Copy `custom_components/city_visitor_parking/` to your Home Assistant `custom_components/` folder.
+2. Restart Home Assistant.
+
+Minimum supported Home Assistant version is defined in `custom_components/city_visitor_parking/manifest.json`.
+
+## Configuration
+
+1. Go to **Settings** > **Devices & services**.
+2. Select **Add integration**.
+3. Search for **City Visitor Parking**.
+4. Select your municipality, sign in, and select your permit.
+
+To add multiple permits, add the integration multiple times.
 
 ## Use cases
 
@@ -45,9 +68,11 @@ Quick links:
 This integration connects to municipality visitor parking portals (service providers).
 
 Supported providers are defined in:
+
 - `custom_components/city_visitor_parking/providers.yaml`
 
 Supported municipalities (from `providers.yaml`):
+
 - Apeldoorn
 - Bloemendaal
 - Delft
@@ -125,6 +150,7 @@ The exact polling interval is defined in the integration and may vary by provide
 Entities are created per config entry. Find them via **Settings** > **Devices & services** > **City Visitor Parking** > your entry.
 
 Typical sensors:
+
 - Active sessions
 - Remaining balance
 - Paid or free (including next change time)
@@ -143,6 +169,7 @@ title: Visitor parking
 ```
 
 If you use YAML dashboards, add these as `module` resources:
+
 - `/city_visitor_parking/city-visitor-parking-card.js`
 - `/city_visitor_parking/city-visitor-parking-active-card.js`
 
@@ -189,6 +216,7 @@ See: [docs/troubleshooting.md](docs/troubleshooting.md)
 ## Support
 
 When opening an issue, include:
+
 - Home Assistant version
 - Integration version
 - Municipality and permit type (no credentials)

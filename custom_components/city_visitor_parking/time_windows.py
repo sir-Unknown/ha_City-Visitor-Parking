@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from datetime import datetime, time, timedelta
+from typing import cast
 
 from homeassistant.util import dt as dt_util
 
@@ -12,9 +13,7 @@ from .helpers import normalize_override_windows
 from .models import TimeRange
 
 
-def _current_or_next_window(
-    windows: list[TimeRange], now: datetime
-) -> TimeRange | None:
+def current_or_next_window(windows: list[TimeRange], now: datetime) -> TimeRange | None:
     """Return the current or next chargeable window."""
 
     for window in sorted(windows, key=lambda item: item.start):
@@ -24,31 +23,31 @@ def _current_or_next_window(
     return None
 
 
-def _current_or_next_window_with_overrides(
+def current_or_next_window_with_overrides(
     zone_validity: list[TimeRange],
     options: Mapping[str, object],
     now: datetime,
 ) -> TimeRange | None:
     """Return the current or next chargeable window, honoring overrides."""
 
-    overrides = options.get(CONF_OPERATING_TIME_OVERRIDES, {})
+    overrides = options.get(CONF_OPERATING_TIME_OVERRIDES)
     if not isinstance(overrides, Mapping) or not overrides:
-        return _current_or_next_window(zone_validity, now)
+        return current_or_next_window(zone_validity, now)
 
     windows: list[TimeRange] = []
     # Look ahead one week to apply weekday overrides for upcoming windows.
     for offset in range(7):
         windows.extend(
-            _windows_for_today(zone_validity, options, now + timedelta(days=offset))
+            windows_for_today(zone_validity, options, now + timedelta(days=offset))
         )
 
     if not windows:
-        return _current_or_next_window(zone_validity, now)
+        return current_or_next_window(zone_validity, now)
 
-    return _current_or_next_window(windows, now)
+    return current_or_next_window(windows, now)
 
 
-def _windows_for_today(
+def windows_for_today(
     zone_validity: list[TimeRange],
     options: Mapping[str, object],
     now: datetime,
@@ -59,9 +58,10 @@ def _windows_for_today(
     local_date = local_now.date()
     local_day = WEEKDAY_KEYS[local_now.weekday()]
 
-    overrides = options.get(CONF_OPERATING_TIME_OVERRIDES, {})
+    overrides = options.get(CONF_OPERATING_TIME_OVERRIDES)
     if not isinstance(overrides, Mapping):
         overrides = {}
+    overrides = cast(Mapping[str, object], overrides)
     override = overrides.get(local_day)
     override_windows = normalize_override_windows(override)
     if override_windows:

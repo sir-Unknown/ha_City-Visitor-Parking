@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, time, timedelta
 from types import SimpleNamespace
+from typing import Any, cast
 from unittest.mock import AsyncMock
 
 import pytest
@@ -20,6 +21,10 @@ from custom_components.city_visitor_parking.const import (
 )
 from custom_components.city_visitor_parking.coordinator import (
     CityVisitorParkingCoordinator,
+    Permit,
+    ProviderFavorite,
+    ProviderProtocol,
+    ProviderReservation,
     _as_utc_datetime,
     _compute_zone_availability,
     _normalize_favorites,
@@ -42,7 +47,7 @@ from custom_components.city_visitor_parking.models import (
 )
 from custom_components.city_visitor_parking.time_windows import (
     _as_time,
-    _windows_for_today,
+    windows_for_today,
 )
 
 
@@ -201,33 +206,50 @@ async def test_auto_end_handles_provider_failure(hass, pv_library) -> None:
     provider.end_reservation.assert_awaited_once()
 
 
+async def test_provider_protocol_raises() -> None:
+    """Provider protocol defaults should raise when called."""
+
+    protocol = cast(Any, ProviderProtocol)
+    with pytest.raises(NotImplementedError):
+        await protocol.get_permit(object())
+    with pytest.raises(NotImplementedError):
+        await protocol.list_reservations(object())
+    with pytest.raises(NotImplementedError):
+        await protocol.list_favorites(object())
+    with pytest.raises(NotImplementedError):
+        await protocol.end_reservation(object(), "res", datetime.now(UTC))
+
+
 def test_normalize_helpers() -> None:
     """Normalization helpers should handle invalid input."""
 
-    assert _normalize_remaining_minutes({"remaining_balance": None}) == 0
-    assert _normalize_remaining_minutes({"remaining_balance": "bad"}) == 0
-    assert _normalize_remaining_minutes({"remaining_balance": "-5"}) == 0
-    assert _normalize_remaining_minutes({"remaining_balance": 15}) == 15
-    assert _normalize_remaining_minutes({"remaining_balance": []}) == 0
+    assert _normalize_remaining_minutes(cast(Permit, {"remaining_balance": None})) == 0
+    assert _normalize_remaining_minutes(cast(Permit, {"remaining_balance": "bad"})) == 0
+    assert _normalize_remaining_minutes(cast(Permit, {"remaining_balance": "-5"})) == 0
+    assert _normalize_remaining_minutes(cast(Permit, {"remaining_balance": 15})) == 15
+    assert _normalize_remaining_minutes(cast(Permit, {"remaining_balance": []})) == 0
 
     now = datetime(2025, 1, 1, 8, 0, tzinfo=UTC)
     validity = _normalize_zone_validity(
-        {
-            "zone_validity": [
-                {
-                    "start_time": now.isoformat(),
-                    "end_time": (now + timedelta(hours=1)).isoformat(),
-                },
-                {
-                    "start_time": now.isoformat(),
-                    "end_time": now.isoformat(),
-                },
-                {"start_time": now.isoformat()},
-            ]
-        }
+        cast(
+            Permit,
+            {
+                "zone_validity": [
+                    {
+                        "start_time": now.isoformat(),
+                        "end_time": (now + timedelta(hours=1)).isoformat(),
+                    },
+                    {
+                        "start_time": now.isoformat(),
+                        "end_time": now.isoformat(),
+                    },
+                    {"start_time": now.isoformat()},
+                ]
+            },
+        )
     )
     assert len(validity) == 1
-    assert _normalize_zone_validity({"zone_validity": {}}) == []
+    assert _normalize_zone_validity(cast(Permit, {"zone_validity": {}})) == []
 
     parsed = _as_utc_datetime("2025-01-01T10:00:00+00:00")
     assert parsed.tzinfo is not None
@@ -242,22 +264,32 @@ def test_normalize_helpers() -> None:
     with pytest.raises(ValueError):
         _as_utc_datetime(123)
 
-    reservation = _normalize_reservations([{"id": "res1"}])
+    reservation = _normalize_reservations([cast(ProviderReservation, {"id": "res1"})])
     assert reservation == []
     invalid_reservation = _normalize_reservations(
         [
-            {
-                "id": "res1",
-                "start_time": now.isoformat(),
-                "end_time": (now - timedelta(minutes=5)).isoformat(),
-            }
+            cast(
+                ProviderReservation,
+                {
+                    "id": "res1",
+                    "start_time": now.isoformat(),
+                    "end_time": (now - timedelta(minutes=5)).isoformat(),
+                },
+            )
         ]
     )
     assert invalid_reservation == []
-    favorites = _normalize_favorites([{"license_plate": "AA1234"}])
+    favorites = _normalize_favorites(
+        [cast(ProviderFavorite, {"license_plate": "AA1234"})]
+    )
     assert favorites == []
     favorites = _normalize_favorites(
-        [{"id": "fav1", "license_plate": "AA1234", "name": "Ada"}]
+        [
+            cast(
+                ProviderFavorite,
+                {"id": "fav1", "license_plate": "AA1234", "name": "Ada"},
+            )
+        ]
     )
     assert favorites == [
         Favorite(favorite_id="fav1", license_plate="AA1234", name="Ada")
@@ -388,7 +420,7 @@ def test_windows_for_today_with_overrides() -> None:
 
     now = datetime(2025, 1, 6, 9, 0, tzinfo=UTC)
     overrides = {"mon": [{"start": "10:00", "end": "12:00"}]}
-    windows = _windows_for_today([], {CONF_OPERATING_TIME_OVERRIDES: overrides}, now)
+    windows = windows_for_today([], {CONF_OPERATING_TIME_OVERRIDES: overrides}, now)
 
     assert len(windows) == 1
     assert windows[0].start < windows[0].end
@@ -406,7 +438,7 @@ def test_windows_for_today_fallback() -> None:
         start=datetime(2025, 1, 5, 0, 0, tzinfo=UTC),
         end=datetime(2025, 1, 5, 23, 0, tzinfo=UTC),
     )
-    windows = _windows_for_today(
+    windows = windows_for_today(
         [window, out_of_range], {CONF_OPERATING_TIME_OVERRIDES: {}}, now
     )
 
@@ -447,12 +479,12 @@ def test_windows_for_today_invalid_overrides() -> None:
         start=dt_util.as_utc(local_start),
         end=dt_util.as_utc(local_start + timedelta(hours=1)),
     )
-    windows = _windows_for_today([window], {CONF_OPERATING_TIME_OVERRIDES: "bad"}, now)
+    windows = windows_for_today([window], {CONF_OPERATING_TIME_OVERRIDES: "bad"}, now)
 
     assert windows
 
     overrides = {"mon": [{"start": "10:00", "end": "09:00"}]}
-    windows = _windows_for_today(
+    windows = windows_for_today(
         [window], {CONF_OPERATING_TIME_OVERRIDES: overrides}, now
     )
     assert windows

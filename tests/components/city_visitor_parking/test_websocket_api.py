@@ -4,10 +4,12 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, time, timedelta
 from types import SimpleNamespace
+from typing import cast
 from unittest.mock import AsyncMock
 
 from freezegun import freeze_time
 from homeassistant import config_entries
+from homeassistant.components.websocket_api.connection import ActiveConnection
 from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
 from homeassistant.util import dt as dt_util
 from pycityvisitorparking.exceptions import PyCityVisitorParkingError
@@ -24,11 +26,13 @@ from custom_components.city_visitor_parking.const import (
 )
 from custom_components.city_visitor_parking.models import (
     AutoEndState,
-    CityVisitorParkingRuntimeData,
     CoordinatorData,
     ProviderConfig,
     TimeRange,
     ZoneAvailability,
+)
+from custom_components.city_visitor_parking.runtime_data import (
+    CityVisitorParkingRuntimeData,
 )
 from custom_components.city_visitor_parking.websocket_api import (
     _as_utc_iso,
@@ -72,7 +76,8 @@ async def test_ws_list_favorites_success(hass) -> None:
     ]
     entry.runtime_data = _runtime(provider, None)
 
-    connection = _FakeConnection()
+    raw_connection = _FakeConnection()
+    connection = cast(ActiveConnection, raw_connection)
     _ws_list_favorites(
         hass,
         connection,
@@ -80,15 +85,18 @@ async def test_ws_list_favorites_success(hass) -> None:
     )
     await hass.async_block_till_done()
 
-    assert connection.results[0]["result"]["favorites"][0]["id"] == "fav1"
-    assert connection.results[0]["result"]["favorites"][0]["license_plate"] == "AB-1234"
-    assert connection.results[0]["result"]["favorites"][1]["license_plate"] == "CD-5678"
+    result = _first_result(raw_connection)
+    favorites = cast(list[dict[str, object]], result["favorites"])
+    assert favorites[0]["id"] == "fav1"
+    assert favorites[0]["license_plate"] == "AB-1234"
+    assert favorites[1]["license_plate"] == "CD-5678"
 
 
 async def test_ws_list_favorites_invalid_target(hass) -> None:
     """Websocket should reject invalid targets."""
 
-    connection = _FakeConnection()
+    raw_connection = _FakeConnection()
+    connection = cast(ActiveConnection, raw_connection)
     _ws_list_favorites(
         hass,
         connection,
@@ -96,13 +104,15 @@ async def test_ws_list_favorites_invalid_target(hass) -> None:
     )
     await hass.async_block_till_done()
 
-    assert connection.errors[0]["code"] == "invalid_target"
+    error = _first_error(raw_connection)
+    assert error["code"] == "invalid_target"
 
 
 async def test_ws_get_status_invalid_target(hass) -> None:
     """Websocket should reject invalid targets for status."""
 
-    connection = _FakeConnection()
+    raw_connection = _FakeConnection()
+    connection = cast(ActiveConnection, raw_connection)
     _ws_get_status(
         hass,
         connection,
@@ -110,7 +120,8 @@ async def test_ws_get_status_invalid_target(hass) -> None:
     )
     await hass.async_block_till_done()
 
-    assert connection.errors[0]["code"] == "invalid_target"
+    error = _first_error(raw_connection)
+    assert error["code"] == "invalid_target"
 
 
 async def test_ws_list_favorites_provider_error(hass) -> None:
@@ -124,7 +135,8 @@ async def test_ws_list_favorites_provider_error(hass) -> None:
     provider.list_favorites.side_effect = PyCityVisitorParkingError
     entry.runtime_data = _runtime(provider, None)
 
-    connection = _FakeConnection()
+    raw_connection = _FakeConnection()
+    connection = cast(ActiveConnection, raw_connection)
     _ws_list_favorites(
         hass,
         connection,
@@ -132,7 +144,8 @@ async def test_ws_list_favorites_provider_error(hass) -> None:
     )
     await hass.async_block_till_done()
 
-    assert connection.errors[0]["code"] == "favorites_failed"
+    error = _first_error(raw_connection)
+    assert error["code"] == "favorites_failed"
 
 
 async def test_ws_get_status_current_window(hass) -> None:
@@ -162,7 +175,8 @@ async def test_ws_get_status_current_window(hass) -> None:
     )
     entry.runtime_data = _runtime(AsyncMock(), data)
 
-    connection = _FakeConnection()
+    raw_connection = _FakeConnection()
+    connection = cast(ActiveConnection, raw_connection)
     with freeze_time(now):
         _ws_get_status(
             hass,
@@ -171,7 +185,7 @@ async def test_ws_get_status_current_window(hass) -> None:
         )
         await hass.async_block_till_done()
 
-    response = connection.results[0]["result"]
+    response = _first_result(raw_connection)
     assert response["state"] == STATE_CHARGEABLE
     assert response["window_kind"] == "current"
     assert response["window_start"] == dt_util.as_utc(window.start).isoformat()
@@ -205,7 +219,8 @@ async def test_ws_get_status_next_window_override(hass) -> None:
     )
     entry.runtime_data = _runtime(AsyncMock(), data)
 
-    connection = _FakeConnection()
+    raw_connection = _FakeConnection()
+    connection = cast(ActiveConnection, raw_connection)
     with freeze_time(now):
         _ws_get_status(
             hass,
@@ -214,7 +229,7 @@ async def test_ws_get_status_next_window_override(hass) -> None:
         )
         await hass.async_block_till_done()
 
-    response = connection.results[0]["result"]
+    response = _first_result(raw_connection)
     assert response["state"] == STATE_FREE
     assert response["window_kind"] == "next"
     local_now = dt_util.as_local(now)
@@ -238,7 +253,8 @@ async def test_ws_get_status_failure_response(hass) -> None:
     entry.mock_state(hass, config_entries.ConfigEntryState.LOADED)
     entry.runtime_data = _runtime(AsyncMock(), None)
 
-    connection = _FakeConnection()
+    raw_connection = _FakeConnection()
+    connection = cast(ActiveConnection, raw_connection)
     _ws_get_status(
         hass,
         connection,
@@ -246,13 +262,26 @@ async def test_ws_get_status_failure_response(hass) -> None:
     )
     await hass.async_block_till_done()
 
-    assert connection.errors[0]["code"] == "status_failed"
+    error = _first_error(raw_connection)
+    assert error["code"] == "status_failed"
 
 
 def test_ws_as_utc_iso_none() -> None:
     """UTC formatting should return None for missing values."""
 
     assert _as_utc_iso(None) is None
+
+
+def _first_result(connection: _FakeConnection) -> dict[str, object]:
+    """Return the first websocket result payload."""
+
+    return cast(dict[str, object], connection.results[0]["result"])
+
+
+def _first_error(connection: _FakeConnection) -> dict[str, object]:
+    """Return the first websocket error payload."""
+
+    return cast(dict[str, object], connection.errors[0])
 
 
 def _create_entry(options: dict[str, object] | None = None) -> MockConfigEntry:

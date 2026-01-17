@@ -11,6 +11,7 @@ Please report security vulnerabilities through GitHub Security Advisories for
 this repository. Do not open public issues or discussions.
 
 Include as much detail as you can:
+
 - A clear description of the issue and potential impact
 - Steps to reproduce
 - Affected versions

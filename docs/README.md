@@ -17,6 +17,7 @@ City Visitor Parking lets you manage visitor parking permits from Dutch municipa
 This integration connects to municipality visitor parking portals (service providers).
 
 Supported providers are defined in:
+
 - `custom_components/city_visitor_parking/providers.yaml`
 
 ## Supported functionality

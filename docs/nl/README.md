@@ -17,6 +17,7 @@ City Visitor Parking laat je bezoekersparkeren van Nederlandse gemeenten beheren
 Deze integratie koppelt met bezoekersparkeerportalen van gemeenten (providers).
 
 Ondersteunde providers staan in:
+
 - `custom_components/city_visitor_parking/providers.yaml`
 
 ## Supported functionality

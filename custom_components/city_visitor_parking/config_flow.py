@@ -7,7 +7,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import time
 from importlib import resources
-from typing import Final, cast
+from typing import Final, Protocol, cast
 
 import voluptuous as vol
 import yaml
@@ -27,7 +27,6 @@ from .const import (
     CONF_API_URL,
     CONF_AUTO_END,
     CONF_BASE_URL,
-    CONF_DESCRIPTION,
     CONF_MUNICIPALITY,
     CONF_OPERATING_TIME_OVERRIDES,
     CONF_PERMIT_ID,
@@ -40,6 +39,19 @@ from .models import ProviderConfig
 
 OTHER_OPTION: Final[str] = "other"
 SECTION_OPERATING_TIMES: Final[str] = "operating_times"
+
+
+class _SelectorModule(Protocol):
+    """Protocol for selector module helpers."""
+
+    def selector(
+        self, config: Mapping[str, object]
+    ) -> selector.Selector[Mapping[str, object]]:
+        """Instantiate a selector."""
+        raise NotImplementedError
+
+
+SELECTOR = cast(_SelectorModule, selector).selector
 
 WEEKDAY_LABELS: Final[dict[str, str]] = {
     "mon": "monday",
@@ -95,8 +107,8 @@ class CityVisitorParkingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if user_input is None:
             schema = vol.Schema(
                 {
-                    vol.Required(CONF_MUNICIPALITY): selector.SelectSelector(
-                        selector.SelectSelectorConfig(options=options)
+                    vol.Required(CONF_MUNICIPALITY): SELECTOR(
+                        {"select": {"options": options}}
                     )
                 }
             )
@@ -137,8 +149,8 @@ class CityVisitorParkingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if user_input is None or errors:
             schema = vol.Schema(
                 {
-                    vol.Required(CONF_PROVIDER_ID): selector.SelectSelector(
-                        selector.SelectSelectorConfig(options=provider_options)
+                    vol.Required(CONF_PROVIDER_ID): SELECTOR(
+                        {"select": {"options": provider_options}}
                     ),
                     vol.Required(CONF_MUNICIPALITY): cv.string,
                     vol.Optional(CONF_BASE_URL): cv.string,
@@ -176,16 +188,14 @@ class CityVisitorParkingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             ]
             schema = vol.Schema(
                 {
-                    vol.Required(CONF_PERMIT_ID): selector.SelectSelector(
-                        selector.SelectSelectorConfig(options=options)
+                    vol.Required(CONF_PERMIT_ID): SELECTOR(
+                        {"select": {"options": options}}
                     ),
-                    vol.Optional(CONF_DESCRIPTION): cv.string,
                 }
             )
             return self.async_show_form(step_id="permit", data_schema=schema)
 
         permit_id = cast(str, user_input[CONF_PERMIT_ID])
-        description = cast(str | None, user_input.get(CONF_DESCRIPTION))
 
         if self._provider_config is None:
             return self.async_abort(reason="unknown")
@@ -194,11 +204,7 @@ class CityVisitorParkingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         await self.async_set_unique_id(unique_id)
         self._abort_if_unique_id_configured()
 
-        title = (
-            f"{description} - {permit_id}"
-            if description
-            else f"{self._provider_config.municipality_name} - {permit_id}"
-        )
+        title = f"{self._provider_config.municipality_name} - {permit_id}"
 
         data = {
             CONF_PROVIDER_ID: self._provider_config.provider_id,
@@ -208,8 +214,6 @@ class CityVisitorParkingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             CONF_PERMIT_ID: permit_id,
             **self._credentials,
         }
-        if description:
-            data[CONF_DESCRIPTION] = description
 
         return self.async_create_entry(title=title, data=data)
 
@@ -218,7 +222,10 @@ class CityVisitorParkingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     ) -> config_entries.ConfigFlowResult:
         """Handle reauthentication."""
 
-        entry = self.hass.config_entries.async_get_entry(self.context["entry_id"])
+        entry_id = self.context.get("entry_id")
+        if not isinstance(entry_id, str):
+            return self.async_abort(reason="unknown")
+        entry = self.hass.config_entries.async_get_entry(entry_id)
         if entry is None:
             return self.async_abort(reason="unknown")
 
@@ -237,7 +244,10 @@ class CityVisitorParkingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     ) -> config_entries.ConfigFlowResult:
         """Handle reconfiguration."""
 
-        entry = self.hass.config_entries.async_get_entry(self.context["entry_id"])
+        entry_id = self.context.get("entry_id")
+        if not isinstance(entry_id, str):
+            return self.async_abort(reason="unknown")
+        entry = self.hass.config_entries.async_get_entry(entry_id)
         if entry is None:
             return self.async_abort(reason="unknown")
 
@@ -426,14 +436,16 @@ class CityVisitorParkingOptionsFlow(config_entries.OptionsFlow):
 
         errors: dict[str, str] = {}
         if user_input is not None:
-            section_input = user_input.get(SECTION_OPERATING_TIMES, {})
+            section_input = user_input.get(SECTION_OPERATING_TIMES)
             if not isinstance(section_input, Mapping):
                 section_input = {}
-            overrides = _build_overrides(section_input, errors)
+            overrides = _build_overrides(
+                cast(Mapping[str, object], section_input),
+                errors,
+            )
             if errors:
                 return self._show_form(user_input, errors)
 
-            self._update_description(user_input.get(CONF_DESCRIPTION))
             return self.async_create_entry(
                 title="",
                 data={
@@ -452,15 +464,12 @@ class CityVisitorParkingOptionsFlow(config_entries.OptionsFlow):
         overrides = self._config_entry.options.get(CONF_OPERATING_TIME_OVERRIDES, {})
         if not isinstance(overrides, Mapping):
             overrides = {}
+        overrides = cast(Mapping[str, object], overrides)
         defaults = {CONF_AUTO_END: self._config_entry.options.get(CONF_AUTO_END, False)}
-        description_default = self._config_entry.data.get(CONF_DESCRIPTION, "")
         if user_input is not None:
             raw_auto_end = user_input.get(CONF_AUTO_END)
             if isinstance(raw_auto_end, bool):
                 defaults[CONF_AUTO_END] = raw_auto_end
-            raw_description = user_input.get(CONF_DESCRIPTION)
-            if isinstance(raw_description, str):
-                description_default = raw_description
 
         expanded = False
         for day in WEEKDAY_KEYS:
@@ -470,6 +479,7 @@ class CityVisitorParkingOptionsFlow(config_entries.OptionsFlow):
         if not expanded and user_input is not None:
             section_input = user_input.get(SECTION_OPERATING_TIMES, {})
             if isinstance(section_input, Mapping):
+                section_input = cast(Mapping[str, object], section_input)
                 for day in WEEKDAY_KEYS:
                     raw_value = section_input.get(_day_windows_key(day))
                     if isinstance(raw_value, str) and raw_value.strip():
@@ -478,20 +488,22 @@ class CityVisitorParkingOptionsFlow(config_entries.OptionsFlow):
 
         schema: dict[object, object] = {
             vol.Required(CONF_AUTO_END, default=defaults[CONF_AUTO_END]): cv.boolean,
-            vol.Optional(CONF_DESCRIPTION, default=description_default): cv.string,
         }
 
         day_schema: dict[object, object] = {}
         for day in WEEKDAY_KEYS:
             day_key = _day_windows_key(day)
-            default_windows = _format_override_windows(overrides.get(day))
+            default_windows: str = _format_override_windows(overrides.get(day))
             if user_input is not None:
                 section_input = user_input.get(SECTION_OPERATING_TIMES, {})
-                if isinstance(section_input, dict):
-                    default_windows = section_input.get(day_key, default_windows)
+                if isinstance(section_input, Mapping):
+                    section_input = cast(Mapping[str, object], section_input)
+                    raw_value = section_input.get(day_key, default_windows)
+                    if isinstance(raw_value, str):
+                        default_windows = raw_value
 
-            day_schema[vol.Optional(day_key, default=default_windows)] = (
-                selector.TextSelector()
+            day_schema[vol.Optional(day_key, default=default_windows)] = SELECTOR(
+                {"text": {}}
             )
 
         schema[vol.Required(SECTION_OPERATING_TIMES)] = section(
@@ -500,33 +512,6 @@ class CityVisitorParkingOptionsFlow(config_entries.OptionsFlow):
 
         return self.async_show_form(
             step_id="init", data_schema=vol.Schema(schema), errors=errors
-        )
-
-    def _update_description(self, raw_description: object) -> None:
-        """Update the config entry description and title."""
-
-        description = str(raw_description).strip() if raw_description else ""
-        data = dict(self._config_entry.data)
-        if description:
-            data[CONF_DESCRIPTION] = description
-        else:
-            data.pop(CONF_DESCRIPTION, None)
-
-        permit_id = data.get(CONF_PERMIT_ID)
-        municipality = data.get(CONF_MUNICIPALITY)
-        if permit_id and municipality:
-            title = (
-                f"{description} - {permit_id}"
-                if description
-                else f"{municipality} - {permit_id}"
-            )
-        else:
-            title = self._config_entry.title
-
-        self.hass.config_entries.async_update_entry(
-            self._config_entry,
-            data=data,
-            title=title,
         )
 
 
@@ -568,7 +553,7 @@ def _load_providers_sync() -> dict[str, ProviderConfig]:
         .joinpath("providers.yaml")
         .open("r", encoding="utf-8") as file
     ):
-        data = yaml.safe_load(file) or {}
+        data = cast(dict[str, dict[str, object]], yaml.safe_load(file) or {})
 
     providers: dict[str, ProviderConfig] = {}
     for key, config in data.items():

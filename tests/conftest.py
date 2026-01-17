@@ -5,7 +5,7 @@ from __future__ import annotations
 import sys
 from dataclasses import dataclass
 from types import ModuleType
-from typing import Any
+from typing import Any, cast
 
 import pytest
 
@@ -104,7 +104,7 @@ class Provider:
         """Stub remove favorite."""
 
 
-module = ModuleType("pycityvisitorparking")
+module = cast(Any, ModuleType("pycityvisitorparking"))
 module.AuthError = AuthError
 module.NetworkError = NetworkError
 module.ProviderError = ProviderError
@@ -112,7 +112,7 @@ module.ValidationError = ValidationError
 module.ProviderInfo = ProviderInfo
 module.Client = Client
 
-exceptions_module = ModuleType("pycityvisitorparking.exceptions")
+exceptions_module = cast(Any, ModuleType("pycityvisitorparking.exceptions"))
 exceptions_module.PyCityVisitorParkingError = PyCityVisitorParkingError
 exceptions_module.AuthError = AuthError
 exceptions_module.NetworkError = NetworkError

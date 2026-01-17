@@ -23,8 +23,8 @@ else:
 
 from .const import DOMAIN, STATE_CHARGEABLE, STATE_FREE
 from .helpers import get_attr
-from .models import CityVisitorParkingRuntimeData
-from .time_windows import _current_or_next_window_with_overrides
+from .runtime_data import CityVisitorParkingRuntimeData
+from .time_windows import current_or_next_window_with_overrides
 
 WEBSOCKET_LIST_FAVORITES: Final[str] = "city_visitor_parking/favorites"
 WEBSOCKET_GET_STATUS: Final[str] = "city_visitor_parking/status"
@@ -120,7 +120,7 @@ async def _ws_get_status(
         state = (
             STATE_CHARGEABLE if data.zone_availability.is_chargeable_now else STATE_FREE
         )
-        window = _current_or_next_window_with_overrides(
+        window = current_or_next_window_with_overrides(
             data.zone_validity,
             entry.options,
             now,
