@@ -10,7 +10,7 @@ from homeassistant.helpers.update_coordinator import BaseCoordinatorEntity
 
 from .const import CONF_MUNICIPALITY, CONF_PERMIT_ID, DOMAIN
 from .coordinator import CityVisitorParkingCoordinator
-from .models import CityVisitorParkingConfigEntry
+from .runtime_data import CityVisitorParkingConfigEntry
 
 
 class CityVisitorParkingEntity(

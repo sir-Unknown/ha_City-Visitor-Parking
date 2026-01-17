@@ -13,7 +13,8 @@ from homeassistant.util import dt as dt_util
 from .const import STATE_CHARGEABLE, STATE_FREE
 from .coordinator import CityVisitorParkingCoordinator
 from .entity import CityVisitorParkingEntity
-from .models import CityVisitorParkingConfigEntry, CoordinatorData, TimeRange
+from .models import CoordinatorData, TimeRange
+from .runtime_data import CityVisitorParkingConfigEntry
 from .time_windows import (
     current_or_next_window,
     current_or_next_window_with_overrides,

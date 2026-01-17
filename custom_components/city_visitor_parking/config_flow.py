@@ -48,7 +48,7 @@ class _SelectorModule(Protocol):
         self, config: Mapping[str, object]
     ) -> selector.Selector[Mapping[str, object]]:
         """Instantiate a selector."""
-        ...
+        raise NotImplementedError
 
 
 SELECTOR = cast(_SelectorModule, selector).selector

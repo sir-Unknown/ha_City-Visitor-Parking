@@ -45,13 +45,8 @@ from .const import (
 )
 from .coordinator import CityVisitorParkingCoordinator
 from .helpers import normalize_override_windows
-from .models import (
-    AutoEndState,
-    CityVisitorParkingConfigEntry,
-    CityVisitorParkingRuntimeData,
-    OperatingTimeOverrides,
-    ProviderConfig,
-)
+from .models import AutoEndState, OperatingTimeOverrides, ProviderConfig
+from .runtime_data import CityVisitorParkingConfigEntry, CityVisitorParkingRuntimeData
 from .services import async_setup_services
 from .websocket_api import async_setup_websocket
 
@@ -65,7 +60,7 @@ class _ConfigValidation(Protocol):
         self, domain: str
     ) -> Callable[[ConfigType], ConfigType]:
         """Return a config schema for config entry only integrations."""
-        ...
+        raise NotImplementedError
 
 
 class _ResourceStorage(Protocol):
@@ -75,21 +70,21 @@ class _ResourceStorage(Protocol):
 
     async def async_load(self) -> None:
         """Load stored resources."""
-        ...
+        raise NotImplementedError
 
     def async_items(self) -> list[dict[str, object]]:
         """Return stored resource items."""
-        ...
+        raise NotImplementedError
 
     async def async_update_item(
         self, item_id: str, updates: dict[str, object]
     ) -> dict[str, object]:
         """Update a stored resource item."""
-        ...
+        raise NotImplementedError
 
     async def async_create_item(self, data: dict[str, object]) -> dict[str, object]:
         """Create a stored resource item."""
-        ...
+        raise NotImplementedError
 
 
 _config_entry_only_schema = cast(_ConfigValidation, cv).config_entry_only_config_schema

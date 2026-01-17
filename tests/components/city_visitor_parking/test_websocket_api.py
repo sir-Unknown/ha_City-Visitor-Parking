@@ -26,11 +26,13 @@ from custom_components.city_visitor_parking.const import (
 )
 from custom_components.city_visitor_parking.models import (
     AutoEndState,
-    CityVisitorParkingRuntimeData,
     CoordinatorData,
     ProviderConfig,
     TimeRange,
     ZoneAvailability,
+)
+from custom_components.city_visitor_parking.runtime_data import (
+    CityVisitorParkingRuntimeData,
 )
 from custom_components.city_visitor_parking.websocket_api import (
     _as_utc_iso,

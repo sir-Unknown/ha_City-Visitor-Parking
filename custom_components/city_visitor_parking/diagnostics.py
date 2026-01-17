@@ -10,7 +10,7 @@ from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
 from homeassistant.core import HomeAssistant
 
 from .const import CONF_AUTO_END, CONF_OPERATING_TIME_OVERRIDES
-from .models import CityVisitorParkingConfigEntry
+from .runtime_data import CityVisitorParkingConfigEntry
 
 TO_REDACT: Final[list[str]] = [CONF_PASSWORD, CONF_USERNAME]
 
@@ -22,7 +22,7 @@ class _DiagnosticsModule(Protocol):
         self, data: Mapping[str, object], to_redact: Iterable[str]
     ) -> dict[str, object]:
         """Redact sensitive data."""
-        ...
+        raise NotImplementedError
 
 
 _async_redact_data = cast(_DiagnosticsModule, diagnostics_util).async_redact_data

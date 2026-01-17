@@ -37,7 +37,8 @@ from .const import (
     DOMAIN,
 )
 from .helpers import get_attr
-from .models import CityVisitorParkingRuntimeData, Favorite, Reservation
+from .models import Favorite, Reservation
+from .runtime_data import CityVisitorParkingRuntimeData
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -58,7 +59,7 @@ class _SelectorModule(Protocol):
         self, config: Mapping[str, object]
     ) -> selector.Selector[Mapping[str, object]]:
         """Instantiate a selector."""
-        ...
+        raise NotImplementedError
 
 
 SELECTOR = cast(_SelectorModule, selector).selector

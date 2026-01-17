@@ -25,13 +25,15 @@ from custom_components.city_visitor_parking.diagnostics import (
 )
 from custom_components.city_visitor_parking.models import (
     AutoEndState,
-    CityVisitorParkingRuntimeData,
     CoordinatorData,
     Favorite,
     ProviderConfig,
     Reservation,
     TimeRange,
     ZoneAvailability,
+)
+from custom_components.city_visitor_parking.runtime_data import (
+    CityVisitorParkingRuntimeData,
 )
 
 

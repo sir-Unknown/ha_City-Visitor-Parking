@@ -29,12 +29,14 @@ from custom_components.city_visitor_parking.const import (
 )
 from custom_components.city_visitor_parking.models import (
     AutoEndState,
-    CityVisitorParkingRuntimeData,
     CoordinatorData,
     Favorite,
     ProviderConfig,
     Reservation,
     ZoneAvailability,
+)
+from custom_components.city_visitor_parking.runtime_data import (
+    CityVisitorParkingRuntimeData,
 )
 from custom_components.city_visitor_parking.services import (
     SERVICE_ADD_FAVORITE,

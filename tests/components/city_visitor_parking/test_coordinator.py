@@ -223,9 +223,7 @@ async def test_provider_protocol_raises() -> None:
 def test_normalize_helpers() -> None:
     """Normalization helpers should handle invalid input."""
 
-    assert (
-        _normalize_remaining_minutes(cast(Permit, {"remaining_balance": None})) == 0
-    )
+    assert _normalize_remaining_minutes(cast(Permit, {"remaining_balance": None})) == 0
     assert _normalize_remaining_minutes(cast(Permit, {"remaining_balance": "bad"})) == 0
     assert _normalize_remaining_minutes(cast(Permit, {"remaining_balance": "-5"})) == 0
     assert _normalize_remaining_minutes(cast(Permit, {"remaining_balance": 15})) == 15
@@ -266,9 +264,7 @@ def test_normalize_helpers() -> None:
     with pytest.raises(ValueError):
         _as_utc_datetime(123)
 
-    reservation = _normalize_reservations(
-        [cast(ProviderReservation, {"id": "res1"})]
-    )
+    reservation = _normalize_reservations([cast(ProviderReservation, {"id": "res1"})])
     assert reservation == []
     invalid_reservation = _normalize_reservations(
         [
