@@ -1,8 +1,15 @@
 # Release steps
 
-## 1) Update versions
+## 1) Prepare the change
 
 1. Update the version in `custom_components/city_visitor_parking/manifest.json`.
+2. Commit the change (for example: `Bump version to 1.2.3`).
+3. Open a pull request and set:
+   - a clear title that matches the change
+   - a short description (summary + testing)
+   - relevant labels (for example: `backend`, `python`, `tests`, `documentation`,
+     `translations`, `config-flow`, `diagnostics`, `chore`)
+4. Merge the pull request after required checks pass.
 
 ## 2) Publish a GitHub release
 
