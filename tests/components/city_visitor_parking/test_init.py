@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from types import SimpleNamespace
+from typing import cast
 from unittest.mock import AsyncMock
 
 import pytest
@@ -261,9 +262,9 @@ async def test_register_lovelace_resources_updates_and_creates(
         def __init__(self) -> None:
             self.loaded = False
             self.load_calls = 0
-            self.updated: list[tuple[str, dict[str, str]]] = []
-            self.created: list[dict[str, str]] = []
-            self._items = [
+            self.updated: list[tuple[str, dict[str, object]]] = []
+            self.created: list[dict[str, object]] = []
+            self._items: list[dict[str, object]] = [
                 {
                     "id": "1",
                     CONF_URL: "/city_visitor_parking/city-visitor-parking-card.js",
@@ -286,22 +287,23 @@ async def test_register_lovelace_resources_updates_and_creates(
 
             self.load_calls += 1
 
-        def async_items(self) -> list[dict[str, str]]:
+        def async_items(self) -> list[dict[str, object]]:
             """Return the stored items."""
 
             return list(self._items)
 
         async def async_update_item(
-            self, item_id: str, updates: dict[str, str]
+            self, item_id: str, updates: dict[str, object]
         ) -> None:
             """Track updates."""
 
             self.updated.append((item_id, updates))
             for item in self._items:
-                if item["id"] == item_id:
+                item_id_value = item.get("id")
+                if isinstance(item_id_value, str) and item_id_value == item_id:
                     item.update(updates)
 
-        async def async_create_item(self, item: dict[str, str]) -> None:
+        async def async_create_item(self, item: dict[str, object]) -> None:
             """Track creates."""
 
             self.created.append(item)
@@ -380,8 +382,36 @@ def test_install_zone_validity_logging_wraps_provider() -> None:
         fallback_zone={"start_time": "2025-01-01T00:00:00", "end_time": "2025-01-02"},
     )
 
-    assert result["fallback_zone"] is not None
+    result_map = cast(dict[str, object], result)
+    assert result_map["fallback_zone"] is not None
     assert calls
+
+
+def test_install_zone_validity_logging_detects_candidates() -> None:
+    """Zone validity logging should detect candidate windows."""
+
+    class Provider:
+        provider_id = "test"
+
+        def _map_zone_validity(
+            self, raw: object, *, fallback_zone: object | None = None
+        ) -> object:
+            return {"raw": raw, "fallback_zone": fallback_zone}
+
+    provider = Provider()
+    init_module._install_zone_validity_logging(provider)
+
+    raw = [
+        "not-a-mapping",
+        {"start_time": "2025-01-01T00:00:00", "end_time": "2025-01-01T01:00:00"},
+    ]
+    result = provider._map_zone_validity(
+        raw,
+        fallback_zone={"start_time": "2025-01-02T00:00:00", "end_time": "2025-01-02"},
+    )
+
+    result_map = cast(dict[str, object], result)
+    assert result_map["raw"] == raw
 
 
 def test_install_zone_validity_logging_without_fallback_param() -> None:
@@ -392,7 +422,7 @@ def test_install_zone_validity_logging_without_fallback_param() -> None:
     class Provider:
         provider_id = "test"
 
-        def _map_zone_validity(self, raw: object) -> object:
+        def _map_zone_validity(self, raw: object, **_: object) -> object:
             calls.append(raw)
             return raw
 

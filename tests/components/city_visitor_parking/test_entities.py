@@ -2,20 +2,26 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from datetime import UTC, datetime, time, timedelta
-from unittest.mock import MagicMock
+from types import SimpleNamespace
+from typing import cast
+from unittest.mock import AsyncMock, MagicMock
 
 from freezegun import freeze_time
+from homeassistant.helpers import entity_registry as er
 from homeassistant.util import dt as dt_util
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.city_visitor_parking.const import (
     CONF_OPERATING_TIME_OVERRIDES,
     DOMAIN,
+    STATE_CHARGEABLE,
 )
 from custom_components.city_visitor_parking.coordinator import (
     _compute_zone_availability,
 )
+from custom_components.city_visitor_parking.entity import CityVisitorParkingEntity
 from custom_components.city_visitor_parking.models import (
     CoordinatorData,
     Favorite,
@@ -25,17 +31,20 @@ from custom_components.city_visitor_parking.models import (
 )
 from custom_components.city_visitor_parking.sensor import (
     ActiveReservationsSensor,
+    FavoritesSensor,
+    FutureReservationsSensor,
     NextChargeableEndSensor,
     NextChargeableStartSensor,
     PermitZoneAvailabilitySensor,
     ProviderChargeableEndSensor,
     ProviderChargeableStartSensor,
+    RemainingTimeSensor,
     _as_utc_iso,
-    _current_or_next_window,
     _next_end_time,
     _remaining_balance_minutes,
     _timerange_to_dict,
 )
+from custom_components.city_visitor_parking.time_windows import current_or_next_window
 
 
 async def test_entity_unique_id_and_device_info() -> None:
@@ -50,8 +59,12 @@ async def test_entity_unique_id_and_device_info() -> None:
 
     assert sensor_one.unique_id == "provider:permit1:city:active_reservations"
     assert sensor_two.unique_id == "provider:permit2:city:active_reservations"
-    assert (DOMAIN, entry_one.entry_id) in sensor_one.device_info["identifiers"]
-    assert (DOMAIN, entry_two.entry_id) in sensor_two.device_info["identifiers"]
+    device_info_one = sensor_one.device_info
+    device_info_two = sensor_two.device_info
+    assert device_info_one is not None
+    assert device_info_two is not None
+    assert (DOMAIN, entry_one.entry_id) in device_info_one["identifiers"]
+    assert (DOMAIN, entry_two.entry_id) in device_info_two["identifiers"]
 
 
 async def test_zone_availability_uses_overrides() -> None:
@@ -95,6 +108,7 @@ async def test_zone_availability_uses_overrides() -> None:
 
         assert sensor.native_value == "free"
         attributes = sensor.extra_state_attributes
+        assert attributes is not None
         expected_override_start = dt_util.as_utc(expected_local)
         expected_override_end = dt_util.as_utc(
             datetime.combine(
@@ -171,6 +185,99 @@ async def test_next_chargeable_window_uses_overrides() -> None:
         assert end_sensor.native_value == dt_util.as_utc(expected_end_local)
 
 
+async def test_entity_async_update_respects_registry() -> None:
+    """Entity updates should respect registry disabled state."""
+
+    coordinator = MagicMock()
+    coordinator.async_add_listener.return_value = lambda: None
+    coordinator.async_request_refresh = AsyncMock()
+    entry = _create_entry("provider:permit1:city")
+
+    entity = CityVisitorParkingEntity(coordinator, entry, "base")
+    entity.registry_entry = cast(er.RegistryEntry, SimpleNamespace(disabled=True))
+    await entity.async_update()
+
+    coordinator.async_request_refresh.assert_not_called()
+
+    entity.registry_entry = None
+    await entity.async_update()
+
+    coordinator.async_request_refresh.assert_awaited_once()
+
+
+async def test_sensors_handle_coordinator_update(monkeypatch) -> None:
+    """Sensors should refresh values when coordinator updates."""
+
+    now = datetime(2025, 1, 6, 9, 0, tzinfo=UTC)
+    zone_window = TimeRange(
+        start=now - timedelta(hours=1),
+        end=now + timedelta(hours=1),
+    )
+    data = CoordinatorData(
+        permit_id="permit",
+        permit_remaining_minutes=120,
+        zone_validity=[zone_window],
+        reservations=[
+            Reservation(
+                reservation_id="future",
+                start_time=now + timedelta(hours=2),
+                end_time=now + timedelta(hours=3),
+            )
+        ],
+        favorites=[Favorite(favorite_id="fav1")],
+        zone_availability=ZoneAvailability(
+            is_chargeable_now=True,
+            next_change_time=zone_window.end,
+            windows_today=[zone_window],
+        ),
+        active_reservations=[
+            Reservation(
+                reservation_id="active",
+                start_time=now - timedelta(minutes=30),
+                end_time=now + timedelta(minutes=30),
+            )
+        ],
+    )
+    coordinator = _make_coordinator(data)
+    coordinator.last_update_success = True
+    entry = _create_entry("provider:permit1:city")
+
+    with freeze_time(now):
+        active_sensor = ActiveReservationsSensor(coordinator, entry)
+        future_sensor = FutureReservationsSensor(coordinator, entry)
+        remaining_sensor = RemainingTimeSensor(coordinator, entry)
+        availability_sensor = PermitZoneAvailabilitySensor(coordinator, entry)
+        provider_start = ProviderChargeableStartSensor(coordinator, entry)
+        provider_end = ProviderChargeableEndSensor(coordinator, entry)
+        next_start = NextChargeableStartSensor(coordinator, entry)
+        next_end = NextChargeableEndSensor(coordinator, entry)
+        favorites_sensor = FavoritesSensor(coordinator, entry)
+
+        for sensor in (
+            active_sensor,
+            future_sensor,
+            remaining_sensor,
+            availability_sensor,
+            provider_start,
+            provider_end,
+            next_start,
+            next_end,
+            favorites_sensor,
+        ):
+            monkeypatch.setattr(sensor, "async_write_ha_state", MagicMock())
+            sensor._handle_coordinator_update()
+
+    assert active_sensor.native_value == 1
+    assert future_sensor.native_value == 1
+    assert remaining_sensor.native_value == 2.0
+    assert availability_sensor.native_value == STATE_CHARGEABLE
+    assert provider_start.native_value == zone_window.start
+    assert provider_end.native_value == zone_window.end
+    assert next_start.native_value == zone_window.start
+    assert next_end.native_value == zone_window.end
+    assert favorites_sensor.native_value == 1
+
+
 def _sample_data(zone_availability: ZoneAvailability | None = None) -> CoordinatorData:
     """Create coordinator data for tests."""
 
@@ -205,13 +312,15 @@ def _make_coordinator(data: CoordinatorData):
     return coordinator
 
 
-def _create_entry(unique_id: str, options: dict[str, object] | None = None):
+def _create_entry(
+    unique_id: str, options: Mapping[str, object] | None = None
+) -> MockConfigEntry:
     """Create a mock entry for entity tests."""
 
     return MockConfigEntry(
         domain=DOMAIN,
         data={},
-        options=options or {},
+        options=dict(options or {}),
         unique_id=unique_id,
         title="City",
     )
@@ -260,8 +369,8 @@ def test_sensor_helpers() -> None:
         end=datetime(2025, 1, 1, 9, 0, tzinfo=UTC),
     )
     assert _timerange_to_dict(window)["start"].endswith("+00:00")
-    assert _current_or_next_window([window], datetime(2025, 1, 1, 7, 0, tzinfo=UTC))
+    assert current_or_next_window([window], datetime(2025, 1, 1, 7, 0, tzinfo=UTC))
     assert (
-        _current_or_next_window([window], datetime(2025, 1, 1, 9, 0, tzinfo=UTC))
+        current_or_next_window([window], datetime(2025, 1, 1, 9, 0, tzinfo=UTC))
         is None
     )

@@ -25,6 +25,7 @@ logger:
 ## When opening an issue
 
 Include:
+
 - Home Assistant version
 - Integration version
 - Municipality and permit type (no credentials)

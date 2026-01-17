@@ -7,11 +7,12 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from pycityvisitorparking import Client
 
 if TYPE_CHECKING:
     from pycityvisitorparking.provider.base import BaseProvider
+
+    from .coordinator import CityVisitorParkingCoordinator
 else:
 
     class BaseProvider:  # pragma: no cover - runtime typing fallback
@@ -77,11 +78,17 @@ class CoordinatorData:
     active_reservations: list[Reservation]
 
 
+def _default_attempts() -> dict[str, datetime]:
+    """Return an empty attempts mapping."""
+
+    return {}
+
+
 @dataclass
 class AutoEndState:
     """Runtime tracking for auto-end attempts."""
 
-    attempted_ids: dict[str, datetime] = field(default_factory=dict)
+    attempted_ids: dict[str, datetime] = field(default_factory=_default_attempts)
 
 
 type OperatingTimeOverrides = dict[str, tuple[tuple[str, str], ...]]
@@ -94,7 +101,7 @@ class CityVisitorParkingRuntimeData:
     client: Client
     provider: BaseProvider
     provider_config: ProviderConfig
-    coordinator: DataUpdateCoordinator[CoordinatorData]
+    coordinator: CityVisitorParkingCoordinator
     permit_id: str
     auto_end_state: AutoEndState
     operating_time_overrides: OperatingTimeOverrides

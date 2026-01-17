@@ -6,7 +6,7 @@ import asyncio
 import logging
 from collections.abc import Iterable, Mapping
 from datetime import UTC, datetime, timedelta
-from typing import TYPE_CHECKING, Protocol
+from typing import TYPE_CHECKING, Protocol, cast
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
@@ -56,7 +56,7 @@ from .models import (
     TimeRange,
     ZoneAvailability,
 )
-from .time_windows import _windows_for_today
+from .time_windows import windows_for_today
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -228,8 +228,9 @@ def _normalize_zone_validity(permit: Permit) -> list[TimeRange]:
     raw_blocks = get_attr(permit, "zone_validity")
     if not isinstance(raw_blocks, list):
         raw_blocks = []
+    blocks_raw = cast(list[object], raw_blocks)
     blocks: list[TimeRange] = []
-    for block in raw_blocks:
+    for block in blocks_raw:
         start = get_attr(block, "start_time")
         end = get_attr(block, "end_time")
         if start is None or end is None:
@@ -324,7 +325,7 @@ def _compute_zone_availability(
 ) -> ZoneAvailability:
     """Compute zone availability using validity blocks and overrides."""
 
-    windows_today = _windows_for_today(zone_validity, options, now)
+    windows_today = windows_for_today(zone_validity, options, now)
     is_chargeable_now = any(
         window.start <= now < window.end for window in windows_today
     )

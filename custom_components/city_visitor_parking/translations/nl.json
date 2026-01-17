@@ -30,8 +30,7 @@
         "title": "Kies vergunning",
         "description": "Selecteer de vergunning die je in Home Assistant wilt beheren.",
         "data": {
-          "permit_id": "Vergunning",
-          "description": "Beschrijving"
+          "permit_id": "Vergunning"
         }
       },
       "reauth_confirm": {
@@ -69,8 +68,7 @@
         "title": "Opties",
         "description": "Pas betaalvensters en automatisch beëindigen aan. Voer tijden in zoals 09:00-13:00, 14:00-17:30.",
         "data": {
-          "auto_end_reservation_when_free": "Reservaties automatisch beëindigen wanneer parkeren gratis is",
-          "description": "Beschrijving"
+          "auto_end_reservation_when_free": "Reservaties automatisch beëindigen wanneer parkeren gratis is"
         },
         "sections": {
           "operating_times": {

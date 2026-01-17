@@ -4,10 +4,9 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from homeassistant.components.sensor import SensorDeviceClass, SensorEntity
-from homeassistant.const import UnitOfTime
+from homeassistant.components.sensor import SensorDeviceClass
+from homeassistant.const import EntityCategory, UnitOfTime
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.util import dt as dt_util
 
@@ -16,9 +15,9 @@ from .coordinator import CityVisitorParkingCoordinator
 from .entity import CityVisitorParkingEntity
 from .models import CityVisitorParkingConfigEntry, CoordinatorData, TimeRange
 from .time_windows import (
-    _current_or_next_window,
-    _current_or_next_window_with_overrides,
-    _windows_for_today,
+    current_or_next_window,
+    current_or_next_window_with_overrides,
+    windows_for_today,
 )
 
 
@@ -45,10 +44,10 @@ async def async_setup_entry(
     )
 
 
-class ActiveReservationsSensor(CityVisitorParkingEntity, SensorEntity):
+class ActiveReservationsSensor(CityVisitorParkingEntity):
     """Sensor for active reservations count."""
 
-    _attr_translation_key: str = "active_reservations"
+    _attr_translation_key: str | None = "active_reservations"
 
     def __init__(
         self,
@@ -58,18 +57,24 @@ class ActiveReservationsSensor(CityVisitorParkingEntity, SensorEntity):
         """Initialize the sensor."""
 
         super().__init__(coordinator, entry, "active_reservations")
+        self._update_from_coordinator()
 
-    @property
-    def native_value(self) -> int:
-        """Return the number of active reservations."""
+    def _update_from_coordinator(self) -> None:
+        """Update the sensor from coordinator data."""
 
-        return len(self.coordinator.data.active_reservations)
+        self._attr_native_value = len(self.coordinator.data.active_reservations)
+
+    def _handle_coordinator_update(self) -> None:
+        """Update the sensor from coordinator data."""
+
+        self._update_from_coordinator()
+        super()._handle_coordinator_update()
 
 
-class FutureReservationsSensor(CityVisitorParkingEntity, SensorEntity):
+class FutureReservationsSensor(CityVisitorParkingEntity):
     """Sensor for future reservations count."""
 
-    _attr_translation_key: str = "future_reservations"
+    _attr_translation_key: str | None = "future_reservations"
 
     def __init__(
         self,
@@ -79,26 +84,32 @@ class FutureReservationsSensor(CityVisitorParkingEntity, SensorEntity):
         """Initialize the sensor."""
 
         super().__init__(coordinator, entry, "future_reservations")
+        self._update_from_coordinator()
 
-    @property
-    def native_value(self) -> int:
-        """Return the number of future reservations."""
+    def _update_from_coordinator(self) -> None:
+        """Update the sensor from coordinator data."""
 
         now = dt_util.utcnow()
-        return sum(
+        self._attr_native_value = sum(
             1
             for reservation in self.coordinator.data.reservations
             if reservation.start_time > now
         )
 
+    def _handle_coordinator_update(self) -> None:
+        """Update the sensor from coordinator data."""
 
-class RemainingTimeSensor(CityVisitorParkingEntity, SensorEntity):
+        self._update_from_coordinator()
+        super()._handle_coordinator_update()
+
+
+class RemainingTimeSensor(CityVisitorParkingEntity):
     """Sensor for remaining balance time."""
 
-    _attr_translation_key: str = "remaining_time"
-    _attr_device_class: SensorDeviceClass = SensorDeviceClass.DURATION
-    _attr_native_unit_of_measurement: str = UnitOfTime.HOURS
-    _attr_suggested_display_precision: int = 2
+    _attr_translation_key: str | None = "remaining_time"
+    _attr_device_class: SensorDeviceClass | None = SensorDeviceClass.DURATION
+    _attr_native_unit_of_measurement: str | None = UnitOfTime.HOURS
+    _attr_suggested_display_precision: int | None = 2
 
     def __init__(
         self,
@@ -108,34 +119,37 @@ class RemainingTimeSensor(CityVisitorParkingEntity, SensorEntity):
         """Initialize the sensor."""
 
         super().__init__(coordinator, entry, "remaining_time")
+        self._update_from_coordinator()
 
-    @property
-    def native_value(self) -> float:
-        """Return remaining balance in hours."""
+    def _update_from_coordinator(self) -> None:
+        """Update the sensor from coordinator data."""
 
         remaining_minutes = _remaining_balance_minutes(self.coordinator.data)
-        return round(remaining_minutes / 60, 2)
-
-    @property
-    def extra_state_attributes(self) -> dict[str, object]:
-        """Return non-PII attributes for remaining balance."""
-
         next_end_time = _next_end_time(self.coordinator.data)
         active_count = len(self.coordinator.data.active_reservations)
+        attributes = dict(self._attr_extra_state_attributes or {})
+        attributes.update(
+            {
+                "remaining_minutes": remaining_minutes,
+                "active_reservations": active_count,
+                "next_end_time": _as_utc_iso(next_end_time) if next_end_time else None,
+                "has_active_reservation": active_count > 0,
+            }
+        )
+        self._attr_native_value = round(remaining_minutes / 60, 2)
+        self._attr_extra_state_attributes = attributes
 
-        return {
-            **(self._attr_extra_state_attributes or {}),
-            "remaining_minutes": _remaining_balance_minutes(self.coordinator.data),
-            "active_reservations": active_count,
-            "next_end_time": _as_utc_iso(next_end_time) if next_end_time else None,
-            "has_active_reservation": active_count > 0,
-        }
+    def _handle_coordinator_update(self) -> None:
+        """Update the sensor from coordinator data."""
+
+        self._update_from_coordinator()
+        super()._handle_coordinator_update()
 
 
-class PermitZoneAvailabilitySensor(CityVisitorParkingEntity, SensorEntity):
+class PermitZoneAvailabilitySensor(CityVisitorParkingEntity):
     """Sensor for permit zone availability."""
 
-    _attr_translation_key: str = "permit_zone_availability"
+    _attr_translation_key: str | None = "permit_zone_availability"
 
     def __init__(
         self,
@@ -145,61 +159,63 @@ class PermitZoneAvailabilitySensor(CityVisitorParkingEntity, SensorEntity):
         """Initialize the sensor."""
 
         super().__init__(coordinator, entry, "permit_zone_availability")
+        self._update_from_coordinator()
 
-    @property
-    def native_value(self) -> str:
-        """Return whether the permit zone is chargeable."""
-
-        return (
-            STATE_CHARGEABLE
-            if self.coordinator.data.zone_availability.is_chargeable_now
-            else STATE_FREE
-        )
-
-    @property
-    def extra_state_attributes(self) -> dict[str, object]:
-        """Return availability attributes."""
+    def _update_from_coordinator(self) -> None:
+        """Update the sensor from coordinator data."""
 
         availability = self.coordinator.data.zone_availability
         now = dt_util.utcnow()
-        provider_windows = _windows_for_today(
+        provider_windows = windows_for_today(
             self.coordinator.data.zone_validity,
             {},
             now,
         )
-        next_window = _current_or_next_window_with_overrides(
+        next_window = current_or_next_window_with_overrides(
             self.coordinator.data.zone_validity,
             self._entry.options,
             now,
         )
-        provider_next_window = _current_or_next_window(
+        provider_next_window = current_or_next_window(
             self.coordinator.data.zone_validity,
             now,
         )
-        return {
-            **(self._attr_extra_state_attributes or {}),
-            "is_chargeable_now": availability.is_chargeable_now,
-            "Today provider": [
-                _timerange_to_dict(window) for window in provider_windows
-            ],
-            "Today user entered": [
-                _timerange_to_dict(window) for window in availability.windows_today
-            ],
-            "Next provider": _timerange_to_dict(provider_next_window)
-            if provider_next_window
-            else None,
-            "Next user entered": _timerange_to_dict(next_window)
-            if next_window
-            else None,
-        }
+        attributes = dict(self._attr_extra_state_attributes or {})
+        attributes.update(
+            {
+                "is_chargeable_now": availability.is_chargeable_now,
+                "Today provider": [
+                    _timerange_to_dict(window) for window in provider_windows
+                ],
+                "Today user entered": [
+                    _timerange_to_dict(window) for window in availability.windows_today
+                ],
+                "Next provider": _timerange_to_dict(provider_next_window)
+                if provider_next_window
+                else None,
+                "Next user entered": _timerange_to_dict(next_window)
+                if next_window
+                else None,
+            }
+        )
+        self._attr_native_value = (
+            STATE_CHARGEABLE if availability.is_chargeable_now else STATE_FREE
+        )
+        self._attr_extra_state_attributes = attributes
+
+    def _handle_coordinator_update(self) -> None:
+        """Update the sensor from coordinator data."""
+
+        self._update_from_coordinator()
+        super()._handle_coordinator_update()
 
 
-class ProviderChargeableStartSensor(CityVisitorParkingEntity, SensorEntity):
+class ProviderChargeableStartSensor(CityVisitorParkingEntity):
     """Sensor for the start of the current or next provider chargeable window."""
 
-    _attr_translation_key: str = "provider_chargeable_start"
-    _attr_device_class: SensorDeviceClass = SensorDeviceClass.TIMESTAMP
-    _attr_entity_category: EntityCategory = EntityCategory.DIAGNOSTIC
+    _attr_translation_key: str | None = "provider_chargeable_start"
+    _attr_device_class: SensorDeviceClass | None = SensorDeviceClass.TIMESTAMP
+    _attr_entity_category: EntityCategory | None = EntityCategory.DIAGNOSTIC
     _attr_entity_registry_enabled_default: bool = False
 
     def __init__(
@@ -210,24 +226,30 @@ class ProviderChargeableStartSensor(CityVisitorParkingEntity, SensorEntity):
         """Initialize the sensor."""
 
         super().__init__(coordinator, entry, "provider_chargeable_start")
+        self._update_from_coordinator()
 
-    @property
-    def native_value(self) -> datetime | None:
-        """Return the start of the current or next provider chargeable window."""
+    def _update_from_coordinator(self) -> None:
+        """Update the sensor from coordinator data."""
 
-        window = _current_or_next_window(
+        window = current_or_next_window(
             self.coordinator.data.zone_validity,
             dt_util.utcnow(),
         )
-        return window.start if window else None
+        self._attr_native_value = window.start if window else None
+
+    def _handle_coordinator_update(self) -> None:
+        """Update the sensor from coordinator data."""
+
+        self._update_from_coordinator()
+        super()._handle_coordinator_update()
 
 
-class ProviderChargeableEndSensor(CityVisitorParkingEntity, SensorEntity):
+class ProviderChargeableEndSensor(CityVisitorParkingEntity):
     """Sensor for the end of the current or next provider chargeable window."""
 
-    _attr_translation_key: str = "provider_chargeable_end"
-    _attr_device_class: SensorDeviceClass = SensorDeviceClass.TIMESTAMP
-    _attr_entity_category: EntityCategory = EntityCategory.DIAGNOSTIC
+    _attr_translation_key: str | None = "provider_chargeable_end"
+    _attr_device_class: SensorDeviceClass | None = SensorDeviceClass.TIMESTAMP
+    _attr_entity_category: EntityCategory | None = EntityCategory.DIAGNOSTIC
     _attr_entity_registry_enabled_default: bool = False
 
     def __init__(
@@ -238,23 +260,29 @@ class ProviderChargeableEndSensor(CityVisitorParkingEntity, SensorEntity):
         """Initialize the sensor."""
 
         super().__init__(coordinator, entry, "provider_chargeable_end")
+        self._update_from_coordinator()
 
-    @property
-    def native_value(self) -> datetime | None:
-        """Return the end of the current or next provider chargeable window."""
+    def _update_from_coordinator(self) -> None:
+        """Update the sensor from coordinator data."""
 
-        window = _current_or_next_window(
+        window = current_or_next_window(
             self.coordinator.data.zone_validity,
             dt_util.utcnow(),
         )
-        return window.end if window else None
+        self._attr_native_value = window.end if window else None
+
+    def _handle_coordinator_update(self) -> None:
+        """Update the sensor from coordinator data."""
+
+        self._update_from_coordinator()
+        super()._handle_coordinator_update()
 
 
-class NextChargeableStartSensor(CityVisitorParkingEntity, SensorEntity):
+class NextChargeableStartSensor(CityVisitorParkingEntity):
     """Sensor for the start of the current or next chargeable window."""
 
-    _attr_translation_key: str = "next_chargeable_start"
-    _attr_device_class: SensorDeviceClass = SensorDeviceClass.TIMESTAMP
+    _attr_translation_key: str | None = "next_chargeable_start"
+    _attr_device_class: SensorDeviceClass | None = SensorDeviceClass.TIMESTAMP
 
     def __init__(
         self,
@@ -264,25 +292,31 @@ class NextChargeableStartSensor(CityVisitorParkingEntity, SensorEntity):
         """Initialize the sensor."""
 
         super().__init__(coordinator, entry, "next_chargeable_start")
+        self._update_from_coordinator()
 
-    @property
-    def native_value(self) -> datetime | None:
-        """Return the start of the current or next chargeable window."""
+    def _update_from_coordinator(self) -> None:
+        """Update the sensor from coordinator data."""
 
         now = dt_util.utcnow()
-        window = _current_or_next_window_with_overrides(
+        window = current_or_next_window_with_overrides(
             self.coordinator.data.zone_validity,
             self._entry.options,
             now,
         )
-        return window.start if window else None
+        self._attr_native_value = window.start if window else None
+
+    def _handle_coordinator_update(self) -> None:
+        """Update the sensor from coordinator data."""
+
+        self._update_from_coordinator()
+        super()._handle_coordinator_update()
 
 
-class NextChargeableEndSensor(CityVisitorParkingEntity, SensorEntity):
+class NextChargeableEndSensor(CityVisitorParkingEntity):
     """Sensor for the end of the current or next chargeable window."""
 
-    _attr_translation_key: str = "next_chargeable_end"
-    _attr_device_class: SensorDeviceClass = SensorDeviceClass.TIMESTAMP
+    _attr_translation_key: str | None = "next_chargeable_end"
+    _attr_device_class: SensorDeviceClass | None = SensorDeviceClass.TIMESTAMP
 
     def __init__(
         self,
@@ -292,24 +326,30 @@ class NextChargeableEndSensor(CityVisitorParkingEntity, SensorEntity):
         """Initialize the sensor."""
 
         super().__init__(coordinator, entry, "next_chargeable_end")
+        self._update_from_coordinator()
 
-    @property
-    def native_value(self) -> datetime | None:
-        """Return the end of the current or next chargeable window."""
+    def _update_from_coordinator(self) -> None:
+        """Update the sensor from coordinator data."""
 
         now = dt_util.utcnow()
-        window = _current_or_next_window_with_overrides(
+        window = current_or_next_window_with_overrides(
             self.coordinator.data.zone_validity,
             self._entry.options,
             now,
         )
-        return window.end if window else None
+        self._attr_native_value = window.end if window else None
+
+    def _handle_coordinator_update(self) -> None:
+        """Update the sensor from coordinator data."""
+
+        self._update_from_coordinator()
+        super()._handle_coordinator_update()
 
 
-class FavoritesSensor(CityVisitorParkingEntity, SensorEntity):
+class FavoritesSensor(CityVisitorParkingEntity):
     """Sensor for favorites count."""
 
-    _attr_translation_key: str = "favorites"
+    _attr_translation_key: str | None = "favorites"
 
     def __init__(
         self,
@@ -319,12 +359,18 @@ class FavoritesSensor(CityVisitorParkingEntity, SensorEntity):
         """Initialize the sensor."""
 
         super().__init__(coordinator, entry, "favorites")
+        self._update_from_coordinator()
 
-    @property
-    def native_value(self) -> int:
-        """Return number of favorites."""
+    def _update_from_coordinator(self) -> None:
+        """Update the sensor from coordinator data."""
 
-        return len(self.coordinator.data.favorites)
+        self._attr_native_value = len(self.coordinator.data.favorites)
+
+    def _handle_coordinator_update(self) -> None:
+        """Update the sensor from coordinator data."""
+
+        self._update_from_coordinator()
+        super()._handle_coordinator_update()
 
 
 def _remaining_balance_minutes(data: CoordinatorData) -> int:

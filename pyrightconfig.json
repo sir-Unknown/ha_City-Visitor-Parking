@@ -1,5 +1,7 @@
 {
   "include": ["custom_components/city_visitor_parking"],
+  "extraPaths": ["../homeassistant-core"],
+  "pythonVersion": "3.13",
   "typeCheckingMode": "strict",
   "reportMissingImports": "none"
 }

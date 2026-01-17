@@ -2,19 +2,24 @@
 
 from __future__ import annotations
 
+from homeassistant.components.sensor import SensorEntity
 from homeassistant.const import ATTR_ATTRIBUTION
+from homeassistant.core import callback
 from homeassistant.helpers.device_registry import DeviceEntryType, DeviceInfo
-from homeassistant.helpers.update_coordinator import CoordinatorEntity
+from homeassistant.helpers.update_coordinator import BaseCoordinatorEntity
 
 from .const import CONF_MUNICIPALITY, CONF_PERMIT_ID, DOMAIN
 from .coordinator import CityVisitorParkingCoordinator
 from .models import CityVisitorParkingConfigEntry
 
 
-class CityVisitorParkingEntity(CoordinatorEntity[CityVisitorParkingCoordinator]):
+class CityVisitorParkingEntity(
+    BaseCoordinatorEntity[CityVisitorParkingCoordinator], SensorEntity
+):
     """Base entity for the integration."""
 
     _attr_has_entity_name: bool = True
+    _attr_available: bool = True
 
     def __init__(
         self,
@@ -44,3 +49,17 @@ class CityVisitorParkingEntity(CoordinatorEntity[CityVisitorParkingCoordinator])
         self._attr_extra_state_attributes: dict[str, object] = {
             ATTR_ATTRIBUTION: "Data provided by your municipality",
         }
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        """Update availability before writing state."""
+
+        self._attr_available = self.coordinator.last_update_success
+        super()._handle_coordinator_update()
+
+    async def async_update(self) -> None:
+        """Update the entity via the coordinator."""
+
+        if not self.enabled:
+            return
+        await self.coordinator.async_request_refresh()

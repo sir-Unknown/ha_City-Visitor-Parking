@@ -3,9 +3,11 @@
 ## End parking when it becomes free
 
 Option 1:
+
 - Enable the integration option that ends an active session when it becomes free.
 
 Option 2:
+
 - Create an automation that monitors the paid/free sensor and calls the end service when it changes to free.
 
 ## Example automation (skeleton)

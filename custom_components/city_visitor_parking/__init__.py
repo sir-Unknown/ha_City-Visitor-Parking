@@ -9,15 +9,16 @@ from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Final, Protocol, cast
 
-import voluptuous as vol
 from homeassistant.components.http import StaticPathConfig
-from homeassistant.components.lovelace.const import (
-    CONF_RESOURCE_TYPE_WS,
-    CONF_URL,
-    LOVELACE_DATA,
-)
+from homeassistant.components.lovelace.const import CONF_RESOURCE_TYPE_WS, LOVELACE_DATA
 from homeassistant.components.lovelace.resources import ResourceStorageCollection
-from homeassistant.const import CONF_ID, CONF_PASSWORD, CONF_TYPE, CONF_USERNAME
+from homeassistant.const import (
+    CONF_ID,
+    CONF_PASSWORD,
+    CONF_TYPE,
+    CONF_URL,
+    CONF_USERNAME,
+)
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import (
     ConfigEntryAuthFailed,
@@ -56,7 +57,45 @@ from .websocket_api import async_setup_websocket
 
 _LOGGER = logging.getLogger(__name__)
 
-CONFIG_SCHEMA: Final[vol.Schema] = cv.config_entry_only_config_schema(DOMAIN)
+
+class _ConfigValidation(Protocol):
+    """Protocol for config validation helpers we rely on."""
+
+    def config_entry_only_config_schema(
+        self, domain: str
+    ) -> Callable[[ConfigType], ConfigType]:
+        """Return a config schema for config entry only integrations."""
+        ...
+
+
+class _ResourceStorage(Protocol):
+    """Protocol for Lovelace resource storage helpers we rely on."""
+
+    loaded: bool
+
+    async def async_load(self) -> None:
+        """Load stored resources."""
+        ...
+
+    def async_items(self) -> list[dict[str, object]]:
+        """Return stored resource items."""
+        ...
+
+    async def async_update_item(
+        self, item_id: str, updates: dict[str, object]
+    ) -> dict[str, object]:
+        """Update a stored resource item."""
+        ...
+
+    async def async_create_item(self, data: dict[str, object]) -> dict[str, object]:
+        """Create a stored resource item."""
+        ...
+
+
+_config_entry_only_schema = cast(_ConfigValidation, cv).config_entry_only_config_schema
+CONFIG_SCHEMA: Final[Callable[[ConfigType], ConfigType]] = _config_entry_only_schema(
+    DOMAIN
+)
 
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
@@ -148,13 +187,6 @@ async def async_setup_entry(
     return True
 
 
-class _ZoneValidityMapper(Protocol):
-    """Protocol for providers exposing zone validity mapping."""
-
-    provider_id: str
-    _map_zone_validity: Callable[..., object]
-
-
 def _install_zone_validity_logging(provider: object) -> None:
     """Add extra debug logging when zone validity falls back to the zone block."""
 
@@ -167,7 +199,8 @@ def _install_zone_validity_logging(provider: object) -> None:
         if raw is None:
             return "raw=None"
         if isinstance(raw, list):
-            return f"raw=list(count={len(raw)})"
+            raw_list = cast(list[object], raw)
+            return f"raw=list(count={len(raw_list)})"
         return f"raw={type(raw).__name__}"
 
     accepts_fallback = (
@@ -175,23 +208,26 @@ def _install_zone_validity_logging(provider: object) -> None:
     )
 
     def _wrap(raw: object, *, fallback_zone: object | None = None) -> object:
-        if isinstance(fallback_zone, dict):
-            start_raw = fallback_zone.get("start_time")
-            end_raw = fallback_zone.get("end_time")
+        if isinstance(fallback_zone, Mapping):
+            fallback = cast(Mapping[str, object], fallback_zone)
+            start_raw = fallback.get("start_time")
+            end_raw = fallback.get("end_time")
             has_candidates = False
             if isinstance(raw, list):
-                has_candidates = any(
-                    isinstance(item, dict)
-                    and item.get("start_time")
-                    and item.get("end_time")
-                    for item in raw
-                )
+                raw_list = cast(list[object], raw)
+                for item in raw_list:
+                    if not isinstance(item, Mapping):
+                        continue
+                    item_map = cast(Mapping[str, object], item)
+                    if item_map.get("start_time") and item_map.get("end_time"):
+                        has_candidates = True
+                        break
             if not has_candidates and start_raw and end_raw:
                 _LOGGER.debug(
                     "Provider %s zone validity fallback details %s "
                     "fallback_start=%s fallback_end=%s",
                     provider_id,
-                    _summarize_raw(raw),
+                    _summarize_raw(cast(object, raw)),
                     start_raw,
                     end_raw,
                 )
@@ -199,7 +235,8 @@ def _install_zone_validity_logging(provider: object) -> None:
             return map_zone_validity(raw, fallback_zone=fallback_zone)
         return map_zone_validity(raw)
 
-    cast(_ZoneValidityMapper, provider)._map_zone_validity = _wrap
+    attr_name = "_map_zone_validity"
+    setattr(provider, attr_name, _wrap)
 
 
 def _normalize_operating_time_overrides(
@@ -210,6 +247,7 @@ def _normalize_operating_time_overrides(
     raw_overrides = options.get(CONF_OPERATING_TIME_OVERRIDES)
     if not isinstance(raw_overrides, Mapping):
         return {}
+    raw_overrides = cast(Mapping[str, object], raw_overrides)
 
     normalized: OperatingTimeOverrides = {}
     for day in WEEKDAY_KEYS:
@@ -256,9 +294,9 @@ async def _async_register_frontend(hass: HomeAssistant, _component: str) -> None
     data: dict[str, object] = hass.data.setdefault(DOMAIN, {})
     if data.get("frontend_registered"):
         return
-
-    if hass.http is None:
-        _LOGGER.debug("HTTP is not available, skipping static assets")
+    http = getattr(hass, "http", None)
+    if http is None:
+        _LOGGER.debug("HTTP component is not available")
         return
 
     dist_path = Path(__file__).parent / "frontend" / "dist"
@@ -287,7 +325,7 @@ async def _async_register_frontend(hass: HomeAssistant, _component: str) -> None
             "Frontend translations directory is missing: %s", translations_path
         )
 
-    await hass.http.async_register_static_paths(static_paths)
+    await http.async_register_static_paths(static_paths)
     data["frontend_registered"] = True
 
 
@@ -309,10 +347,11 @@ async def _async_register_lovelace_resources(
         _LOGGER.debug("Lovelace resources are not storage-based, skipping")
         data["lovelace_resources_registered"] = True
         return
+    resources_store = cast(_ResourceStorage, resources)
 
-    if not resources.loaded:
-        await resources.async_load()
-        resources.loaded = True
+    if not resources_store.loaded:
+        await resources_store.async_load()
+        resources_store.loaded = True
 
     dist_path = Path(__file__).parent / "frontend" / "dist"
     if not dist_path.is_dir():
@@ -331,7 +370,9 @@ async def _async_register_lovelace_resources(
         except FileNotFoundError:
             desired_urls[base_url] = base_url
 
-    items = resources.async_items()
+    items = resources_store.async_items()
+    update_item = resources_store.async_update_item
+    create_item = resources_store.async_create_item
     seen: set[str] = set()
     for item in items:
         item_url = item.get(CONF_URL)
@@ -342,19 +383,19 @@ async def _async_register_lovelace_resources(
         if not desired_url:
             continue
         seen.add(base_url)
-        updates: dict[str, str] = {}
+        updates: dict[str, object] = {}
         if item_url != desired_url:
             updates[CONF_URL] = desired_url
         if item.get(CONF_TYPE) != "module":
             updates[CONF_RESOURCE_TYPE_WS] = "module"
         if updates:
-            await resources.async_update_item(item[CONF_ID], updates)
+            item_id = item.get(CONF_ID)
+            if isinstance(item_id, str):
+                await update_item(item_id, updates)
 
     for base_url, url in desired_urls.items():
         if base_url in seen:
             continue
-        await resources.async_create_item(
-            {CONF_RESOURCE_TYPE_WS: "module", CONF_URL: url}
-        )
+        await create_item({CONF_RESOURCE_TYPE_WS: "module", CONF_URL: url})
 
     data["lovelace_resources_registered"] = True

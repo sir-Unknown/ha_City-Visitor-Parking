@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import logging
 import time
+from collections.abc import Mapping
 from datetime import datetime, timedelta
-from typing import Final
+from typing import Final, NoReturn, Protocol, cast
 
 import voluptuous as vol
 from homeassistant import config_entries
@@ -49,8 +50,20 @@ SERVICE_REMOVE_FAVORITE: Final[str] = "remove_favorite"
 SERVICE_LIST_ACTIVE_RESERVATIONS: Final[str] = "list_active_reservations"
 SERVICE_LIST_FAVORITES: Final[str] = "list_favorites"
 
-DEVICE_SELECTOR: Final[selector.DeviceSelector] = selector.DeviceSelector(
-    selector.DeviceSelectorConfig(integration=DOMAIN)
+
+class _SelectorModule(Protocol):
+    """Protocol for selector module helpers."""
+
+    def selector(
+        self, config: Mapping[str, object]
+    ) -> selector.Selector[Mapping[str, object]]:
+        """Instantiate a selector."""
+        ...
+
+
+SELECTOR = cast(_SelectorModule, selector).selector
+DEVICE_SELECTOR: Final[selector.Selector[Mapping[str, object]]] = SELECTOR(
+    {"device": {"integration": DOMAIN}}
 )
 
 
@@ -105,7 +118,7 @@ def _favorite_error_key(err: PyCityVisitorParkingError, detail_present: bool) ->
     return base_key
 
 
-def _raise_reservation_error(err: PyCityVisitorParkingError) -> None:
+def _raise_reservation_error(err: PyCityVisitorParkingError) -> NoReturn:
     """Raise a translated Home Assistant error for reservation failures."""
     detail = _error_detail(err)
     _LOGGER.debug("Reservation request failed: %s: %s", type(err).__name__, err)
@@ -116,8 +129,14 @@ def _raise_reservation_error(err: PyCityVisitorParkingError) -> None:
     ) from err
 
 
-def _raise_favorite_error(err: PyCityVisitorParkingError) -> None:
+def _raise_favorite_error(err: PyCityVisitorParkingError | TypeError) -> NoReturn:
     """Raise a translated Home Assistant error for favorite failures."""
+    if not isinstance(err, PyCityVisitorParkingError):
+        _LOGGER.debug("Favorite request failed: %s: %s", type(err).__name__, err)
+        raise HomeAssistantError(
+            translation_domain=DOMAIN,
+            translation_key="favorite_operation_failed",
+        ) from err
     detail = _error_detail(err)
     _LOGGER.debug("Favorite request failed: %s: %s", type(err).__name__, err)
     raise HomeAssistantError(
@@ -251,8 +270,9 @@ async def _async_handle_start_reservation(call: ServiceCall) -> None:
     """Handle reservation start service."""
 
     runtime = _runtime_from_call(call)
-    start = _as_utc(call.data[ATTR_START_TIME])
-    end = _as_utc(call.data[ATTR_END_TIME])
+    start = _as_utc(cast(datetime, call.data[ATTR_START_TIME]))
+    end = _as_utc(cast(datetime, call.data[ATTR_END_TIME]))
+    license_plate = cast(str, call.data[ATTR_LICENSE_PLATE])
     now = dt_util.utcnow()
     min_start = now + timedelta(minutes=1)
     if start < min_start:
@@ -278,7 +298,7 @@ async def _async_handle_start_reservation(call: ServiceCall) -> None:
 
     try:
         await runtime.provider.start_reservation(
-            license_plate=call.data[ATTR_LICENSE_PLATE],
+            license_plate=license_plate,
             start_time=start,
             end_time=end,
         )
@@ -297,27 +317,29 @@ async def _async_handle_update_reservation(call: ServiceCall) -> None:
     """Handle reservation update service."""
 
     runtime = _runtime_from_call(call)
-    start = call.data.get(ATTR_START_TIME)
-    end = call.data.get(ATTR_END_TIME)
-    license_plate = call.data.get(ATTR_LICENSE_PLATE)
-    if start is None and end is None and license_plate is None:
+    start_raw = call.data.get(ATTR_START_TIME)
+    end_raw = call.data.get(ATTR_END_TIME)
+    license_plate_raw = call.data.get(ATTR_LICENSE_PLATE)
+    license_plate = license_plate_raw if isinstance(license_plate_raw, str) else None
+    if start_raw is None and end_raw is None and license_plate is None:
         raise ServiceValidationError(
             translation_domain=DOMAIN,
             translation_key="update_requires_changes",
         )
 
-    start_dt_raw = _as_utc(start) if start else None
-    end_dt_raw = _as_utc(end) if end else None
+    start_dt_raw = _as_utc(start_raw) if isinstance(start_raw, datetime) else None
+    end_dt_raw = _as_utc(end_raw) if isinstance(end_raw, datetime) else None
     if start_dt_raw and end_dt_raw and end_dt_raw <= start_dt_raw:
         raise ServiceValidationError(
             translation_domain=DOMAIN,
             translation_key="end_before_start",
         )
 
+    reservation_id: str = call.data[ATTR_RESERVATION_ID]
     if license_plate is not None:
         await _fallback_update_reservation(
             runtime,
-            call.data[ATTR_RESERVATION_ID],
+            reservation_id,
             start_dt_raw,
             end_dt_raw,
             license_plate,
@@ -329,12 +351,12 @@ async def _async_handle_update_reservation(call: ServiceCall) -> None:
     allow_end = ATTR_END_TIME in update_fields
     start_dt = start_dt_raw if start_dt_raw and allow_start else None
     end_dt = end_dt_raw if end_dt_raw and allow_end else None
-    if start is not None and not allow_start:
+    if start_raw is not None and not allow_start:
         _LOGGER.debug(
             "Ignoring start_time update for device %s (unsupported by provider)",
             call.data[ATTR_DEVICE_ID],
         )
-    if end is not None and not allow_end:
+    if end_raw is not None and not allow_end:
         _LOGGER.debug(
             "Ignoring end_time update for device %s (unsupported by provider)",
             call.data[ATTR_DEVICE_ID],
@@ -346,20 +368,17 @@ async def _async_handle_update_reservation(call: ServiceCall) -> None:
         )
 
     try:
-        update_payload: dict[str, object] = {
-            "reservation_id": call.data[ATTR_RESERVATION_ID]
-        }
-        if start_dt is not None:
-            update_payload["start_time"] = start_dt
-        if end_dt is not None:
-            update_payload["end_time"] = end_dt
-        await runtime.provider.update_reservation(**update_payload)
+        await runtime.provider.update_reservation(
+            reservation_id=reservation_id,
+            start_time=start_dt,
+            end_time=end_dt,
+        )
     except (NotImplementedError, ProviderError) as err:
         if isinstance(err, ProviderError) and not _is_not_supported(err):
             _raise_reservation_error(err)
         await _fallback_update_reservation(
             runtime,
-            call.data[ATTR_RESERVATION_ID],
+            reservation_id,
             start_dt,
             end_dt,
             license_plate,
@@ -382,9 +401,10 @@ async def _async_handle_end_reservation(call: ServiceCall) -> None:
     """Handle reservation end service."""
 
     runtime = _runtime_from_call(call)
+    reservation_id: str = call.data[ATTR_RESERVATION_ID]
     try:
         await runtime.provider.end_reservation(
-            call.data[ATTR_RESERVATION_ID],
+            reservation_id,
             dt_util.utcnow(),
         )
     except PyCityVisitorParkingError as err:
@@ -393,7 +413,7 @@ async def _async_handle_end_reservation(call: ServiceCall) -> None:
         _LOGGER.debug(
             "Reservation end requested for device %s reservation %s",
             call.data[ATTR_DEVICE_ID],
-            call.data[ATTR_RESERVATION_ID],
+            reservation_id,
         )
 
 
@@ -401,9 +421,11 @@ async def _async_handle_add_favorite(call: ServiceCall) -> None:
     """Handle add favorite service."""
 
     runtime = _runtime_from_call(call)
-    name = call.data.get(ATTR_NAME)
+    name_raw = call.data.get(ATTR_NAME)
+    name = name_raw if isinstance(name_raw, str) else None
     try:
-        payload: dict[str, str] = {ATTR_LICENSE_PLATE: call.data[ATTR_LICENSE_PLATE]}
+        license_plate: str = call.data[ATTR_LICENSE_PLATE]
+        payload: dict[str, str] = {ATTR_LICENSE_PLATE: license_plate}
         if name is not None:
             payload[ATTR_NAME] = name
         await runtime.provider.add_favorite(**payload)
@@ -421,16 +443,19 @@ async def _async_handle_update_favorite(call: ServiceCall) -> None:
     """Handle update favorite service."""
 
     runtime = _runtime_from_call(call)
-    license_plate = call.data.get(ATTR_LICENSE_PLATE)
-    name = call.data.get(ATTR_NAME)
+    license_plate_raw = call.data.get(ATTR_LICENSE_PLATE)
+    name_raw = call.data.get(ATTR_NAME)
+    license_plate = license_plate_raw if isinstance(license_plate_raw, str) else None
+    name = name_raw if isinstance(name_raw, str) else None
     if license_plate is None and name is None:
         raise ServiceValidationError(
             translation_domain=DOMAIN,
             translation_key="update_requires_changes",
         )
 
+    favorite_id: str = call.data[ATTR_FAVORITE_ID]
     try:
-        update_data: dict[str, str] = {ATTR_FAVORITE_ID: call.data[ATTR_FAVORITE_ID]}
+        update_data: dict[str, str] = {ATTR_FAVORITE_ID: favorite_id}
         if license_plate is not None:
             update_data[ATTR_LICENSE_PLATE] = license_plate
         if name is not None:
@@ -439,9 +464,7 @@ async def _async_handle_update_favorite(call: ServiceCall) -> None:
     except (NotImplementedError, ProviderError) as err:
         if isinstance(err, ProviderError) and not _is_not_supported(err):
             _raise_favorite_error(err)
-        await _fallback_update_favorite(
-            runtime, call.data[ATTR_FAVORITE_ID], license_plate, name
-        )
+        await _fallback_update_favorite(runtime, favorite_id, license_plate, name)
     except (TypeError, PyCityVisitorParkingError) as err:
         _LOGGER.debug(
             "Update favorite failed for device %s favorite %s: %s: %s",
@@ -459,7 +482,7 @@ async def _async_handle_remove_favorite(call: ServiceCall) -> None:
     runtime = _runtime_from_call(call)
     try:
         _LOGGER.debug("Removing favorite for device %s", call.data[ATTR_DEVICE_ID])
-        favorite_id = call.data[ATTR_FAVORITE_ID]
+        favorite_id: str = call.data[ATTR_FAVORITE_ID]
         await runtime.provider.remove_favorite(favorite_id)
         _LOGGER.debug("Removed favorite for device %s", call.data[ATTR_DEVICE_ID])
     except PyCityVisitorParkingError as err:
@@ -525,10 +548,12 @@ async def _async_handle_list_active_reservations(
         for favorite in favorites
         if favorite.license_plate
     }
+    config_entry = runtime.coordinator.config_entry
+    entry_title = config_entry.title if config_entry else "unknown"
     _LOGGER.debug(
         "Active reservations response for %s (permit %s): %s active, %s future of %s "
         "(duration=%.3fs)",
-        runtime.coordinator.config_entry.title,
+        entry_title,
         runtime.permit_id,
         len(active),
         len(future),
@@ -577,9 +602,11 @@ async def _async_handle_list_favorites(call: ServiceCall) -> dict[str, JsonValue
             payload[ATTR_NAME] = str(name)
         normalized.append(payload)
 
+    config_entry = runtime.coordinator.config_entry
+    entry_title = config_entry.title if config_entry else "unknown"
     _LOGGER.debug(
         "List favorites response for %s (permit %s): %s favorites",
-        runtime.coordinator.config_entry.title,
+        entry_title,
         runtime.permit_id,
         len(normalized),
     )
@@ -702,7 +729,7 @@ def _runtime_from_call(call: ServiceCall) -> CityVisitorParkingRuntimeData:
     return entry.runtime_data
 
 
-def _raise_invalid_target() -> None:
+def _raise_invalid_target() -> NoReturn:
     """Raise when a service call targets an invalid entry."""
 
     raise ServiceValidationError(

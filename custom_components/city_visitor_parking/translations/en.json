@@ -30,8 +30,7 @@
         "title": "Select permit",
         "description": "Choose the permit to manage in Home Assistant.",
         "data": {
-          "permit_id": "Permit",
-          "description": "Description"
+          "permit_id": "Permit"
         }
       },
       "reauth_confirm": {
@@ -69,8 +68,7 @@
         "title": "Options",
         "description": "Adjust chargeable windows and auto-end behavior. Enter times like 09:00-13:00, 14:00-17:30.",
         "data": {
-          "auto_end_reservation_when_free": "Automatically end reservations when parking is free",
-          "description": "Description"
+          "auto_end_reservation_when_free": "Automatically end reservations when parking is free"
         },
         "sections": {
           "operating_times": {
