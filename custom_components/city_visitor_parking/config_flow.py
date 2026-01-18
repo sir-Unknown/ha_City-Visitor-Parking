@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Mapping
-from dataclasses import dataclass
 from datetime import time
 from importlib import resources
 from typing import Final, Protocol, cast
@@ -66,14 +65,6 @@ WEEKDAY_LABELS: Final[dict[str, str]] = {
 _LOGGER = logging.getLogger(__name__)
 
 
-@dataclass(frozen=True)
-class PermitChoice:
-    """Simplified permit choice for the flow."""
-
-    permit_id: str
-    label: str
-
-
 class CityVisitorParkingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Handle a config flow for City visitor parking."""
 
@@ -86,7 +77,6 @@ class CityVisitorParkingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self._providers: dict[str, ProviderConfig] = {}
         self._provider_config: ProviderConfig | None = None
         self._credentials: dict[str, str] = {}
-        self._permits: list[PermitChoice] = []
         self._reauth_entry: config_entries.ConfigEntry | None = None
 
     async def async_step_user(
@@ -175,47 +165,6 @@ class CityVisitorParkingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         """Handle the authentication step."""
 
         return await self._async_handle_auth(user_input, step_id="auth")
-
-    async def async_step_permit(
-        self, user_input: dict[str, object] | None = None
-    ) -> config_entries.ConfigFlowResult:
-        """Handle permit selection."""
-
-        if user_input is None:
-            options = [
-                selector.SelectOptionDict(value=permit.permit_id, label=permit.label)
-                for permit in self._permits
-            ]
-            schema = vol.Schema(
-                {
-                    vol.Required(CONF_PERMIT_ID): SELECTOR(
-                        {"select": {"options": options}}
-                    ),
-                }
-            )
-            return self.async_show_form(step_id="permit", data_schema=schema)
-
-        permit_id = cast(str, user_input[CONF_PERMIT_ID])
-
-        if self._provider_config is None:
-            return self.async_abort(reason="unknown")
-
-        unique_id = _build_unique_id(self._provider_config, permit_id)
-        await self.async_set_unique_id(unique_id)
-        self._abort_if_unique_id_configured()
-
-        title = f"{self._provider_config.municipality_name} - {permit_id}"
-
-        data = {
-            CONF_PROVIDER_ID: self._provider_config.provider_id,
-            CONF_MUNICIPALITY: self._provider_config.municipality_name,
-            CONF_BASE_URL: self._provider_config.base_url,
-            CONF_API_URL: self._provider_config.api_url,
-            CONF_PERMIT_ID: permit_id,
-            **self._credentials,
-        }
-
-        return self.async_create_entry(title=title, data=data)
 
     async def async_step_reauth(
         self, user_input: dict[str, object] | None = None
@@ -326,7 +275,7 @@ class CityVisitorParkingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         password = cast(str, user_input[CONF_PASSWORD])
         self._credentials = {CONF_USERNAME: username, CONF_PASSWORD: password}
 
-        permits = await self._async_validate_credentials(
+        permit_id = await self._async_validate_credentials(
             username,
             password,
             errors,
@@ -343,7 +292,6 @@ class CityVisitorParkingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 errors=errors,
             )
 
-        self._permits = permits
         if self._reauth_entry is not None:
             return self.async_update_reload_and_abort(
                 self._reauth_entry,
@@ -351,16 +299,44 @@ class CityVisitorParkingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 reason="reauth_successful",
             )
 
-        return await self.async_step_permit()
+        if permit_id is None:
+            return self.async_abort(reason="unknown")
+
+        return await self._async_create_entry_for_permit(permit_id)
+
+    async def _async_create_entry_for_permit(
+        self, permit_id: str
+    ) -> config_entries.ConfigFlowResult:
+        """Create a config entry for the selected permit."""
+
+        if self._provider_config is None:
+            return self.async_abort(reason="unknown")
+
+        unique_id = _build_unique_id(self._provider_config, permit_id)
+        await self.async_set_unique_id(unique_id)
+        self._abort_if_unique_id_configured()
+
+        title = f"{self._provider_config.municipality_name} - {permit_id}"
+
+        data = {
+            CONF_PROVIDER_ID: self._provider_config.provider_id,
+            CONF_MUNICIPALITY: self._provider_config.municipality_name,
+            CONF_BASE_URL: self._provider_config.base_url,
+            CONF_API_URL: self._provider_config.api_url,
+            CONF_PERMIT_ID: permit_id,
+            **self._credentials,
+        }
+
+        return self.async_create_entry(title=title, data=data)
 
     async def _async_validate_credentials(
         self, username: str, password: str, errors: dict[str, str]
-    ) -> list[PermitChoice]:
-        """Validate credentials and return permits."""
+    ) -> str | None:
+        """Validate credentials and return the permit id."""
 
         if self._provider_config is None:
             errors["base"] = "unknown"
-            return []
+            return None
 
         try:
             client = await async_create_client(self.hass, self._provider_config)
@@ -373,10 +349,10 @@ class CityVisitorParkingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             permit = await provider.get_permit()
         except AuthError:
             errors["base"] = "invalid_auth"
-            return []
+            return None
         except NetworkError:
             errors["base"] = "cannot_connect"
-            return []
+            return None
         except PyCityVisitorParkingError as err:
             _LOGGER.debug(
                 "Provider error during login for %s: %s",
@@ -384,7 +360,7 @@ class CityVisitorParkingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 type(err).__name__,
             )
             errors["base"] = "unknown"
-            return []
+            return None
         # Allowed in config flow
         except Exception as err:  # noqa: BLE001
             _LOGGER.debug(
@@ -393,23 +369,14 @@ class CityVisitorParkingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 type(err).__name__,
             )
             errors["base"] = "unknown"
-            return []
+            return None
 
         permit_id = get_attr(permit, "permit_id") or get_attr(permit, "id")
-        choices = []
-        if permit_id:
-            label = get_attr(permit, "name") or get_attr(permit, "label") or permit_id
-            choices = [
-                PermitChoice(
-                    permit_id=str(permit_id),
-                    label=str(label),
-                )
-            ]
-        if not choices:
+        if not permit_id:
             errors["base"] = "no_permits"
-            return []
+            return None
 
-        return choices
+        return str(permit_id)
 
     @staticmethod
     @callback

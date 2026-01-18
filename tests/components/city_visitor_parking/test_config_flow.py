@@ -13,7 +13,6 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 from custom_components.city_visitor_parking.config_flow import (
     OTHER_OPTION,
     CityVisitorParkingConfigFlow,
-    PermitChoice,
     _day_windows_key,
     _format_override_windows,
     _format_time,
@@ -173,12 +172,6 @@ async def test_config_flow_success(hass, monkeypatch) -> None:
     )
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"], {CONF_USERNAME: "user", CONF_PASSWORD: "pass"}
-    )
-    assert result["step_id"] == "permit"
-
-    result = await hass.config_entries.flow.async_configure(
-        result["flow_id"],
-        {CONF_PERMIT_ID: "PERMIT1"},
     )
 
     assert result["type"] == "create_entry"
@@ -410,20 +403,6 @@ async def test_reauth_missing_entry_id_aborts(hass) -> None:
     assert result["reason"] == "unknown"
 
 
-async def test_permit_step_without_provider_aborts(hass) -> None:
-    """Permit step should abort without provider config."""
-
-    flow = CityVisitorParkingConfigFlow()
-    flow.hass = hass
-    flow.context = {"source": "user"}
-    flow._permits = [PermitChoice(permit_id="PERMIT1", label="Permit One")]
-
-    result = await flow.async_step_permit({CONF_PERMIT_ID: "PERMIT1"})
-
-    assert result["type"] == "abort"
-    assert result["reason"] == "unknown"
-
-
 async def test_validate_credentials_requires_provider(hass) -> None:
     """Credential validation should require provider config."""
 
@@ -431,9 +410,9 @@ async def test_validate_credentials_requires_provider(hass) -> None:
     flow.hass = hass
     errors: dict[str, str] = {}
 
-    permits = await flow._async_validate_credentials("user", "pass", errors)
+    permit_id = await flow._async_validate_credentials("user", "pass", errors)
 
-    assert permits == []
+    assert permit_id is None
     assert errors["base"] == "unknown"
 
 
@@ -455,9 +434,9 @@ async def test_validate_credentials_unexpected_error(hass, monkeypatch) -> None:
     )
 
     errors: dict[str, str] = {}
-    permits = await flow._async_validate_credentials("user", "pass", errors)
+    permit_id = await flow._async_validate_credentials("user", "pass", errors)
 
-    assert permits == []
+    assert permit_id is None
     assert errors["base"] == "unknown"
 
 
@@ -483,9 +462,9 @@ async def test_validate_credentials_no_permits(hass, monkeypatch) -> None:
     )
 
     errors: dict[str, str] = {}
-    permits = await flow._async_validate_credentials("user", "pass", errors)
+    permit_id = await flow._async_validate_credentials("user", "pass", errors)
 
-    assert permits == []
+    assert permit_id is None
     assert errors["base"] == "no_permits"
 
 
