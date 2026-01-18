@@ -690,6 +690,7 @@ var localize = (target, key) => {
 // src/card-shared.ts
 var DOMAIN = "city_visitor_parking";
 var RESERVATION_STARTED_EVENT = "city-visitor-parking-reservation-started";
+var PERMIT_PLACEHOLDER_VALUE = "__permit_placeholder__";
 var createStatusState = () => ({
   message: "",
   type: "info",
@@ -733,6 +734,36 @@ var BASE_CARD_STYLES = i`
     font-size: 0.85rem;
   }
 `;
+var splitPermitLabel = (label, entryId) => {
+  const trimmed = label.trim();
+  if (!trimmed) {
+    return { primary: entryId, secondary: "" };
+  }
+  const parts = trimmed.split(" - ").map((part) => part.trim()).filter(Boolean);
+  if (parts.length > 1) {
+    return { primary: parts[0], secondary: parts.slice(1).join(" - ") };
+  }
+  if (trimmed !== entryId) {
+    return { primary: trimmed, secondary: entryId };
+  }
+  return { primary: trimmed, secondary: "" };
+};
+var buildPermitOptions = (entries) => entries.map((entry) => {
+  const label = entry.title || entry.entry_id;
+  const { primary, secondary } = splitPermitLabel(label, entry.entry_id);
+  return {
+    id: entry.entry_id,
+    primary,
+    secondary
+  };
+}).sort(
+  (first, second) => first.primary.localeCompare(second.primary) || first.secondary.localeCompare(second.secondary)
+);
+var fetchPermitEntries = async (hass) => hass.callWS({
+  type: "config_entries/get",
+  type_filter: ["device", "hub", "service"],
+  domain: DOMAIN
+});
 var errorMessage = (err, fallbackKey, localizeFn) => {
   const message = err?.message;
   if (typeof message === "string" && message.trim()) {
@@ -965,24 +996,9 @@ var getCardConfigForm = async (hassOrLocalize) => {
   const STATUS_THROTTLE_MS = 15e3;
   const STATUS_REFRESH_MS = 6e4;
   const FAVORITE_PLACEHOLDER_VALUE = "__favorite_placeholder__";
-  const PERMIT_PLACEHOLDER_VALUE = "__permit_placeholder__";
   const normalizeTimeValue = (value) => value.length === 5 ? `${value}:00` : value;
   const normalizeMatchValue = (value) => String(value ?? "").trim().toLowerCase();
   const normalizePlateValue = (value) => normalizeMatchValue(value).replace(/[^a-z0-9]/g, "");
-  const splitPermitLabel = (label, entryId) => {
-    const trimmed = label.trim();
-    if (!trimmed) {
-      return { primary: entryId, secondary: "" };
-    }
-    const parts = trimmed.split(" - ").map((part) => part.trim()).filter(Boolean);
-    if (parts.length > 1) {
-      return { primary: parts[0], secondary: parts.slice(1).join(" - ") };
-    }
-    if (trimmed !== entryId) {
-      return { primary: trimmed, secondary: entryId };
-    }
-    return { primary: trimmed, secondary: "" };
-  };
   const INPUT_VALUE_IDS = /* @__PURE__ */ new Set([
     "licensePlate",
     "visitorName",
@@ -1103,6 +1119,7 @@ var getCardConfigForm = async (hassOrLocalize) => {
       this._requestRender();
       this._ensureDeviceId();
       this._ensurePermitOptions();
+      this._maybeSelectSinglePermit();
       if (entryId) {
         void this._loadZoneStatusForEntry(entryId);
       }
@@ -1132,6 +1149,7 @@ var getCardConfigForm = async (hassOrLocalize) => {
       this._requestRender();
       this._ensureDeviceId();
       this._ensurePermitOptions();
+      this._maybeSelectSinglePermit();
       const entryId = this._getActiveEntryId();
       this._applyZoneStatusCache(entryId);
       this._setPendingDefaultsForFixedEntry(entryId);
@@ -1206,6 +1224,18 @@ var getCardConfigForm = async (hassOrLocalize) => {
       }
       void this._loadPermitOptions();
     }
+    _maybeSelectSinglePermit() {
+      if (this._config?.config_entry_id) {
+        return;
+      }
+      if (!this._permitOptionsLoaded || this._permitOptions.length !== 1) {
+        return;
+      }
+      if (this._getActiveEntryId()) {
+        return;
+      }
+      this._handlePermitChange(this._permitOptions[0].id);
+    }
     async _loadPermitOptions() {
       if (!this._hass || this._config?.config_entry_id) {
         return;
@@ -1218,26 +1248,10 @@ var getCardConfigForm = async (hassOrLocalize) => {
       this._requestRender();
       const loadPromise = (async () => {
         try {
-          const result = await hass.callWS({
-            type: "config_entries/get",
-            type_filter: ["device", "hub", "service"],
-            domain: DOMAIN
-          });
-          this._permitOptions = result.map((entry) => {
-            const label = entry.title || entry.entry_id;
-            const { primary, secondary } = splitPermitLabel(
-              label,
-              entry.entry_id
-            );
-            return {
-              id: entry.entry_id,
-              primary,
-              secondary
-            };
-          }).sort(
-            (first, second) => first.primary.localeCompare(second.primary) || first.secondary.localeCompare(second.secondary)
-          );
+          const result = await fetchPermitEntries(hass);
+          this._permitOptions = buildPermitOptions(result);
           this._permitOptionsLoaded = true;
+          this._maybeSelectSinglePermit();
         } catch {
           this._permitOptions = [];
           this._permitOptionsLoaded = false;
@@ -1441,7 +1455,7 @@ var getCardConfigForm = async (hassOrLocalize) => {
       const showStart = this._config.show_start_time;
       const showEnd = this._config.show_end_time;
       const activeEntryId = this._getActiveEntryId();
-      const showPermitPicker = !this._config.config_entry_id;
+      const showPermitPicker = !this._config.config_entry_id && !(this._permitOptionsLoaded && this._permitOptions.length === 1);
       const hasTarget = Boolean(activeEntryId);
       const favoriteValue = hasTarget ? priorFavorite && priorFavorite !== FAVORITE_PLACEHOLDER_VALUE ? priorFavorite : FAVORITE_PLACEHOLDER_VALUE : "";
       const hasDevice = Boolean(this._deviceId);

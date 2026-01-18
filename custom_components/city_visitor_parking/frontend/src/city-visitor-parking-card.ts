@@ -3,12 +3,15 @@ import { keyed } from "lit/directives/keyed.js";
 import {
   BASE_CARD_STYLES,
   DOMAIN,
+  PERMIT_PLACEHOLDER_VALUE,
   RESERVATION_STARTED_EVENT,
+  buildPermitOptions,
   clearStatusState,
   createErrorMessage,
   createLocalize,
   createRenderScheduler,
   createStatusState,
+  fetchPermitEntries,
   formatDate,
   formatDateTimeLocal,
   formatTime,
@@ -26,6 +29,7 @@ import {
   showPicker,
   type DeviceEntry,
   type HomeAssistant,
+  type PermitOption,
   type StatusState,
   type StatusType,
 } from "./card-shared";
@@ -39,18 +43,12 @@ import { ensureTranslations } from "./localize";
   const STATUS_THROTTLE_MS = 15000;
   const STATUS_REFRESH_MS = 60000;
   const FAVORITE_PLACEHOLDER_VALUE = "__favorite_placeholder__";
-  const PERMIT_PLACEHOLDER_VALUE = "__permit_placeholder__";
 
   type FavoriteItem = {
     id?: string;
     license_plate?: string;
     name?: string;
     [key: string]: unknown;
-  };
-  type PermitOption = {
-    id: string;
-    primary: string;
-    secondary: string;
   };
   type ZoneStatus = {
     state: "chargeable" | "free" | null;
@@ -92,26 +90,6 @@ import { ensureTranslations } from "./localize";
       .toLowerCase();
   const normalizePlateValue = (value: string | undefined | null): string =>
     normalizeMatchValue(value).replace(/[^a-z0-9]/g, "");
-  const splitPermitLabel = (
-    label: string,
-    entryId: string,
-  ): { primary: string; secondary: string } => {
-    const trimmed = label.trim();
-    if (!trimmed) {
-      return { primary: entryId, secondary: "" };
-    }
-    const parts = trimmed
-      .split(" - ")
-      .map((part) => part.trim())
-      .filter(Boolean);
-    if (parts.length > 1) {
-      return { primary: parts[0], secondary: parts.slice(1).join(" - ") };
-    }
-    if (trimmed !== entryId) {
-      return { primary: trimmed, secondary: entryId };
-    }
-    return { primary: trimmed, secondary: "" };
-  };
   const INPUT_VALUE_IDS = new Set([
     "licensePlate",
     "visitorName",
@@ -337,6 +315,7 @@ import { ensureTranslations } from "./localize";
       this._requestRender();
       this._ensureDeviceId();
       this._ensurePermitOptions();
+      this._maybeSelectSinglePermit();
       if (entryId) {
         void this._loadZoneStatusForEntry(entryId);
       }
@@ -371,6 +350,7 @@ import { ensureTranslations } from "./localize";
       this._requestRender();
       this._ensureDeviceId();
       this._ensurePermitOptions();
+      this._maybeSelectSinglePermit();
       const entryId = this._getActiveEntryId();
       this._applyZoneStatusCache(entryId);
       this._setPendingDefaultsForFixedEntry(entryId);
@@ -459,6 +439,19 @@ import { ensureTranslations } from "./localize";
       void this._loadPermitOptions();
     }
 
+    _maybeSelectSinglePermit(): void {
+      if (this._config?.config_entry_id) {
+        return;
+      }
+      if (!this._permitOptionsLoaded || this._permitOptions.length !== 1) {
+        return;
+      }
+      if (this._getActiveEntryId()) {
+        return;
+      }
+      this._handlePermitChange(this._permitOptions[0].id);
+    }
+
     async _loadPermitOptions(): Promise<void> {
       if (!this._hass || this._config?.config_entry_id) {
         return;
@@ -471,32 +464,10 @@ import { ensureTranslations } from "./localize";
       this._requestRender();
       const loadPromise = (async () => {
         try {
-          const result = await hass.callWS<
-            Array<{ entry_id: string; title?: string | null }>
-          >({
-            type: "config_entries/get",
-            type_filter: ["device", "hub", "service"],
-            domain: DOMAIN,
-          });
-          this._permitOptions = result
-            .map((entry) => {
-              const label = entry.title || entry.entry_id;
-              const { primary, secondary } = splitPermitLabel(
-                label,
-                entry.entry_id,
-              );
-              return {
-                id: entry.entry_id,
-                primary,
-                secondary,
-              };
-            })
-            .sort(
-              (first, second) =>
-                first.primary.localeCompare(second.primary) ||
-                first.secondary.localeCompare(second.secondary),
-            );
+          const result = await fetchPermitEntries(hass);
+          this._permitOptions = buildPermitOptions(result);
           this._permitOptionsLoaded = true;
+          this._maybeSelectSinglePermit();
         } catch {
           this._permitOptions = [];
           this._permitOptionsLoaded = false;
@@ -729,7 +700,9 @@ import { ensureTranslations } from "./localize";
       const showStart = this._config.show_start_time;
       const showEnd = this._config.show_end_time;
       const activeEntryId = this._getActiveEntryId();
-      const showPermitPicker = !this._config.config_entry_id;
+      const showPermitPicker =
+        !this._config.config_entry_id &&
+        !(this._permitOptionsLoaded && this._permitOptions.length === 1);
       const hasTarget = Boolean(activeEntryId);
       const favoriteValue = hasTarget
         ? priorFavorite && priorFavorite !== FAVORITE_PLACEHOLDER_VALUE
