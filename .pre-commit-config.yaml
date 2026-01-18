@@ -56,6 +56,9 @@ repos:
         entry: mypy
         language: system
         require_serial: true
+        args:
+          - --config-file
+          - /workspaces/ha_City-Visitor-Parking/mypy.ini
         types_or: [python, pyi]
         files: ^(custom_components|tests)/.+\.(py|pyi)$
       - id: pyright
@@ -67,7 +70,7 @@ repos:
     hooks:
       - id: hassfest
         name: hassfest (city_visitor_parking)
-        entry: python
+        entry: env PYTHONPATH=/workspaces/homeassistant-core python
         args:
           - -m
           - script.hassfest

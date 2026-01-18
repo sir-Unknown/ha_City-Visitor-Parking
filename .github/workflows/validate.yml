@@ -119,7 +119,6 @@ jobs:
       - name: Run pytest (with coverage)
         run: pytest tests/components/city_visitor_parking --cov=custom_components.city_visitor_parking --cov-report=term-missing
 
-
   frontend:
     name: Frontend build
     runs-on: ubuntu-latest
