@@ -103,7 +103,7 @@ repos:
         name: frontend types
         entry: yarn --cwd custom_components/city_visitor_parking/frontend lint:types
         language: system
-        files: ^custom_components/city_visitor_parking/frontend/.*\.(ts|json)$
+        files: ^custom_components/city_visitor_parking/frontend/src/.*\.ts$|^custom_components/city_visitor_parking/frontend/tsconfig\.json$
         pass_filenames: false
       - id: frontend-test
         name: frontend test
