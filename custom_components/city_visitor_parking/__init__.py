@@ -96,7 +96,7 @@ CONFIG_SCHEMA: Final[Callable[[ConfigType], ConfigType]] = _config_entry_only_sc
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     """Set up the City visitor parking integration."""
 
-    await _async_register_frontend(hass, "frontend")
+    async_when_setup(hass, "http", _async_register_frontend)
     async_when_setup(hass, "lovelace", _async_register_lovelace_resources)
     _LOGGER.debug("Setting up services and websocket API")
     await async_setup_services(hass)

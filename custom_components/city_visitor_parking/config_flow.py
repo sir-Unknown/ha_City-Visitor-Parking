@@ -65,7 +65,8 @@ WEEKDAY_LABELS: Final[dict[str, str]] = {
 _LOGGER = logging.getLogger(__name__)
 
 
-class CityVisitorParkingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
+@config_entries.HANDLERS.register(DOMAIN)
+class CityVisitorParkingConfigFlow(config_entries.ConfigFlow):
     """Handle a config flow for City visitor parking."""
 
     VERSION = 1
