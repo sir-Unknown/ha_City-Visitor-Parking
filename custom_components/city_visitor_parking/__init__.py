@@ -360,11 +360,7 @@ async def _async_register_lovelace_resources(
         base_url = f"/city_visitor_parking/{filename}"
         file_path = dist_path / filename
         try:
-            version = int(
-                await hass.async_add_executor_job(
-                    lambda: file_path.stat().st_mtime
-                )
-            )
+            version = int(await hass.async_add_executor_job(_stat_mtime, file_path))
             desired_urls[base_url] = f"{base_url}?v={version}"
         except FileNotFoundError:
             desired_urls[base_url] = base_url
@@ -398,3 +394,8 @@ async def _async_register_lovelace_resources(
         await create_item({CONF_RESOURCE_TYPE_WS: "module", CONF_URL: url})
 
     data["lovelace_resources_registered"] = True
+
+
+def _stat_mtime(path: Path) -> float:
+    """Return the modification time for a path."""
+    return path.stat().st_mtime
