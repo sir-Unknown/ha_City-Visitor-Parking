@@ -3,10 +3,12 @@ import { keyed } from "lit/directives/keyed.js";
 import {
   BASE_CARD_STYLES,
   DOMAIN,
+  FAVORITE_PLACEHOLDER_VALUE,
   PERMIT_PLACEHOLDER_VALUE,
   RESERVATION_STARTED_EVENT,
   buildPermitOptions,
-  clearStatusState,
+  renderFavoriteActionRow,
+  renderFavoriteSelect,
   createErrorMessage,
   createLocalize,
   createRenderScheduler,
@@ -15,19 +17,28 @@ import {
   formatDate,
   formatDateTimeLocal,
   formatTime,
-  getCardText,
   getGlobalHass,
+  getConfigEntryId,
+  filterDomainDevices,
   getInvalidConfigError,
+  getHassLanguage,
+  useStatusState,
   isHassRunning,
   isHassStarting,
   isInEditor,
-  registerCustomCard,
+  parseDateTimePartsMaybe,
+  parseDateTimeParts,
+  parseDateTimeValue,
+  parseDateTimeValueWithFallback,
+  registerCustomCardWithTranslations,
   renderCardHeader,
+  getPermitSelectState,
+  renderPermitSelect,
   renderLoadingCard,
   renderStatusAlert,
-  setStatusState,
   showPicker,
   type DeviceEntry,
+  type FavoriteOption,
   type HomeAssistant,
   type PermitOption,
   type StatusState,
@@ -42,12 +53,8 @@ import { ensureTranslations } from "./localize";
   const WS_GET_STATUS = "city_visitor_parking/status";
   const STATUS_THROTTLE_MS = 15000;
   const STATUS_REFRESH_MS = 60000;
-  const FAVORITE_PLACEHOLDER_VALUE = "__favorite_placeholder__";
 
-  type FavoriteItem = {
-    id?: string;
-    license_plate?: string;
-    name?: string;
+  type FavoriteItem = FavoriteOption & {
     [key: string]: unknown;
   };
   type ZoneStatus = {
@@ -66,7 +73,6 @@ import { ensureTranslations } from "./localize";
     type: string;
     title?: string;
     icon?: string;
-    show_reservation_form?: boolean;
     show_favorites?: boolean;
     show_start_time?: boolean;
     show_end_time?: boolean;
@@ -80,10 +86,9 @@ import { ensureTranslations } from "./localize";
     showAddFavorite: boolean;
     showRemoveFavorite: boolean;
     selectedFavorite: FavoriteItem | null;
+    removeFavorite: FavoriteItem | null;
   };
 
-  const normalizeTimeValue = (value: string): string =>
-    value.length === 5 ? `${value}:00` : value;
   const normalizeMatchValue = (value: string | undefined | null): string =>
     String(value ?? "")
       .trim()
@@ -149,6 +154,8 @@ import { ensureTranslations } from "./localize";
           margin-left: auto;
         }
         .start-button.success {
+          --ha-button-primary-color: var(--success-color, #21b365);
+          --ha-button-primary-text-color: var(--text-primary-color, #fff);
           --mdc-theme-primary: var(--success-color, #21b365);
           --mdc-theme-on-primary: var(--text-primary-color, #fff);
         }
@@ -271,11 +278,13 @@ import { ensureTranslations } from "./localize";
       return getCardConfigForm(hass);
     }
 
+    static getConfigElement(): HTMLElement {
+      return document.createElement("city-visitor-parking-card-editor");
+    }
+
     static getStubConfig(): CardConfig {
       return {
         type: `custom:${CARD_TYPE}`,
-        title: getCardText("name"),
-        show_reservation_form: true,
         show_favorites: true,
         show_start_time: true,
         show_end_time: true,
@@ -289,20 +298,26 @@ import { ensureTranslations } from "./localize";
         );
       }
       const priorEntryId = this._getActiveEntryId();
+      const priorShowFavorites = this._config?.show_favorites ?? true;
       this._config = {
-        show_reservation_form: config.show_reservation_form !== false,
         show_favorites: config.show_favorites !== false,
         show_start_time: config.show_start_time !== false,
         show_end_time: config.show_end_time !== false,
         ...config,
       };
-      if (this._config.config_entry_id) {
+      if (priorShowFavorites && !this._config.show_favorites) {
+        this._resetFavoritesState();
+        this._addFavoriteChecked = false;
+        this._suppressFavoriteClear = false;
+        this._setInputValue("favorite", FAVORITE_PLACEHOLDER_VALUE);
+      }
+      if (getConfigEntryId(this._config)) {
         this._selectedEntryId = null;
       }
       const entryChanged = this._getActiveEntryId() !== priorEntryId;
       if (this._config.device_id) {
         this._deviceId = this._config.device_id;
-        this._deviceEntryId = this._config.config_entry_id || null;
+        this._deviceEntryId = getConfigEntryId(this._config);
         if (entryChanged) {
           this._resetFavoritesState();
         }
@@ -380,7 +395,7 @@ import { ensureTranslations } from "./localize";
       }
       if (this._config?.device_id) {
         this._deviceId = this._config.device_id;
-        this._deviceEntryId = this._config.config_entry_id || entryId;
+        this._deviceEntryId = getConfigEntryId(this._config) || entryId;
         return;
       }
       if (this._deviceEntryId === entryId && this._deviceId) {
@@ -400,18 +415,11 @@ import { ensureTranslations } from "./localize";
       this._deviceLoadPromise = this._hass
         .callWS<DeviceEntry[]>({ type: "config/device_registry/list" })
         .then((devices) => {
-          const match = devices.find((device: DeviceEntry) => {
-            const identifiers = Array.isArray(device.identifiers)
-              ? device.identifiers
-              : [];
-            const hasDomain = identifiers.some(
-              (identifier: [string, string]) => identifier[0] === DOMAIN,
-            );
-            const hasEntry = Array.isArray(device.config_entries)
-              ? device.config_entries.includes(entryId)
-              : false;
-            return hasDomain && hasEntry;
-          });
+          const match = filterDomainDevices(devices).find(
+            (device: DeviceEntry) =>
+              Array.isArray(device.config_entries) &&
+              device.config_entries.includes(entryId),
+          );
           const deviceId = match ? match.id : null;
           this._deviceId = deviceId;
           if (deviceId) {
@@ -430,7 +438,7 @@ import { ensureTranslations } from "./localize";
     }
 
     _ensurePermitOptions(): void {
-      if (this._config?.config_entry_id || !this._hass) {
+      if (getConfigEntryId(this._config) || !this._hass) {
         return;
       }
       if (this._permitOptionsLoaded || this._permitOptionsLoadPromise) {
@@ -440,7 +448,7 @@ import { ensureTranslations } from "./localize";
     }
 
     _maybeSelectSinglePermit(): void {
-      if (this._config?.config_entry_id) {
+      if (getConfigEntryId(this._config)) {
         return;
       }
       if (!this._permitOptionsLoaded || this._permitOptions.length !== 1) {
@@ -453,7 +461,7 @@ import { ensureTranslations } from "./localize";
     }
 
     async _loadPermitOptions(): Promise<void> {
-      if (!this._hass || this._config?.config_entry_id) {
+      if (!this._hass || getConfigEntryId(this._config)) {
         return;
       }
       const hass = this._hass;
@@ -482,18 +490,11 @@ import { ensureTranslations } from "./localize";
     }
 
     async _loadData(): Promise<void> {
-      if (this._config?.show_reservation_form === false) {
-        return;
-      }
       await this._maybeLoadFavorites();
     }
 
     async _maybeLoadFavorites(): Promise<void> {
-      if (
-        !this._hass ||
-        !this._config?.show_favorites ||
-        this._config?.show_reservation_form === false
-      ) {
+      if (!this._hass || !this._config?.show_favorites) {
         return;
       }
       if (!isHassRunning(this._hass)) {
@@ -624,6 +625,7 @@ import { ensureTranslations } from "./localize";
           showAddFavorite: false,
           showRemoveFavorite: false,
           selectedFavorite: null,
+          removeFavorite: null,
         };
       }
       const controlsDisabled = this._isInEditor();
@@ -635,6 +637,10 @@ import { ensureTranslations } from "./localize";
       const selectedFavoriteMatchesLicense = selectedFavorite
         ? this._selectedFavoriteMatchesLicense(selectedFavorite, license)
         : false;
+      const licenseFavorite = this._findFavorite(license, "");
+      const removeFavorite = selectedFavoriteMatchesLicense
+        ? selectedFavorite
+        : licenseFavorite;
       const matchingFavorite = this._findFavorite(license, name);
       const canManageFavorites =
         !controlsDisabled && !this._favoritesLoading && Boolean(this._deviceId);
@@ -643,15 +649,16 @@ import { ensureTranslations } from "./localize";
         Boolean(license) &&
         Boolean(name) &&
         !matchingFavorite &&
+        !licenseFavorite &&
         !selectedFavoriteMatchesLicense;
       const showRemoveFavorite =
         canManageFavorites &&
-        Boolean(selectedFavorite?.id || selectedFavorite?.license_plate) &&
-        selectedFavoriteMatchesLicense;
+        Boolean(removeFavorite?.id || removeFavorite?.license_plate);
       return {
         showAddFavorite: showAddFavorite && !showRemoveFavorite,
         showRemoveFavorite,
         selectedFavorite,
+        removeFavorite,
       };
     }
 
@@ -695,13 +702,12 @@ import { ensureTranslations } from "./localize";
 
       const title = this._config.title || "";
       const icon = this._config.icon;
-      const showFavorites = this._config.show_favorites;
-      const showReservationForm = this._config.show_reservation_form;
-      const showStart = this._config.show_start_time;
-      const showEnd = this._config.show_end_time;
+      const showFavorites = this._config.show_favorites ?? true;
+      const showStart = this._config.show_start_time ?? true;
+      const showEnd = this._config.show_end_time ?? true;
       const activeEntryId = this._getActiveEntryId();
       const showPermitPicker =
-        !this._config.config_entry_id &&
+        !getConfigEntryId(this._config) &&
         !(this._permitOptionsLoaded && this._permitOptions.length === 1);
       const hasTarget = Boolean(activeEntryId);
       const favoriteValue = hasTarget
@@ -717,14 +723,15 @@ import { ensureTranslations } from "./localize";
       const permitPlaceholder = localize(permitPlaceholderKey);
       const permitPlaceholderText =
         permitPlaceholder === permitPlaceholderKey ? "" : permitPlaceholder;
-      const permitSelectedText = activeEntryId
-        ? this._permitOptions.find((entry) => entry.id === activeEntryId)
-            ?.primary || activeEntryId
-        : permitPlaceholderText;
-      const permitSelectValue = activeEntryId ?? PERMIT_PLACEHOLDER_VALUE;
+      const { selectedText: permitSelectedText, value: permitSelectValue } =
+        getPermitSelectState(
+          activeEntryId,
+          this._permitOptions,
+          permitPlaceholderText,
+        );
       const permitSelectDisabled =
         controlsDisabled || this._permitOptionsLoading;
-      const { showAddFavorite, showRemoveFavorite, selectedFavorite } =
+      const { showAddFavorite, showRemoveFavorite, removeFavorite } =
         this._getFavoriteActionState();
       const favoriteRemoveDisabled =
         controlsDisabled || this._favoriteRemoveInFlight;
@@ -744,234 +751,120 @@ import { ensureTranslations } from "./localize";
         >
           ${renderCardHeader(title, icon, html, nothing)}
           <div class="card-content">
-            ${showReservationForm
-              ? html`
-                  ${showPermitPicker
-                    ? html`
-                        <div class="row">
-                          <ha-select
-                            id="permitSelect"
-                            .label=${localize("field.permit")}
-                            .value=${permitSelectValue}
-                            .selectedText=${permitSelectedText}
-                            ?disabled=${permitSelectDisabled}
-                            @selected=${this._onPermitSelectChange}
-                          >
-                            <mwc-list-item value=${PERMIT_PLACEHOLDER_VALUE}>
-                              ${permitPlaceholderText}
-                            </mwc-list-item>
-                            ${this._permitOptions.map((entry) => {
-                              const secondaryText = entry.secondary;
-                              return html`<mwc-list-item
-                                value=${entry.id}
-                                ?twoline=${Boolean(secondaryText)}
-                              >
-                                <span>${entry.primary}</span>
-                                ${secondaryText
-                                  ? html`<span slot="secondary"
-                                      >${secondaryText}</span
-                                    >`
-                                  : nothing}
-                              </mwc-list-item>`;
-                            })}
-                          </ha-select>
-                        </div>
-                      `
-                    : nothing}
-                  ${showFavorites
-                    ? html`
-                        <div class="row">
-                          ${keyed(
-                            activeEntryId ?? "",
-                            html`<ha-select
-                              id="favorite"
-                              .label=${localize("field.favorite")}
-                              .value=${favoriteValue}
-                              .selectedText=${favoriteSelectedText}
-                              ?disabled=${favoriteSelectDisabled}
-                              @selected=${this._onFavoriteSelectChange}
-                            >
-                              ${hasTarget
-                                ? html`
-                                    <mwc-list-item
-                                      value=${FAVORITE_PLACEHOLDER_VALUE}
-                                    >
-                                      ${localize("message.select_favorite")}
-                                    </mwc-list-item>
-                                  `
-                                : nothing}
-                              ${favoritesOptions.map(
-                                (favorite: FavoriteItem) => {
-                                  const value =
-                                    favorite.license_plate || favorite.id || "";
-                                  const label =
-                                    favorite.name ||
-                                    favorite.license_plate ||
-                                    favorite.id ||
-                                    "";
-                                  const secondaryText =
-                                    favorite.name && favorite.license_plate
-                                      ? favorite.license_plate
-                                      : "";
-                                  return html`<mwc-list-item
-                                    value=${value}
-                                    ?twoline=${Boolean(secondaryText)}
-                                  >
-                                    <span>${label}</span>
-                                    ${secondaryText
-                                      ? html`<span slot="secondary"
-                                          >${secondaryText}</span
-                                        >`
-                                      : nothing}
-                                  </mwc-list-item>`;
-                                },
-                              )}
-                            </ha-select>`,
-                          )}
-                          ${this._favoritesError
-                            ? html`
-                                <ha-alert alert-type="warning">
-                                  ${this._favoritesError}
-                                </ha-alert>
-                              `
-                            : nothing}
-                        </div>
-                      `
-                    : nothing}
-                  <div class="row">
-                    <ha-textfield
-                      id="visitorName"
-                      .label=${localize("field.name")}
-                      .value=${priorVisitorName}
-                    ></ha-textfield>
-                  </div>
-                  <div class="row">
-                    <ha-textfield
-                      id="licensePlate"
-                      .label=${localize("field.license_plate")}
-                      placeholder=${localize("placeholder.license_plate")}
-                      .value=${priorLicense}
-                    ></ha-textfield>
-                  </div>
-                  ${showStart
-                    ? useSplitDateTime
-                      ? html`
-                          <div class="row">
-                            <ha-date-input
-                              id="startDate"
-                              .label=${localize("field.start_date")}
-                              .locale=${this._hass?.locale}
-                              .value=${priorStartDate}
-                            ></ha-date-input>
-                          </div>
-                          <div class="row">
-                            <ha-time-input
-                              id="startTime"
-                              .label=${localize("field.start_time")}
-                              .locale=${this._hass?.locale}
-                              .value=${priorStartTime}
-                            ></ha-time-input>
-                          </div>
-                        `
-                      : html`
-                          <div class="row">
-                            <ha-textfield
-                              id="startDateTime"
-                              .label=${localize("field.start_time")}
-                              type="datetime-local"
-                              .value=${priorStartDateTime}
-                              @click=${this._onPickerClick}
-                            ></ha-textfield>
-                          </div>
-                        `
-                    : nothing}
-                  ${showEnd
-                    ? useSplitDateTime
-                      ? html`
-                          <div class="row">
-                            <ha-date-input
-                              id="endDate"
-                              .label=${localize("field.end_date")}
-                              .locale=${this._hass?.locale}
-                              .value=${priorEndDate}
-                            ></ha-date-input>
-                          </div>
-                          <div class="row">
-                            <ha-time-input
-                              id="endTime"
-                              .label=${localize("field.end_time")}
-                              .locale=${this._hass?.locale}
-                              .value=${priorEndTime}
-                            ></ha-time-input>
-                          </div>
-                        `
-                      : html`
-                          <div class="row">
-                            <ha-textfield
-                              id="endDateTime"
-                              .label=${localize("field.end_time")}
-                              type="datetime-local"
-                              .value=${priorEndDateTime}
-                              @click=${this._onPickerClick}
-                            ></ha-textfield>
-                          </div>
-                        `
-                    : nothing}
-                  <div class="row actions">
-                    <div class="favorite-actions">
-                      ${showFavorites
-                        ? showRemoveFavorite
-                          ? html`
-                              <ha-formfield
-                                id="removeFavoriteWrap"
-                                .label=${localize("action.remove_favorite")}
-                              >
-                                <ha-icon-button
-                                  id="removeFavorite"
-                                  title=${localize("action.remove_favorite")}
-                                  aria-label=${localize(
-                                    "action.remove_favorite",
-                                  )}
-                                  data-favorite-id=${selectedFavorite?.id ||
-                                  selectedFavorite?.license_plate ||
-                                  ""}
-                                  ?disabled=${favoriteRemoveDisabled}
-                                >
-                                  <div class="leading">
-                                    <ha-icon
-                                      icon="mdi:trash-can-outline"
-                                    ></ha-icon>
-                                  </div>
-                                </ha-icon-button>
-                              </ha-formfield>
-                            `
-                          : showAddFavorite
-                            ? html`
-                                <ha-formfield
-                                  id="addFavoriteWrap"
-                                  .label=${localize("action.add_favorite")}
-                                >
-                                  <ha-checkbox
-                                    id="addFavorite"
-                                    .checked=${this._addFavoriteChecked}
-                                  ></ha-checkbox>
-                                </ha-formfield>
-                              `
-                            : nothing
-                        : nothing}
-                    </div>
-                    <ha-button
-                      id="startReservation"
-                      class=${this._startButtonSuccess
-                        ? "start-button success"
-                        : "start-button"}
-                      ?disabled=${startDisabled}
-                    >
-                      ${localize("action.start_reservation")}
-                    </ha-button>
-                  </div>
-                `
+            ${showPermitPicker
+              ? renderPermitSelect(html, {
+                  label: localize("field.permit"),
+                  value: permitSelectValue,
+                  selectedText: permitSelectedText,
+                  disabled: permitSelectDisabled,
+                  placeholderText: permitPlaceholderText,
+                  options: this._permitOptions,
+                  onSelected: this._onPermitSelectChange,
+                })
               : nothing}
+            ${renderFavoriteSelect(html, {
+              showFavorites,
+              favoriteValue,
+              favoriteSelectedText,
+              favoriteSelectDisabled,
+              hasTarget,
+              favoritesOptions,
+              favoritesError: this._favoritesError,
+              localize,
+              onSelected: this._onFavoriteSelectChange,
+              wrapSelect: (content) => keyed(activeEntryId ?? "", content),
+            })}
+            <div class="row">
+              <ha-textfield
+                id="visitorName"
+                .label=${localize("field.name")}
+                .value=${priorVisitorName}
+              ></ha-textfield>
+            </div>
+            <div class="row">
+              <ha-textfield
+                id="licensePlate"
+                .label=${localize("field.license_plate")}
+                placeholder=${localize("placeholder.license_plate")}
+                .value=${priorLicense}
+              ></ha-textfield>
+            </div>
+            ${showStart
+              ? useSplitDateTime
+                ? html`
+                    <div class="row">
+                      <ha-date-input
+                        id="startDate"
+                        .label=${localize("field.start_date")}
+                        .locale=${this._hass?.locale}
+                        .value=${priorStartDate}
+                      ></ha-date-input>
+                    </div>
+                    <div class="row">
+                      <ha-time-input
+                        id="startTime"
+                        .label=${localize("field.start_time")}
+                        .locale=${this._hass?.locale}
+                        .value=${priorStartTime}
+                      ></ha-time-input>
+                    </div>
+                  `
+                : html`
+                    <div class="row">
+                      <ha-textfield
+                        id="startDateTime"
+                        .label=${localize("field.start_time")}
+                        type="datetime-local"
+                        .value=${priorStartDateTime}
+                        @click=${this._onPickerClick}
+                      ></ha-textfield>
+                    </div>
+                  `
+              : nothing}
+            ${showEnd
+              ? useSplitDateTime
+                ? html`
+                    <div class="row">
+                      <ha-date-input
+                        id="endDate"
+                        .label=${localize("field.end_date")}
+                        .locale=${this._hass?.locale}
+                        .value=${priorEndDate}
+                      ></ha-date-input>
+                    </div>
+                    <div class="row">
+                      <ha-time-input
+                        id="endTime"
+                        .label=${localize("field.end_time")}
+                        .locale=${this._hass?.locale}
+                        .value=${priorEndTime}
+                      ></ha-time-input>
+                    </div>
+                  `
+                : html`
+                    <div class="row">
+                      <ha-textfield
+                        id="endDateTime"
+                        .label=${localize("field.end_time")}
+                        type="datetime-local"
+                        .value=${priorEndDateTime}
+                        @click=${this._onPickerClick}
+                      ></ha-textfield>
+                    </div>
+                  `
+              : nothing}
+            ${renderFavoriteActionRow(html, {
+              showFavorites,
+              showAddFavorite,
+              showRemoveFavorite,
+              selectedFavoriteId:
+                removeFavorite?.id || removeFavorite?.license_plate || "",
+              favoriteRemoveDisabled,
+              addFavoriteChecked: this._addFavoriteChecked,
+              startButtonSuccess: this._startButtonSuccess,
+              startDisabled,
+              localize,
+            })}
             ${renderStatusAlert(this._statusState, html, nothing)}
           </div>
         </ha-card>
@@ -1238,7 +1131,7 @@ import { ensureTranslations } from "./localize";
     }
 
     _setPendingDefaultsForFixedEntry(entryId: string | null): void {
-      if (!this._config?.config_entry_id || !entryId) {
+      if (!getConfigEntryId(this._config) || !entryId) {
         return;
       }
       this._pendingPermitDefaultsEntryId = entryId;
@@ -1246,11 +1139,7 @@ import { ensureTranslations } from "./localize";
 
     _setupStatusRefresh(entryId: string | null): void {
       this._clearStatusRefresh();
-      if (
-        !this._config?.config_entry_id ||
-        !this._config.show_reservation_form ||
-        !entryId
-      ) {
+      if (!getConfigEntryId(this._config) || !entryId) {
         return;
       }
       this._statusRefreshHandle = window.setInterval(() => {
@@ -1375,7 +1264,12 @@ import { ensureTranslations } from "./localize";
     }
 
     _addFavorite(license: string, name: string): void {
-      if (!this._hass || !this._deviceId || !license) {
+      if (
+        !this._hass ||
+        !this._deviceId ||
+        !license ||
+        !this._config?.show_favorites
+      ) {
         return;
       }
       this._favoritesLoadedFor = null;
@@ -1389,7 +1283,12 @@ import { ensureTranslations } from "./localize";
     }
 
     async _removeFavorite(favoriteId: string): Promise<void> {
-      if (!this._hass || !this._deviceId || !favoriteId) {
+      if (
+        !this._hass ||
+        !this._deviceId ||
+        !favoriteId ||
+        !this._config?.show_favorites
+      ) {
         return;
       }
       if (this._favoriteRemoveInFlight) {
@@ -1486,10 +1385,11 @@ import { ensureTranslations } from "./localize";
           license_plate: license,
         });
       } catch (err: unknown) {
-        this._setStatus(
-          this._errorMessage(err, "message.reservation_start_failed"),
-          "warning",
+        const message = this._errorMessage(
+          err,
+          "message.reservation_start_failed",
         );
+        this._setStatus(message, "warning");
         this._startInFlight = false;
         this._requestRender();
         return;
@@ -1511,17 +1411,15 @@ import { ensureTranslations } from "./localize";
     }
 
     _setStatus(message: string, type: StatusType, clearAfterMs?: number): void {
-      setStatusState(
-        this._statusState,
+      useStatusState(this._statusState, this._requestRender).set(
         message,
         type,
-        () => this._requestRender(),
         clearAfterMs,
       );
     }
 
     _clearStatus(): void {
-      clearStatusState(this._statusState, () => this._requestRender());
+      useStatusState(this._statusState, this._requestRender).clear();
     }
 
     _setStartButtonSuccess(): void {
@@ -1569,9 +1467,9 @@ import { ensureTranslations } from "./localize";
           ? this._getInputValue("startDateTime")
           : "";
         const endValue = showEnd ? this._getInputValue("endDateTime") : "";
-        start = startValue ? new Date(startValue) : fallbackStart;
+        start = parseDateTimeValueWithFallback(startValue, fallbackStart);
         const fallbackEnd = new Date(start.getTime() + 60 * 60 * 1000);
-        end = endValue ? new Date(endValue) : fallbackEnd;
+        end = parseDateTimeValueWithFallback(endValue, fallbackEnd);
       }
 
       if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
@@ -1581,11 +1479,7 @@ import { ensureTranslations } from "./localize";
     }
 
     _parseDateTime(dateValue: string, timeValue: string, fallback: Date): Date {
-      if (!dateValue || !timeValue) {
-        return fallback;
-      }
-      const normalizedTime = normalizeTimeValue(timeValue);
-      return new Date(`${dateValue}T${normalizedTime}`);
+      return parseDateTimeParts(dateValue, timeValue, fallback);
     }
 
     _getInputValue(id: string): string {
@@ -1637,10 +1531,8 @@ import { ensureTranslations } from "./localize";
         if (!startDateValue || !startTimeValue) {
           return;
         }
-        const start = new Date(
-          `${startDateValue}T${normalizeTimeValue(startTimeValue)}`,
-        );
-        if (Number.isNaN(start.getTime())) {
+        const start = parseDateTimePartsMaybe(startDateValue, startTimeValue);
+        if (!start) {
           return;
         }
         const end = this._resolveDefaultEnd(start, offsetMs);
@@ -1652,8 +1544,8 @@ import { ensureTranslations } from "./localize";
       if (!startValue) {
         return;
       }
-      const start = new Date(startValue);
-      if (Number.isNaN(start.getTime())) {
+      const start = parseDateTimeValue(startValue);
+      if (!start) {
         return;
       }
       const end = this._resolveDefaultEnd(start, offsetMs);
@@ -1749,10 +1641,11 @@ import { ensureTranslations } from "./localize";
                 this._setInputValue("startTime", formatTime(defaults.start));
               }
             } else {
-              const start = new Date(
-                `${startDateValue}T${normalizeTimeValue(startTimeValue)}`,
+              const start = parseDateTimePartsMaybe(
+                startDateValue,
+                startTimeValue,
               );
-              if (Number.isNaN(start.getTime())) {
+              if (!start) {
                 this._setInputValue("startDate", formatDate(defaults.start));
                 this._setInputValue("startTime", formatTime(defaults.start));
               } else if (start <= now) {
@@ -1791,8 +1684,8 @@ import { ensureTranslations } from "./localize";
               formatDateTimeLocal(defaults.start),
             );
           } else {
-            const start = new Date(startValue);
-            if (Number.isNaN(start.getTime())) {
+            const start = parseDateTimeValue(startValue);
+            if (!start) {
               this._setInputValue(
                 "startDateTime",
                 formatDateTimeLocal(defaults.start),
@@ -1821,7 +1714,7 @@ import { ensureTranslations } from "./localize";
     }
 
     _getActiveEntryId(): string | null {
-      return this._config?.config_entry_id || this._selectedEntryId;
+      return getConfigEntryId(this._config) || this._selectedEntryId;
     }
 
     _useSplitDateTime(): boolean {
@@ -1836,17 +1729,7 @@ import { ensureTranslations } from "./localize";
     }
 
     _getTranslationLanguage(hass: HomeAssistant | null): string {
-      const hassLanguage =
-        typeof hass?.language === "string" ? hass.language : undefined;
-      const localeLanguage =
-        hass && typeof hass.locale === "object" && hass.locale
-          ? (hass.locale as { language?: unknown }).language
-          : undefined;
-      const normalizedLocaleLanguage =
-        typeof localeLanguage === "string" ? localeLanguage : undefined;
-      return (
-        hassLanguage || normalizedLocaleLanguage || navigator.language || "en"
-      );
+      return getHassLanguage(hass) || navigator.language || "en";
     }
 
     _isInEditor(): boolean {
@@ -1854,34 +1737,10 @@ import { ensureTranslations } from "./localize";
     }
   }
 
-  const registerCard = (): void => {
-    registerCustomCard(
-      CARD_TYPE,
-      CityVisitorParkingNewReservationCard,
-      getCardText("name"),
-      getCardText("description"),
-    );
-  };
-  const getHassLanguage = (
-    hass: HomeAssistant | null | undefined,
-  ): string | undefined => {
-    const hassLanguage =
-      typeof hass?.language === "string" ? hass.language : undefined;
-    const localeLanguage =
-      hass && typeof hass.locale === "object" && hass.locale
-        ? (hass.locale as { language?: unknown }).language
-        : undefined;
-    return (
-      hassLanguage ||
-      (typeof localeLanguage === "string" ? localeLanguage : undefined)
-    );
-  };
-  const registerCardWithTranslations = (attempt = 0): void => {
-    const hass = getGlobalHass<HomeAssistant>();
-    void ensureTranslations(hass).then(registerCard);
-    if (!getHassLanguage(hass) && attempt < 20) {
-      window.setTimeout(() => registerCardWithTranslations(attempt + 1), 500);
-    }
-  };
-  registerCardWithTranslations();
+  registerCustomCardWithTranslations(
+    CARD_TYPE,
+    CityVisitorParkingNewReservationCard,
+    "name",
+    "description",
+  );
 })();
