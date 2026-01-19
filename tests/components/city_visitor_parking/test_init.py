@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from types import SimpleNamespace
-from typing import cast
+from typing import TYPE_CHECKING, cast
 from unittest.mock import AsyncMock
 
 import pytest
@@ -32,10 +32,18 @@ from custom_components.city_visitor_parking.const import (
     DOMAIN,
 )
 
+if TYPE_CHECKING:
+    from os import stat_result
+    from types import ModuleType
 
-async def test_async_setup_entry_auth_error(hass, monkeypatch, pv_library) -> None:
+    from homeassistant.core import HomeAssistant
+    from pytest import MonkeyPatch
+
+
+async def test_async_setup_entry_auth_error(
+    hass: HomeAssistant, monkeypatch: MonkeyPatch, pv_library: ModuleType
+) -> None:
     """Auth errors should raise ConfigEntryAuthFailed."""
-
     entry = _create_entry()
     entry.add_to_hass(hass)
 
@@ -52,9 +60,10 @@ async def test_async_setup_entry_auth_error(hass, monkeypatch, pv_library) -> No
         await init_module.async_setup_entry(hass, entry)
 
 
-async def test_async_setup_entry_network_error(hass, monkeypatch, pv_library) -> None:
+async def test_async_setup_entry_network_error(
+    hass: HomeAssistant, monkeypatch: MonkeyPatch, pv_library: ModuleType
+) -> None:
     """Network errors should raise ConfigEntryNotReady."""
-
     entry = _create_entry()
     entry.add_to_hass(hass)
 
@@ -71,9 +80,10 @@ async def test_async_setup_entry_network_error(hass, monkeypatch, pv_library) ->
         await init_module.async_setup_entry(hass, entry)
 
 
-async def test_async_setup_entry_provider_error(hass, monkeypatch, pv_library) -> None:
+async def test_async_setup_entry_provider_error(
+    hass: HomeAssistant, monkeypatch: MonkeyPatch, pv_library: ModuleType
+) -> None:
     """Provider errors should raise ConfigEntryError."""
-
     entry = _create_entry()
     entry.add_to_hass(hass)
 
@@ -90,9 +100,10 @@ async def test_async_setup_entry_provider_error(hass, monkeypatch, pv_library) -
         await init_module.async_setup_entry(hass, entry)
 
 
-async def test_update_listener_reloads_on_override_change(hass, monkeypatch) -> None:
+async def test_update_listener_reloads_on_override_change(
+    hass: HomeAssistant, monkeypatch: MonkeyPatch
+) -> None:
     """Override changes should reload the entry."""
-
     entry = await _setup_entry(hass, monkeypatch)
 
     reload_mock = AsyncMock()
@@ -110,10 +121,9 @@ async def test_update_listener_reloads_on_override_change(hass, monkeypatch) -> 
 
 
 async def test_update_listener_skips_reload_without_override_change(
-    hass, monkeypatch
+    hass: HomeAssistant, monkeypatch: MonkeyPatch
 ) -> None:
     """Non-override updates should not reload the entry."""
-
     entry = await _setup_entry(hass, monkeypatch)
 
     reload_mock = AsyncMock()
@@ -128,9 +138,10 @@ async def test_update_listener_skips_reload_without_override_change(
     reload_mock.assert_not_awaited()
 
 
-async def test_register_frontend_assets(hass, monkeypatch) -> None:
+async def test_register_frontend_assets(
+    hass: HomeAssistant, monkeypatch: MonkeyPatch
+) -> None:
     """Frontend assets should register once when available."""
-
     hass.config.components.add("frontend")
     hass.http = AsyncMock()
     await init_module._async_register_frontend(hass, "frontend")
@@ -140,18 +151,18 @@ async def test_register_frontend_assets(hass, monkeypatch) -> None:
     assert hass.data[DOMAIN]["frontend_registered"] is True
 
 
-async def test_register_frontend_assets_no_http(hass) -> None:
+async def test_register_frontend_assets_no_http(hass: HomeAssistant) -> None:
     """Frontend assets should skip when HTTP is unavailable."""
-
     hass.http = None
     await init_module._async_register_frontend(hass, "frontend")
 
     assert "frontend_registered" not in hass.data[DOMAIN]
 
 
-async def test_register_frontend_assets_missing_dist(hass, monkeypatch) -> None:
+async def test_register_frontend_assets_missing_dist(
+    hass: HomeAssistant, monkeypatch: MonkeyPatch
+) -> None:
     """Frontend assets should skip when dist path is missing."""
-
     hass.config.components.add("frontend")
     hass.http = AsyncMock()
     original_is_dir = Path.is_dir
@@ -169,9 +180,10 @@ async def test_register_frontend_assets_missing_dist(hass, monkeypatch) -> None:
     assert "frontend_registered" not in hass.data[DOMAIN]
 
 
-async def test_register_frontend_assets_missing_translations(hass, monkeypatch) -> None:
+async def test_register_frontend_assets_missing_translations(
+    hass: HomeAssistant, monkeypatch: MonkeyPatch
+) -> None:
     """Frontend assets should warn when translations are missing."""
-
     hass.config.components.add("frontend")
     hass.http = AsyncMock()
     original_is_dir = Path.is_dir
@@ -190,33 +202,34 @@ async def test_register_frontend_assets_missing_translations(hass, monkeypatch) 
     assert hass.data[DOMAIN]["frontend_registered"] is True
 
 
-async def test_register_lovelace_resources_non_storage(hass) -> None:
+async def test_register_lovelace_resources_non_storage(
+    hass: HomeAssistant,
+) -> None:
     """Lovelace resources should skip when not storage based."""
-
     hass.data[LOVELACE_DATA] = SimpleNamespace(resources=SimpleNamespace())
     await init_module._async_register_lovelace_resources(hass, "lovelace")
 
     assert hass.data[DOMAIN]["lovelace_resources_registered"] is True
 
 
-async def test_register_lovelace_resources_safe_mode(hass) -> None:
+async def test_register_lovelace_resources_safe_mode(hass: HomeAssistant) -> None:
     """Lovelace resources should skip in safe mode."""
-
     hass.config.safe_mode = True
     await init_module._async_register_lovelace_resources(hass, "lovelace")
 
     assert "lovelace_resources_registered" not in hass.data[DOMAIN]
 
 
-async def test_register_lovelace_resources_no_data(hass) -> None:
+async def test_register_lovelace_resources_no_data(hass: HomeAssistant) -> None:
     """Lovelace resources should skip when data is missing."""
-
     await init_module._async_register_lovelace_resources(hass, "lovelace")
 
     assert "lovelace_resources_registered" not in hass.data[DOMAIN]
 
 
-async def test_register_lovelace_resources_missing_dist(hass, monkeypatch) -> None:
+async def test_register_lovelace_resources_missing_dist(
+    hass: HomeAssistant, monkeypatch: MonkeyPatch
+) -> None:
     """Lovelace resources should skip when dist path is missing."""
 
     class FakeResourceCollection:
@@ -227,7 +240,6 @@ async def test_register_lovelace_resources_missing_dist(hass, monkeypatch) -> No
 
         def async_items(self) -> list[dict[str, str]]:
             """Return empty items."""
-
             return []
 
     monkeypatch.setattr(
@@ -252,7 +264,7 @@ async def test_register_lovelace_resources_missing_dist(hass, monkeypatch) -> No
 
 
 async def test_register_lovelace_resources_updates_and_creates(
-    hass, monkeypatch
+    hass: HomeAssistant, monkeypatch: MonkeyPatch
 ) -> None:
     """Lovelace resources should update and create entries."""
 
@@ -284,19 +296,16 @@ async def test_register_lovelace_resources_updates_and_creates(
 
         async def async_load(self) -> None:
             """Track load calls."""
-
             self.load_calls += 1
 
         def async_items(self) -> list[dict[str, object]]:
             """Return the stored items."""
-
             return list(self._items)
 
         async def async_update_item(
             self, item_id: str, updates: dict[str, object]
         ) -> None:
             """Track updates."""
-
             self.updated.append((item_id, updates))
             for item in self._items:
                 item_id_value = item.get("id")
@@ -305,7 +314,6 @@ async def test_register_lovelace_resources_updates_and_creates(
 
         async def async_create_item(self, item: dict[str, object]) -> None:
             """Track creates."""
-
             self.created.append(item)
             self._items.append(item)
 
@@ -318,10 +326,10 @@ async def test_register_lovelace_resources_updates_and_creates(
 
     original_stat = Path.stat
 
-    def _fake_stat(self: Path, *args, **kwargs):
+    def _fake_stat(self: Path, *, follow_symlinks: bool = True) -> stat_result:
         if self.name == "city-visitor-parking-active-card.js":
             raise FileNotFoundError
-        return original_stat(self, *args, **kwargs)
+        return original_stat(self, follow_symlinks=follow_symlinks)
 
     monkeypatch.setattr(Path, "stat", _fake_stat)
 
@@ -339,7 +347,6 @@ async def test_register_lovelace_resources_updates_and_creates(
 
 def test_normalize_operating_time_overrides_filters_invalid() -> None:
     """Operating time overrides should normalize valid windows only."""
-
     options = {
         CONF_OPERATING_TIME_OVERRIDES: {
             "mon": [
@@ -362,7 +369,6 @@ def test_normalize_operating_time_overrides_filters_invalid() -> None:
 
 def test_install_zone_validity_logging_wraps_provider() -> None:
     """Zone validity mapping should be wrapped when available."""
-
     calls: list[tuple[object, object | None]] = []
 
     class Provider:
@@ -382,7 +388,7 @@ def test_install_zone_validity_logging_wraps_provider() -> None:
         fallback_zone={"start_time": "2025-01-01T00:00:00", "end_time": "2025-01-02"},
     )
 
-    result_map = cast(dict[str, object], result)
+    result_map = cast("dict[str, object]", result)
     assert result_map["fallback_zone"] is not None
     assert calls
 
@@ -410,13 +416,12 @@ def test_install_zone_validity_logging_detects_candidates() -> None:
         fallback_zone={"start_time": "2025-01-02T00:00:00", "end_time": "2025-01-02"},
     )
 
-    result_map = cast(dict[str, object], result)
+    result_map = cast("dict[str, object]", result)
     assert result_map["raw"] == raw
 
 
 def test_install_zone_validity_logging_without_fallback_param() -> None:
     """Zone validity mapping should wrap providers without fallback support."""
-
     calls: list[object] = []
 
     class Provider:
@@ -439,7 +444,6 @@ def test_install_zone_validity_logging_without_fallback_param() -> None:
 
 def _create_entry() -> MockConfigEntry:
     """Create a mock entry for setup tests."""
-
     return MockConfigEntry(
         domain=DOMAIN,
         data={
@@ -454,9 +458,10 @@ def _create_entry() -> MockConfigEntry:
     )
 
 
-async def _setup_entry(hass, monkeypatch) -> MockConfigEntry:
+async def _setup_entry(
+    hass: HomeAssistant, monkeypatch: MonkeyPatch
+) -> MockConfigEntry:
     """Set up a config entry with a stub provider."""
-
     entry = _create_entry()
     entry.add_to_hass(hass)
     entry.mock_state(hass, config_entries.ConfigEntryState.SETUP_IN_PROGRESS)

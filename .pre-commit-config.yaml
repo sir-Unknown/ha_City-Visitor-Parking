@@ -6,7 +6,7 @@ repos:
         args:
           - --fix
       - id: ruff-format
-        files: ^custom_components/.+\.(py|pyi)$
+        files: ^(custom_components|tests)/.+\.(py|pyi)$
   - repo: https://github.com/codespell-project/codespell
     rev: v2.4.1
     hooks:
@@ -103,7 +103,7 @@ repos:
         name: frontend types
         entry: yarn --cwd custom_components/city_visitor_parking/frontend lint:types
         language: system
-        files: ^custom_components/city_visitor_parking/frontend/.*\.(ts|json)$
+        files: ^custom_components/city_visitor_parking/frontend/src/.*\.ts$|^custom_components/city_visitor_parking/frontend/tsconfig\.json$
         pass_filenames: false
       - id: frontend-test
         name: frontend test

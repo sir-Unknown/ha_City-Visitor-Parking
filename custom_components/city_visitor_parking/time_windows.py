@@ -15,7 +15,6 @@ from .models import TimeRange
 
 def current_or_next_window(windows: list[TimeRange], now: datetime) -> TimeRange | None:
     """Return the current or next chargeable window."""
-
     for window in sorted(windows, key=lambda item: item.start):
         if window.end <= now:
             continue
@@ -29,7 +28,6 @@ def current_or_next_window_with_overrides(
     now: datetime,
 ) -> TimeRange | None:
     """Return the current or next chargeable window, honoring overrides."""
-
     overrides = options.get(CONF_OPERATING_TIME_OVERRIDES)
     if not isinstance(overrides, Mapping) or not overrides:
         return current_or_next_window(zone_validity, now)
@@ -53,7 +51,6 @@ def windows_for_today(
     now: datetime,
 ) -> list[TimeRange]:
     """Return chargeable windows for today, applying overrides if present."""
-
     local_now = dt_util.as_local(now)
     local_date = local_now.date()
     local_day = WEEKDAY_KEYS[local_now.weekday()]
@@ -61,7 +58,7 @@ def windows_for_today(
     overrides = options.get(CONF_OPERATING_TIME_OVERRIDES)
     if not isinstance(overrides, Mapping):
         overrides = {}
-    overrides = cast(Mapping[str, object], overrides)
+    overrides = cast("Mapping[str, object]", overrides)
     override = overrides.get(local_day)
     override_windows = normalize_override_windows(override)
     if override_windows:
@@ -104,7 +101,6 @@ def windows_for_today(
 
 def _as_time(value: object) -> time | None:
     """Convert a stored override value into a time object."""
-
     if isinstance(value, time):
         return value
     if isinstance(value, str):

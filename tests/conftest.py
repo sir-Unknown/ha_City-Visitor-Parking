@@ -35,12 +35,11 @@ class ValidationError(PyCityVisitorParkingError):
 class Client:
     """Stub client for testing."""
 
-    def __init__(self, *_: Any, **__: Any) -> None:
+    def __init__(self, *_args: object, **_kwargs: object) -> None:
         """Initialize the stub client."""
 
-    async def list_providers(self) -> list[Any]:
+    async def list_providers(self) -> list[ProviderInfo]:
         """Return a default provider list."""
-
         return [
             ProviderInfo(
                 id="dvsportal",
@@ -49,9 +48,8 @@ class Client:
             )
         ]
 
-    async def get_provider(self, *_: Any, **__: Any) -> Any:
+    async def get_provider(self, *_args: object, **_kwargs: object) -> Provider:
         """Return a stub provider."""
-
         return Provider()
 
 
@@ -67,44 +65,41 @@ class ProviderInfo:
 class Provider:
     """Stub provider for testing."""
 
-    async def login(self, *_: Any, **__: Any) -> None:
+    async def login(self, *_args: object, **_kwargs: object) -> None:
         """Stub login call."""
 
-    async def get_permit(self) -> Any:
+    async def get_permit(self) -> dict[str, object]:
         """Return a default permit."""
-
         return {"id": "permit", "zone_validity": []}
 
-    async def list_reservations(self) -> list[Any]:
+    async def list_reservations(self) -> list[dict[str, object]]:
         """Return no reservations by default."""
-
         return []
 
-    async def list_favorites(self) -> list[Any]:
+    async def list_favorites(self) -> list[dict[str, object]]:
         """Return no favorites by default."""
-
         return []
 
-    async def start_reservation(self, *_: Any, **__: Any) -> None:
+    async def start_reservation(self, *_args: object, **_kwargs: object) -> None:
         """Stub start reservation."""
 
-    async def update_reservation(self, *_: Any, **__: Any) -> None:
+    async def update_reservation(self, *_args: object, **_kwargs: object) -> None:
         """Stub update reservation."""
 
-    async def end_reservation(self, *_: Any, **__: Any) -> None:
+    async def end_reservation(self, *_args: object, **_kwargs: object) -> None:
         """Stub end reservation."""
 
-    async def add_favorite(self, *_: Any, **__: Any) -> None:
+    async def add_favorite(self, *_args: object, **_kwargs: object) -> None:
         """Stub add favorite."""
 
-    async def update_favorite(self, *_: Any, **__: Any) -> None:
+    async def update_favorite(self, *_args: object, **_kwargs: object) -> None:
         """Stub update favorite."""
 
-    async def remove_favorite(self, *_: Any, **__: Any) -> None:
+    async def remove_favorite(self, *_args: object, **_kwargs: object) -> None:
         """Stub remove favorite."""
 
 
-module = cast(Any, ModuleType("pycityvisitorparking"))
+module = cast("Any", ModuleType("pycityvisitorparking"))
 module.AuthError = AuthError
 module.NetworkError = NetworkError
 module.ProviderError = ProviderError
@@ -112,7 +107,7 @@ module.ValidationError = ValidationError
 module.ProviderInfo = ProviderInfo
 module.Client = Client
 
-exceptions_module = cast(Any, ModuleType("pycityvisitorparking.exceptions"))
+exceptions_module = cast("Any", ModuleType("pycityvisitorparking.exceptions"))
 exceptions_module.PyCityVisitorParkingError = PyCityVisitorParkingError
 exceptions_module.AuthError = AuthError
 exceptions_module.NetworkError = NetworkError
@@ -132,5 +127,4 @@ def _enable_custom_integrations(enable_custom_integrations: None) -> None:
 @pytest.fixture
 def pv_library() -> ModuleType:
     """Return the stubbed pycityvisitorparking module."""
-
     return module

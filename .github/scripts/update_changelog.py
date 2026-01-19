@@ -53,6 +53,7 @@ def _load_release() -> dict[str, str]:
 
 
 def main() -> int:
+    """Update the changelog for the current GitHub release payload."""
     release = _load_release()
     changelog_path = Path("CHANGELOG.md")
     changelog = changelog_path.read_text(encoding="utf-8")

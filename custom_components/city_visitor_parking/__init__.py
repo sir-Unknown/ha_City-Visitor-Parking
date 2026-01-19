@@ -7,7 +7,7 @@ import logging
 import time
 from collections.abc import Callable, Mapping
 from pathlib import Path
-from typing import Final, Protocol, cast
+from typing import TYPE_CHECKING, Final, Protocol, cast
 
 from homeassistant.components.http import StaticPathConfig
 from homeassistant.components.lovelace.const import CONF_RESOURCE_TYPE_WS, LOVELACE_DATA
@@ -19,14 +19,12 @@ from homeassistant.const import (
     CONF_URL,
     CONF_USERNAME,
 )
-from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import (
     ConfigEntryAuthFailed,
     ConfigEntryError,
     ConfigEntryNotReady,
 )
 from homeassistant.helpers import config_validation as cv
-from homeassistant.helpers.typing import ConfigType
 from homeassistant.setup import async_when_setup
 from pycityvisitorparking import AuthError, NetworkError
 from pycityvisitorparking.exceptions import PyCityVisitorParkingError
@@ -46,9 +44,15 @@ from .const import (
 from .coordinator import CityVisitorParkingCoordinator
 from .helpers import normalize_override_windows
 from .models import AutoEndState, OperatingTimeOverrides, ProviderConfig
-from .runtime_data import CityVisitorParkingConfigEntry, CityVisitorParkingRuntimeData
+from .runtime_data import CityVisitorParkingRuntimeData
 from .services import async_setup_services
 from .websocket_api import async_setup_websocket
+
+if TYPE_CHECKING:
+    from homeassistant.core import HomeAssistant
+    from homeassistant.helpers.typing import ConfigType
+
+    from .runtime_data import CityVisitorParkingConfigEntry
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -87,7 +91,9 @@ class _ResourceStorage(Protocol):
         raise NotImplementedError
 
 
-_config_entry_only_schema = cast(_ConfigValidation, cv).config_entry_only_config_schema
+_config_entry_only_schema = cast(
+    "_ConfigValidation", cv
+).config_entry_only_config_schema
 CONFIG_SCHEMA: Final[Callable[[ConfigType], ConfigType]] = _config_entry_only_schema(
     DOMAIN
 )
@@ -95,8 +101,7 @@ CONFIG_SCHEMA: Final[Callable[[ConfigType], ConfigType]] = _config_entry_only_sc
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     """Set up the City visitor parking integration."""
-
-    async_when_setup(hass, "http", _async_register_frontend)
+    await _async_register_frontend(hass, "http")
     async_when_setup(hass, "lovelace", _async_register_lovelace_resources)
     _LOGGER.debug("Setting up services and websocket API")
     await async_setup_services(hass)
@@ -108,7 +113,6 @@ async def async_setup_entry(
     hass: HomeAssistant, entry: CityVisitorParkingConfigEntry
 ) -> bool:
     """Set up City visitor parking from a config entry."""
-
     _LOGGER.debug(
         "Initializing config entry %s for provider=%s permit=%s",
         entry.title,
@@ -184,7 +188,6 @@ async def async_setup_entry(
 
 def _install_zone_validity_logging(provider: object) -> None:
     """Add extra debug logging when zone validity falls back to the zone block."""
-
     map_zone_validity = getattr(provider, "_map_zone_validity", None)
     provider_id = getattr(provider, "provider_id", "unknown")
     if not callable(map_zone_validity):
@@ -194,7 +197,7 @@ def _install_zone_validity_logging(provider: object) -> None:
         if raw is None:
             return "raw=None"
         if isinstance(raw, list):
-            raw_list = cast(list[object], raw)
+            raw_list = cast("list[object]", raw)
             return f"raw=list(count={len(raw_list)})"
         return f"raw={type(raw).__name__}"
 
@@ -204,16 +207,16 @@ def _install_zone_validity_logging(provider: object) -> None:
 
     def _wrap(raw: object, *, fallback_zone: object | None = None) -> object:
         if isinstance(fallback_zone, Mapping):
-            fallback = cast(Mapping[str, object], fallback_zone)
+            fallback = cast("Mapping[str, object]", fallback_zone)
             start_raw = fallback.get("start_time")
             end_raw = fallback.get("end_time")
             has_candidates = False
             if isinstance(raw, list):
-                raw_list = cast(list[object], raw)
+                raw_list = cast("list[object]", raw)
                 for item in raw_list:
                     if not isinstance(item, Mapping):
                         continue
-                    item_map = cast(Mapping[str, object], item)
+                    item_map = cast("Mapping[str, object]", item)
                     if item_map.get("start_time") and item_map.get("end_time"):
                         has_candidates = True
                         break
@@ -222,7 +225,7 @@ def _install_zone_validity_logging(provider: object) -> None:
                     "Provider %s zone validity fallback details %s "
                     "fallback_start=%s fallback_end=%s",
                     provider_id,
-                    _summarize_raw(cast(object, raw)),
+                    _summarize_raw(cast("object", raw)),
                     start_raw,
                     end_raw,
                 )
@@ -238,11 +241,10 @@ def _normalize_operating_time_overrides(
     options: Mapping[str, object],
 ) -> OperatingTimeOverrides:
     """Normalize operating time overrides for change detection."""
-
     raw_overrides = options.get(CONF_OPERATING_TIME_OVERRIDES)
     if not isinstance(raw_overrides, Mapping):
         return {}
-    raw_overrides = cast(Mapping[str, object], raw_overrides)
+    raw_overrides = cast("Mapping[str, object]", raw_overrides)
 
     normalized: OperatingTimeOverrides = {}
     for day in WEEKDAY_KEYS:
@@ -265,7 +267,6 @@ async def _async_update_listener(
     hass: HomeAssistant, entry: CityVisitorParkingConfigEntry
 ) -> None:
     """Handle config entry updates."""
-
     runtime: CityVisitorParkingRuntimeData = entry.runtime_data
     overrides = _normalize_operating_time_overrides(entry.options)
     if overrides != runtime.operating_time_overrides:
@@ -279,13 +280,11 @@ async def async_unload_entry(
     hass: HomeAssistant, entry: CityVisitorParkingConfigEntry
 ) -> bool:
     """Unload a City visitor parking config entry."""
-
     return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
 
 
 async def _async_register_frontend(hass: HomeAssistant, _component: str) -> None:
     """Register the frontend assets once."""
-
     data: dict[str, object] = hass.data.setdefault(DOMAIN, {})
     if data.get("frontend_registered"):
         return
@@ -295,7 +294,7 @@ async def _async_register_frontend(hass: HomeAssistant, _component: str) -> None
         return
 
     dist_path = Path(__file__).parent / "frontend" / "dist"
-    if not dist_path.is_dir():
+    if not await hass.async_add_executor_job(dist_path.is_dir):
         _LOGGER.error("Frontend assets directory is missing: %s", dist_path)
         return
 
@@ -307,7 +306,7 @@ async def _async_register_frontend(hass: HomeAssistant, _component: str) -> None
             cache_headers=False,
         )
     ]
-    if translations_path.is_dir():
+    if await hass.async_add_executor_job(translations_path.is_dir):
         static_paths.append(
             StaticPathConfig(
                 url_path="/city_visitor_parking/translations",
@@ -328,30 +327,52 @@ async def _async_register_lovelace_resources(
     hass: HomeAssistant, _component: str
 ) -> None:
     """Ensure the Lovelace resources exist for the cards."""
-
     data: dict[str, object] = hass.data.setdefault(DOMAIN, {})
     if data.get("lovelace_resources_registered") or hass.config.safe_mode:
         return
 
+    resources_store = await _async_get_resource_store(hass, data)
+    if resources_store is None:
+        return
+
+    desired_urls = await _async_get_desired_resource_urls(hass)
+    if desired_urls is None:
+        return
+
+    await _async_update_lovelace_resources(resources_store, desired_urls)
+    data["lovelace_resources_registered"] = True
+
+
+async def _async_get_resource_store(
+    hass: HomeAssistant, data: dict[str, object]
+) -> _ResourceStorage | None:
+    """Return the resource store when Lovelace storage is available."""
     lovelace_data = hass.data.get(LOVELACE_DATA)
     if lovelace_data is None:
-        return
+        return None
 
     resources = lovelace_data.resources
     if not isinstance(resources, ResourceStorageCollection):
         _LOGGER.debug("Lovelace resources are not storage-based, skipping")
         data["lovelace_resources_registered"] = True
-        return
-    resources_store = cast(_ResourceStorage, resources)
+        return None
 
+    resources_store = cast("_ResourceStorage", resources)
     if not resources_store.loaded:
         await resources_store.async_load()
         resources_store.loaded = True
+    return resources_store
 
+
+async def _async_get_desired_resource_urls(
+    hass: HomeAssistant,
+) -> dict[str, str] | None:
+    """Return desired Lovelace resource URLs with cache-busting versions."""
     dist_path = Path(__file__).parent / "frontend" / "dist"
-    if not dist_path.is_dir():
+    if not await hass.async_add_executor_job(dist_path.is_dir):
         _LOGGER.error("Frontend assets directory is missing: %s", dist_path)
-        return
+        return None
+
     desired_files: list[str] = [
         "city-visitor-parking-card.js",
         "city-visitor-parking-active-card.js",
@@ -359,12 +380,19 @@ async def _async_register_lovelace_resources(
     desired_urls: dict[str, str] = {}
     for filename in desired_files:
         base_url = f"/city_visitor_parking/{filename}"
+        file_path = dist_path / filename
         try:
-            version = int((dist_path / filename).stat().st_mtime)
+            version = int(await hass.async_add_executor_job(_stat_mtime, file_path))
             desired_urls[base_url] = f"{base_url}?v={version}"
         except FileNotFoundError:
             desired_urls[base_url] = base_url
+    return desired_urls
 
+
+async def _async_update_lovelace_resources(
+    resources_store: _ResourceStorage, desired_urls: dict[str, str]
+) -> None:
+    """Sync Lovelace resources with the expected frontend bundles."""
     items = resources_store.async_items()
     update_item = resources_store.async_update_item
     create_item = resources_store.async_create_item
@@ -393,4 +421,7 @@ async def _async_register_lovelace_resources(
             continue
         await create_item({CONF_RESOURCE_TYPE_WS: "module", CONF_URL: url})
 
-    data["lovelace_resources_registered"] = True
+
+def _stat_mtime(path: Path) -> float:
+    """Return the modification time for a path."""
+    return path.stat().st_mtime

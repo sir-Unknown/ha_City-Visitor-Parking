@@ -5,18 +5,23 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from homeassistant.config_entries import ConfigEntry
-from pycityvisitorparking import Client
-
-from .coordinator import CityVisitorParkingCoordinator
-from .models import AutoEndState, OperatingTimeOverrides, ProviderConfig
-
 if TYPE_CHECKING:
+    from homeassistant.config_entries import ConfigEntry
+    from pycityvisitorparking import Client
     from pycityvisitorparking.provider.base import BaseProvider
+
+    from .coordinator import CityVisitorParkingCoordinator
+    from .models import AutoEndState, OperatingTimeOverrides, ProviderConfig
+
+    type CityVisitorParkingConfigEntry = ConfigEntry["CityVisitorParkingRuntimeData"]
 else:
 
     class BaseProvider:  # pragma: no cover - runtime typing fallback
+        """Fallback provider type when typing is unavailable."""
+
         pass
+
+    CityVisitorParkingConfigEntry = object
 
 
 @dataclass
@@ -30,6 +35,3 @@ class CityVisitorParkingRuntimeData:
     permit_id: str
     auto_end_state: AutoEndState
     operating_time_overrides: OperatingTimeOverrides
-
-
-type CityVisitorParkingConfigEntry = ConfigEntry[CityVisitorParkingRuntimeData]

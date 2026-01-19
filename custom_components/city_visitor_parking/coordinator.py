@@ -4,47 +4,15 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from collections.abc import Iterable, Mapping
+import time
 from datetime import UTC, datetime, timedelta
-from typing import TYPE_CHECKING, Protocol, cast
+from typing import TYPE_CHECKING, Protocol, TypeVar, cast
 
-from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.util import dt as dt_util
 from pycityvisitorparking import AuthError, NetworkError
 from pycityvisitorparking.exceptions import PyCityVisitorParkingError
-
-if TYPE_CHECKING:
-    from pycityvisitorparking import Favorite as ProviderFavorite
-    from pycityvisitorparking import Permit
-    from pycityvisitorparking import Reservation as ProviderReservation
-    from pycityvisitorparking.provider.base import BaseProvider as ProviderProtocol
-else:
-
-    class ProviderProtocol(Protocol):
-        """Protocol for runtime provider behavior."""
-
-        async def get_permit(self) -> object:
-            raise NotImplementedError
-
-        async def list_reservations(self) -> list[object]:
-            raise NotImplementedError
-
-        async def list_favorites(self) -> list[object]:
-            raise NotImplementedError
-
-        async def end_reservation(
-            self,
-            reservation_id: str,
-            end_time: datetime,
-        ) -> object:
-            raise NotImplementedError
-
-    ProviderFavorite = object
-    Permit = object
-    ProviderReservation = object
 
 from .const import AUTO_END_COOLDOWN, CONF_AUTO_END, DEFAULT_UPDATE_INTERVAL
 from .helpers import get_attr
@@ -58,7 +26,46 @@ from .models import (
 )
 from .time_windows import windows_for_today
 
+if TYPE_CHECKING:
+    from collections.abc import Awaitable, Iterable, Mapping
+
+    from homeassistant.config_entries import ConfigEntry
+    from homeassistant.core import HomeAssistant
+    from pycityvisitorparking import Favorite as ProviderFavorite
+    from pycityvisitorparking import Permit
+    from pycityvisitorparking import Reservation as ProviderReservation
+    from pycityvisitorparking.provider.base import BaseProvider as ProviderProtocol
+else:
+
+    class ProviderProtocol(Protocol):
+        """Protocol for runtime provider behavior."""
+
+        async def get_permit(self) -> object:
+            """Return permit details."""
+            raise NotImplementedError
+
+        async def list_reservations(self) -> list[object]:
+            """Return current reservations."""
+            raise NotImplementedError
+
+        async def list_favorites(self) -> list[object]:
+            """Return favorite vehicles."""
+            raise NotImplementedError
+
+        async def end_reservation(
+            self,
+            reservation_id: str,
+            end_time: datetime,
+        ) -> object:
+            """End a reservation."""
+            raise NotImplementedError
+
+    ProviderFavorite = object
+    Permit = object
+    ProviderReservation = object
+
 _LOGGER = logging.getLogger(__name__)
+_T = TypeVar("_T")
 
 
 class CityVisitorParkingCoordinator(DataUpdateCoordinator[CoordinatorData]):
@@ -74,7 +81,6 @@ class CityVisitorParkingCoordinator(DataUpdateCoordinator[CoordinatorData]):
         auto_end_state: AutoEndState,
     ) -> None:
         """Initialize the coordinator."""
-
         super().__init__(
             hass,
             logger=_LOGGER,
@@ -90,17 +96,29 @@ class CityVisitorParkingCoordinator(DataUpdateCoordinator[CoordinatorData]):
 
     async def _async_update_data(self) -> CoordinatorData:
         """Fetch data from the API and normalize it."""
-
         try:
             _LOGGER.debug(
                 "Fetching permit, reservations, and favorites for %s (permit %s)",
                 self._entry_title,
                 self._permit_id,
             )
+
+            async def _timed(label: str, coro: Awaitable[_T]) -> _T:
+                started = time.perf_counter()
+                try:
+                    return await coro
+                finally:
+                    _LOGGER.debug(
+                        "Provider %s %s duration: %.3fs",
+                        self._entry_title,
+                        label,
+                        time.perf_counter() - started,
+                    )
+
             permit, reservations, favorites = await asyncio.gather(
-                self._provider.get_permit(),
-                self._provider.list_reservations(),
-                self._provider.list_favorites(),
+                _timed("get_permit", self._provider.get_permit()),
+                _timed("list_reservations", self._provider.list_reservations()),
+                _timed("list_favorites", self._provider.list_favorites()),
             )
             _LOGGER.debug(
                 "Fetched data for %s (permit %s): reservations=%s favorites=%s",
@@ -162,7 +180,6 @@ class CityVisitorParkingCoordinator(DataUpdateCoordinator[CoordinatorData]):
 
     async def _async_maybe_auto_end(self, data: CoordinatorData) -> None:
         """Auto-end reservations when the zone becomes free."""
-
         options = self._options()
         if not options.get(CONF_AUTO_END, False):
             return
@@ -195,7 +212,6 @@ class CityVisitorParkingCoordinator(DataUpdateCoordinator[CoordinatorData]):
 
     def _prune_auto_end_attempts(self, now: datetime) -> None:
         """Remove stale auto-end attempts to keep memory usage small."""
-
         cutoff = now - timedelta(hours=6)
         self._auto_end_state.attempted_ids = {
             reservation_id: attempted_at
@@ -207,7 +223,6 @@ class CityVisitorParkingCoordinator(DataUpdateCoordinator[CoordinatorData]):
 
     def _options(self) -> Mapping[str, object]:
         """Return options from the config entry or an empty mapping."""
-
         config_entry = self.config_entry
         if config_entry is None:
             return {}
@@ -215,7 +230,6 @@ class CityVisitorParkingCoordinator(DataUpdateCoordinator[CoordinatorData]):
 
     def _log_unavailable_once(self) -> None:
         """Log an unavailable message only once until recovery."""
-
         if self._unavailable_logged:
             return
         _LOGGER.info("Visitor parking data is unavailable")
@@ -224,11 +238,10 @@ class CityVisitorParkingCoordinator(DataUpdateCoordinator[CoordinatorData]):
 
 def _normalize_zone_validity(permit: Permit) -> list[TimeRange]:
     """Normalize zone validity blocks to TimeRange objects in UTC."""
-
     raw_blocks = get_attr(permit, "zone_validity")
     if not isinstance(raw_blocks, list):
         raw_blocks = []
-    blocks_raw = cast(list[object], raw_blocks)
+    blocks_raw = cast("list[object]", raw_blocks)
     blocks: list[TimeRange] = []
     for block in blocks_raw:
         start = get_attr(block, "start_time")
@@ -245,7 +258,6 @@ def _normalize_zone_validity(permit: Permit) -> list[TimeRange]:
 
 def _normalize_remaining_minutes(permit: Permit) -> int:
     """Normalize remaining time balance to minutes."""
-
     raw = get_attr(permit, "remaining_balance")
     if raw is None:
         return 0
@@ -262,7 +274,6 @@ def _normalize_reservations(
     reservations: Iterable[ProviderReservation],
 ) -> list[Reservation]:
     """Normalize reservation entries to Reservation objects."""
-
     normalized: list[Reservation] = []
     for reservation in reservations or []:
         reservation_id = get_attr(reservation, "id")
@@ -288,7 +299,6 @@ def _normalize_reservations(
 
 def _normalize_favorites(favorites: Iterable[ProviderFavorite]) -> list[Favorite]:
     """Normalize favorite entries to Favorite objects."""
-
     normalized: list[Favorite] = []
     for favorite in favorites or []:
         favorite_id = get_attr(favorite, "id")
@@ -310,7 +320,6 @@ def _active_reservations(
     reservations: list[Reservation], now: datetime
 ) -> list[Reservation]:
     """Return reservations active at the provided time."""
-
     return [
         reservation
         for reservation in reservations
@@ -324,7 +333,6 @@ def _compute_zone_availability(
     now: datetime,
 ) -> ZoneAvailability:
     """Compute zone availability using validity blocks and overrides."""
-
     windows_today = windows_for_today(zone_validity, options, now)
     is_chargeable_now = any(
         window.start <= now < window.end for window in windows_today
@@ -358,7 +366,6 @@ def _should_attempt_auto_end(
     state: AutoEndState, reservation_id: str, now: datetime
 ) -> bool:
     """Return True when a reservation can be auto-ended."""
-
     last_attempt = state.attempted_ids.get(reservation_id)
     if last_attempt is None:
         return True
@@ -367,7 +374,6 @@ def _should_attempt_auto_end(
 
 def _as_utc_datetime(value: object) -> datetime:
     """Convert a datetime or ISO string into a UTC datetime."""
-
     if isinstance(value, datetime):
         if value.tzinfo:
             return dt_util.as_utc(value)
