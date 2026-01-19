@@ -25,6 +25,7 @@ from homeassistant.exceptions import (
     ConfigEntryNotReady,
 )
 from homeassistant.helpers import config_validation as cv
+from homeassistant.setup import async_when_setup
 from pycityvisitorparking import AuthError, NetworkError
 from pycityvisitorparking.exceptions import PyCityVisitorParkingError
 
@@ -101,7 +102,7 @@ CONFIG_SCHEMA: Final[Callable[[ConfigType], ConfigType]] = _config_entry_only_sc
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     """Set up the City visitor parking integration."""
     await _async_register_frontend(hass, "http")
-    await _async_register_lovelace_resources(hass, "lovelace")
+    async_when_setup(hass, "lovelace", _async_register_lovelace_resources)
     _LOGGER.debug("Setting up services and websocket API")
     await async_setup_services(hass)
     await async_setup_websocket(hass)
