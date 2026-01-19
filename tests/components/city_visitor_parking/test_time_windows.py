@@ -17,7 +17,6 @@ from custom_components.city_visitor_parking.time_windows import (
 
 def test_current_or_next_window_with_overrides_prefers_override() -> None:
     """Overrides should take precedence over provider validity."""
-
     now = datetime(2025, 1, 6, 9, 0, tzinfo=UTC)
     zone_validity = [
         TimeRange(
@@ -45,7 +44,6 @@ def test_current_or_next_window_with_overrides_prefers_override() -> None:
 
 def test_current_or_next_window_with_overrides_fallback() -> None:
     """Empty overrides should fall back to provider windows."""
-
     now = datetime(2025, 1, 6, 9, 0, tzinfo=UTC)
     zone_validity = [
         TimeRange(
@@ -63,7 +61,6 @@ def test_current_or_next_window_with_overrides_fallback() -> None:
 
 def test_current_or_next_window_with_overrides_no_windows() -> None:
     """Invalid overrides should fall back to provider windows."""
-
     now = datetime(2025, 1, 6, 9, 0, tzinfo=UTC)
     zone_validity: list[TimeRange] = []
     options = {

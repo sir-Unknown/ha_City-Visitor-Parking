@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from datetime import datetime
 
 
 @dataclass(frozen=True)
@@ -67,7 +70,6 @@ class CoordinatorData:
 
 def _default_attempts() -> dict[str, datetime]:
     """Return an empty attempts mapping."""
-
     return {}
 
 

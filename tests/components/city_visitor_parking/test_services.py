@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
+from typing import TYPE_CHECKING
 from unittest.mock import AsyncMock
 
 import pytest
@@ -60,10 +61,16 @@ from custom_components.city_visitor_parking.services import (
     async_setup_services,
 )
 
+if TYPE_CHECKING:
+    from types import ModuleType
 
-async def test_service_routing_targets_single_entry(hass) -> None:
+    from homeassistant.core import HomeAssistant
+
+EXPECTED_COUNT = 2
+
+
+async def test_service_routing_targets_single_entry(hass: HomeAssistant) -> None:
     """Services should target a single entry via device_id."""
-
     await async_setup_services(hass)
 
     entry_one, device_one, provider_one = _create_entry_with_device(hass, "permit1")
@@ -89,9 +96,8 @@ async def test_service_routing_targets_single_entry(hass) -> None:
     assert entry_one.runtime_data.permit_id == "permit1"
 
 
-async def test_service_validation_errors(hass) -> None:
+async def test_service_validation_errors(hass: HomeAssistant) -> None:
     """Invalid input should raise ServiceValidationError."""
-
     await async_setup_services(hass)
 
     _, device, _ = _create_entry_with_device(hass, "permit1")
@@ -136,9 +142,8 @@ async def test_service_validation_errors(hass) -> None:
         )
 
 
-async def test_update_reservation_fallback(hass) -> None:
+async def test_update_reservation_fallback(hass: HomeAssistant) -> None:
     """Fallback update should cancel and recreate when required."""
-
     await async_setup_services(hass)
 
     _, device, provider = _create_entry_with_device(hass, "permit1")
@@ -165,9 +170,8 @@ async def test_update_reservation_fallback(hass) -> None:
     provider.start_reservation.assert_awaited_once()
 
 
-async def test_update_reservation_success(hass) -> None:
+async def test_update_reservation_success(hass: HomeAssistant) -> None:
     """Update reservation should call provider update when supported."""
-
     await async_setup_services(hass)
 
     _, device, provider = _create_entry_with_device(hass, "permit1")
@@ -193,9 +197,8 @@ async def test_update_reservation_success(hass) -> None:
     provider.start_reservation.assert_not_awaited()
 
 
-async def test_update_favorite_fallback(hass) -> None:
+async def test_update_favorite_fallback(hass: HomeAssistant) -> None:
     """Fallback update should remove and add favorites."""
-
     await async_setup_services(hass)
 
     _, device, provider = _create_entry_with_device(hass, "permit1")
@@ -216,9 +219,10 @@ async def test_update_favorite_fallback(hass) -> None:
     provider.add_favorite.assert_awaited_once()
 
 
-async def test_update_reservation_provider_error(hass, pv_library) -> None:
+async def test_update_reservation_provider_error(
+    hass: HomeAssistant, pv_library: ModuleType
+) -> None:
     """Provider errors should raise HomeAssistantError."""
-
     await async_setup_services(hass)
 
     _, device, provider = _create_entry_with_device(hass, "permit1")
@@ -242,9 +246,10 @@ async def test_update_reservation_provider_error(hass, pv_library) -> None:
         )
 
 
-async def test_update_reservation_validation_error(hass, pv_library) -> None:
+async def test_update_reservation_validation_error(
+    hass: HomeAssistant, pv_library: ModuleType
+) -> None:
     """Validation errors should raise HomeAssistantError."""
-
     await async_setup_services(hass)
 
     _, device, provider = _create_entry_with_device(hass, "permit1")
@@ -268,9 +273,8 @@ async def test_update_reservation_validation_error(hass, pv_library) -> None:
         )
 
 
-async def test_service_end_reservation_calls_provider(hass) -> None:
+async def test_service_end_reservation_calls_provider(hass: HomeAssistant) -> None:
     """End reservation should call the provider once."""
-
     await async_setup_services(hass)
 
     _, device, provider = _create_entry_with_device(hass, "permit1")
@@ -290,9 +294,8 @@ async def test_service_end_reservation_calls_provider(hass) -> None:
     provider.end_reservation.assert_awaited_once_with("res1", now)
 
 
-async def test_service_add_and_remove_favorite(hass) -> None:
+async def test_service_add_and_remove_favorite(hass: HomeAssistant) -> None:
     """Add and remove favorite services should call the provider."""
-
     await async_setup_services(hass)
 
     _, device, provider = _create_entry_with_device(hass, "permit1")
@@ -325,9 +328,8 @@ async def test_service_add_and_remove_favorite(hass) -> None:
     provider.remove_favorite.assert_awaited_once_with("fav1")
 
 
-async def test_service_start_reservation_adjusts_start(hass) -> None:
+async def test_service_start_reservation_adjusts_start(hass: HomeAssistant) -> None:
     """Start reservation should enforce a minimum start time."""
-
     await async_setup_services(hass)
 
     _, device, provider = _create_entry_with_device(hass, "permit1")
@@ -356,9 +358,10 @@ async def test_service_start_reservation_adjusts_start(hass) -> None:
     )
 
 
-async def test_service_start_reservation_error(hass, pv_library) -> None:
+async def test_service_start_reservation_error(
+    hass: HomeAssistant, pv_library: ModuleType
+) -> None:
     """Start reservation errors should raise HomeAssistantError."""
-
     await async_setup_services(hass)
 
     _, device, provider = _create_entry_with_device(hass, "permit1")
@@ -381,9 +384,10 @@ async def test_service_start_reservation_error(hass, pv_library) -> None:
         )
 
 
-async def test_update_reservation_requires_full_details(hass) -> None:
+async def test_update_reservation_requires_full_details(
+    hass: HomeAssistant,
+) -> None:
     """Update reservation should require full details for fallback."""
-
     await async_setup_services(hass)
 
     _, device, _provider = _create_entry_with_device(hass, "permit1")
@@ -403,9 +407,8 @@ async def test_update_reservation_requires_full_details(hass) -> None:
         )
 
 
-async def test_update_reservation_unsupported_fields(hass) -> None:
+async def test_update_reservation_unsupported_fields(hass: HomeAssistant) -> None:
     """Update reservation should reject unsupported changes."""
-
     await async_setup_services(hass)
 
     _, device, provider = _create_entry_with_device(hass, "permit1")
@@ -425,9 +428,10 @@ async def test_update_reservation_unsupported_fields(hass) -> None:
         )
 
 
-async def test_update_reservation_unsupported_end_time(hass) -> None:
+async def test_update_reservation_unsupported_end_time(
+    hass: HomeAssistant,
+) -> None:
     """Update reservation should ignore unsupported end_time."""
-
     await async_setup_services(hass)
 
     _, device, provider = _create_entry_with_device(hass, "permit1")
@@ -448,9 +452,10 @@ async def test_update_reservation_unsupported_end_time(hass) -> None:
         )
 
 
-async def test_update_reservation_not_supported_falls_back(hass, pv_library) -> None:
+async def test_update_reservation_not_supported_falls_back(
+    hass: HomeAssistant, pv_library: ModuleType
+) -> None:
     """Update reservation should fall back when provider reports not supported."""
-
     await async_setup_services(hass)
 
     _, device, provider = _create_entry_with_device(hass, "permit1")
@@ -474,9 +479,10 @@ async def test_update_reservation_not_supported_falls_back(hass, pv_library) -> 
         )
 
 
-async def test_service_list_active_reservations_failure(hass) -> None:
+async def test_service_list_active_reservations_failure(
+    hass: HomeAssistant,
+) -> None:
     """List active reservations should fail when refresh has no data."""
-
     await async_setup_services(hass)
 
     entry, device, _provider = _create_entry_with_device(hass, "permit1")
@@ -495,9 +501,10 @@ async def test_service_list_active_reservations_failure(hass) -> None:
         )
 
 
-async def test_service_list_favorites_error(hass, pv_library) -> None:
+async def test_service_list_favorites_error(
+    hass: HomeAssistant, pv_library: ModuleType
+) -> None:
     """List favorites should surface provider errors."""
-
     await async_setup_services(hass)
 
     _entry, device, provider = _create_entry_with_device(hass, "permit1")
@@ -513,9 +520,10 @@ async def test_service_list_favorites_error(hass, pv_library) -> None:
         )
 
 
-async def test_service_end_reservation_error(hass, pv_library) -> None:
+async def test_service_end_reservation_error(
+    hass: HomeAssistant, pv_library: ModuleType
+) -> None:
     """End reservation errors should raise HomeAssistantError."""
-
     await async_setup_services(hass)
 
     _, device, provider = _create_entry_with_device(hass, "permit1")
@@ -533,9 +541,8 @@ async def test_service_end_reservation_error(hass, pv_library) -> None:
         )
 
 
-async def test_service_add_favorite_error(hass) -> None:
+async def test_service_add_favorite_error(hass: HomeAssistant) -> None:
     """Add favorite errors should raise HomeAssistantError."""
-
     await async_setup_services(hass)
 
     _, device, provider = _create_entry_with_device(hass, "permit1")
@@ -553,9 +560,10 @@ async def test_service_add_favorite_error(hass) -> None:
         )
 
 
-async def test_service_update_favorite_requires_changes(hass) -> None:
+async def test_service_update_favorite_requires_changes(
+    hass: HomeAssistant,
+) -> None:
     """Update favorite should require at least one change."""
-
     await async_setup_services(hass)
 
     _, device, _provider = _create_entry_with_device(hass, "permit1")
@@ -572,9 +580,10 @@ async def test_service_update_favorite_requires_changes(hass) -> None:
         )
 
 
-async def test_service_update_favorite_provider_error(hass, pv_library) -> None:
+async def test_service_update_favorite_provider_error(
+    hass: HomeAssistant, pv_library: ModuleType
+) -> None:
     """Update favorite provider errors should raise HomeAssistantError."""
-
     await async_setup_services(hass)
 
     _, device, provider = _create_entry_with_device(hass, "permit1")
@@ -594,9 +603,8 @@ async def test_service_update_favorite_provider_error(hass, pv_library) -> None:
         )
 
 
-async def test_service_update_favorite_type_error(hass) -> None:
+async def test_service_update_favorite_type_error(hass: HomeAssistant) -> None:
     """Update favorite type errors should raise HomeAssistantError."""
-
     await async_setup_services(hass)
 
     _, device, provider = _create_entry_with_device(hass, "permit1")
@@ -615,9 +623,10 @@ async def test_service_update_favorite_type_error(hass) -> None:
         )
 
 
-async def test_service_remove_favorite_error(hass, pv_library) -> None:
+async def test_service_remove_favorite_error(
+    hass: HomeAssistant, pv_library: ModuleType
+) -> None:
     """Remove favorite errors should raise HomeAssistantError."""
-
     await async_setup_services(hass)
 
     _, device, provider = _create_entry_with_device(hass, "permit1")
@@ -635,9 +644,10 @@ async def test_service_remove_favorite_error(hass, pv_library) -> None:
         )
 
 
-async def test_service_list_active_reservations_last_update_failure(hass) -> None:
+async def test_service_list_active_reservations_last_update_failure(
+    hass: HomeAssistant,
+) -> None:
     """List active reservations should fail when last update failed."""
-
     await async_setup_services(hass)
 
     entry, device, _provider = _create_entry_with_device(hass, "permit1")
@@ -655,9 +665,8 @@ async def test_service_list_active_reservations_last_update_failure(hass) -> Non
         )
 
 
-async def test_service_invalid_entry_domain(hass) -> None:
+async def test_service_invalid_entry_domain(hass: HomeAssistant) -> None:
     """Service calls should reject entries from other domains."""
-
     await async_setup_services(hass)
 
     entry = MockConfigEntry(domain="other", data={}, title="Other")
@@ -684,9 +693,8 @@ async def test_service_invalid_entry_domain(hass) -> None:
         )
 
 
-async def test_service_invalid_entry_state(hass) -> None:
+async def test_service_invalid_entry_state(hass: HomeAssistant) -> None:
     """Service calls should reject entries that are not loaded."""
-
     await async_setup_services(hass)
 
     entry = MockConfigEntry(domain=DOMAIN, data={}, title="City")
@@ -713,9 +721,10 @@ async def test_service_invalid_entry_state(hass) -> None:
         )
 
 
-async def test_fallback_update_reservation_error(hass, pv_library) -> None:
+async def test_fallback_update_reservation_error(
+    hass: HomeAssistant, pv_library: ModuleType
+) -> None:
     """Fallback update reservation errors should raise HomeAssistantError."""
-
     entry, _device, provider = _create_entry_with_device(hass, "permit1")
     provider.end_reservation.side_effect = pv_library.ProviderError("boom")
 
@@ -732,18 +741,18 @@ async def test_fallback_update_reservation_error(hass, pv_library) -> None:
         )
 
 
-async def test_fallback_update_favorite_validation_error(hass) -> None:
+async def test_fallback_update_favorite_validation_error(
+    hass: HomeAssistant,
+) -> None:
     """Fallback update favorite should require a license plate."""
-
     entry, _device, _provider = _create_entry_with_device(hass, "permit1")
 
     with pytest.raises(ServiceValidationError):
         await _fallback_update_favorite(entry.runtime_data, "fav1", None, None)
 
 
-async def test_fallback_update_favorite_error(hass) -> None:
+async def test_fallback_update_favorite_error(hass: HomeAssistant) -> None:
     """Fallback update favorite errors should raise HomeAssistantError."""
-
     entry, _device, provider = _create_entry_with_device(hass, "permit1")
     provider.add_favorite.side_effect = TypeError("boom")
 
@@ -758,7 +767,6 @@ async def test_fallback_update_favorite_error(hass) -> None:
 
 def test_error_helpers() -> None:
     """Error helper functions should map and format details."""
-
     err = PyCityVisitorParkingError()
     err.user_message = "User message"
     err.detail = "Detail"
@@ -782,7 +790,6 @@ def test_error_helpers() -> None:
 )
 def test_error_base_key_with_error_code(error_code: str, expected: str) -> None:
     """Error codes should map to reservation keys."""
-
     err = PyCityVisitorParkingError()
     err.error_code = error_code
     assert _error_base_key(err, "reservation") == expected
@@ -790,7 +797,6 @@ def test_error_base_key_with_error_code(error_code: str, expected: str) -> None:
 
 def test_error_base_key_with_instances() -> None:
     """Error instances should map to fallback keys."""
-
     assert _error_base_key(AuthError(), "reservation") == "reservation_auth_failed"
     assert (
         _error_base_key(NetworkError(), "reservation") == "reservation_network_failed"
@@ -810,7 +816,6 @@ def test_error_base_key_with_instances() -> None:
 
 def test_error_key_helpers() -> None:
     """Error key helpers should add detail suffixes."""
-
     err = PyCityVisitorParkingError()
     assert _reservation_error_key(err, True).endswith("_detail")
     assert not _reservation_error_key(err, False).endswith("_detail")
@@ -820,7 +825,6 @@ def test_error_key_helpers() -> None:
 
 def test_raise_error_helpers() -> None:
     """Raise helpers should produce HomeAssistantError."""
-
     err = PyCityVisitorParkingError()
     err.detail = "Detail"
     with pytest.raises(HomeAssistantError):
@@ -832,9 +836,8 @@ def test_raise_error_helpers() -> None:
         _raise_favorite_error(err)
 
 
-def test_is_not_supported_and_update_fields(hass) -> None:
+def test_is_not_supported_and_update_fields(hass: HomeAssistant) -> None:
     """Support helpers should normalize provider data."""
-
     assert _is_not_supported(ProviderError("not supported"))
     assert not _is_not_supported(ProviderError("boom"))
 
@@ -843,9 +846,10 @@ def test_is_not_supported_and_update_fields(hass) -> None:
     assert _reservation_update_fields(entry.runtime_data) == []
 
 
-async def test_service_list_active_reservations_response(hass) -> None:
+async def test_service_list_active_reservations_response(
+    hass: HomeAssistant,
+) -> None:
     """List active reservations should return normalized data."""
-
     await async_setup_services(hass)
 
     entry, device, provider = _create_entry_with_device(hass, "permit1")
@@ -898,7 +902,7 @@ async def test_service_list_active_reservations_response(hass) -> None:
             return_response=True,
         )
 
-    assert response["count"] == 2
+    assert response["count"] == EXPECTED_COUNT
     assert response["active_count"] == 1
     assert response["future_count"] == 1
     assert response["stale"] is False
@@ -907,7 +911,7 @@ async def test_service_list_active_reservations_response(hass) -> None:
         ATTR_END_TIME,
     }
     reservations = response["active_reservations"]
-    assert len(reservations) == 2
+    assert len(reservations) == EXPECTED_COUNT
     active_payload = next(
         item for item in reservations if item[ATTR_RESERVATION_ID] == "res1"
     )
@@ -916,9 +920,8 @@ async def test_service_list_active_reservations_response(hass) -> None:
     assert active_payload["favorite_name"] == "Ada"
 
 
-async def test_service_list_active_reservations_stale(hass) -> None:
+async def test_service_list_active_reservations_stale(hass: HomeAssistant) -> None:
     """List active reservations should mark stale on failed refresh."""
-
     await async_setup_services(hass)
 
     entry, device, _provider = _create_entry_with_device(hass, "permit1")
@@ -959,9 +962,8 @@ async def test_service_list_active_reservations_stale(hass) -> None:
     assert response["stale"] is True
 
 
-async def test_service_list_favorites_response(hass) -> None:
+async def test_service_list_favorites_response(hass: HomeAssistant) -> None:
     """List favorites should return normalized favorites."""
-
     await async_setup_services(hass)
 
     _entry, device, provider = _create_entry_with_device(hass, "permit1")
@@ -979,7 +981,7 @@ async def test_service_list_favorites_response(hass) -> None:
         return_response=True,
     )
 
-    assert response["count"] == 2
+    assert response["count"] == EXPECTED_COUNT
     favorites = response["favorites"]
     assert favorites[0][ATTR_FAVORITE_ID] == "fav1"
     assert favorites[0][ATTR_LICENSE_PLATE] == "AA1234"
@@ -988,9 +990,8 @@ async def test_service_list_favorites_response(hass) -> None:
     assert favorites[1][ATTR_LICENSE_PLATE] == "BB9999"
 
 
-async def test_service_invalid_device_target(hass) -> None:
+async def test_service_invalid_device_target(hass: HomeAssistant) -> None:
     """Service calls should reject unknown devices."""
-
     await async_setup_services(hass)
 
     with pytest.raises(ServiceValidationError):
@@ -1005,9 +1006,10 @@ async def test_service_invalid_device_target(hass) -> None:
         )
 
 
-def _create_entry_with_device(hass, permit_id: str):
+def _create_entry_with_device(
+    hass: HomeAssistant, permit_id: str
+) -> tuple[MockConfigEntry, dr.DeviceEntry, AsyncMock]:
     """Create a mock entry with device registry entry."""
-
     entry = MockConfigEntry(
         domain=DOMAIN,
         data={

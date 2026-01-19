@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from homeassistant.components.sensor import SensorEntity
 from homeassistant.const import ATTR_ATTRIBUTION
 from homeassistant.core import callback
@@ -10,7 +12,9 @@ from homeassistant.helpers.update_coordinator import BaseCoordinatorEntity
 
 from .const import CONF_MUNICIPALITY, CONF_PERMIT_ID, DOMAIN
 from .coordinator import CityVisitorParkingCoordinator
-from .runtime_data import CityVisitorParkingConfigEntry
+
+if TYPE_CHECKING:
+    from .runtime_data import CityVisitorParkingConfigEntry
 
 
 class CityVisitorParkingEntity(
@@ -28,7 +32,6 @@ class CityVisitorParkingEntity(
         key: str,
     ) -> None:
         """Initialize the entity."""
-
         super().__init__(coordinator)
         self._entry: CityVisitorParkingConfigEntry = entry
         municipality = entry.data.get(CONF_MUNICIPALITY)
@@ -53,13 +56,11 @@ class CityVisitorParkingEntity(
     @callback
     def _handle_coordinator_update(self) -> None:
         """Update availability before writing state."""
-
         self._attr_available = self.coordinator.last_update_success
         super()._handle_coordinator_update()
 
     async def async_update(self) -> None:
         """Update the entity via the coordinator."""
-
         if not self.enabled:
             return
         await self.coordinator.async_request_refresh()

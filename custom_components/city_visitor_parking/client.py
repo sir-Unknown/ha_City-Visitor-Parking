@@ -2,16 +2,19 @@
 
 from __future__ import annotations
 
-from homeassistant.core import HomeAssistant
+from typing import TYPE_CHECKING
+
 from homeassistant.helpers import aiohttp_client
 from pycityvisitorparking import Client
 
-from .models import ProviderConfig
+if TYPE_CHECKING:
+    from homeassistant.core import HomeAssistant
+
+    from .models import ProviderConfig
 
 
 async def async_create_client(hass: HomeAssistant, provider: ProviderConfig) -> Client:
     """Create a pycityvisitorparking client using Home Assistant's session."""
-
     session = aiohttp_client.async_get_clientsession(hass)
     return Client(
         session=session,
