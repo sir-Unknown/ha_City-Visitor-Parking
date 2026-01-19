@@ -94,7 +94,9 @@ async def test_diagnostics_redacts_sensitive_data(hass: HomeAssistant) -> None:
         last_update_success=True,
         last_update_success_time=datetime(2025, 1, 1, 9, 0, tzinfo=UTC),
     )
-    coordinator_typed = cast("CityVisitorParkingCoordinator", coordinator)
+    coordinator_typed: CityVisitorParkingCoordinator = cast(
+        "CityVisitorParkingCoordinator", coordinator
+    )
     entry.runtime_data = CityVisitorParkingRuntimeData(
         client=AsyncMock(),
         provider=AsyncMock(),

@@ -16,3 +16,6 @@ convention = "google"
 
 [tool.ruff.format]
 quote-style = "double"
+
+[tool.pyright]
+extraPaths = ["/workspaces/ha_City-Visitor-Parking"]

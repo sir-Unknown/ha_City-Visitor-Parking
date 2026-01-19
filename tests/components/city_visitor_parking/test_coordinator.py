@@ -215,7 +215,7 @@ async def test_auto_end_handles_provider_failure(
 
 async def test_provider_protocol_raises() -> None:
     """Provider protocol defaults should raise when called."""
-    protocol = cast("Any", ProviderProtocol)
+    protocol = cast(Any, ProviderProtocol)
     with pytest.raises(NotImplementedError):
         await protocol.get_permit(object())
     with pytest.raises(NotImplementedError):
