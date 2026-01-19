@@ -2,31 +2,30 @@ import { LitElement, css, html, nothing, type TemplateResult } from "lit";
 import {
   BASE_CARD_STYLES,
   DOMAIN,
-  PERMIT_PLACEHOLDER_VALUE,
   RESERVATION_STARTED_EVENT,
-  buildPermitOptions,
-  buildPermitTitleMap,
-  clearStatusState,
   createErrorMessage,
   createLocalize,
   createRenderScheduler,
   createStatusState,
-  fetchPermitEntries,
+  fetchPermitTitleMap,
   formatOptionalDateTimeLocal,
-  getCardText,
   getGlobalHass,
+  getConfigEntryId,
+  filterDomainDevices,
   getInvalidConfigError,
+  hideCustomCardFromPicker,
   isHassRunning,
   isInEditor,
-  registerCustomCard,
+  parseDateTimeValue,
+  resolvePermitLabelsByDevice,
+  useStatusState,
+  registerCustomCardWithTranslations,
   renderCardHeader,
   renderLoadingCard,
   renderStatusAlert,
-  setStatusState,
   showPicker,
   type DeviceEntry,
   type HomeAssistant,
-  type PermitOption,
   type StatusState,
   type StatusType,
 } from "./card-shared";
@@ -123,11 +122,6 @@ import { ensureTranslations } from "./localize";
     _configEntriesPromise: Promise<Map<string, string>> | null;
     _configEntryTitleById: Map<string, string>;
     _permitLabelsByDeviceId: Map<string, string>;
-    _permitOptions: PermitOption[];
-    _permitOptionsLoaded: boolean;
-    _permitOptionsLoading: boolean;
-    _permitOptionsLoadPromise: Promise<void> | null;
-    _selectedEntryId: string | null;
     _statusState: StatusState;
     _reservationStartedHandler: (() => void) | null;
     _requestRender: () => void;
@@ -139,7 +133,6 @@ import { ensureTranslations } from "./localize";
     _onReservationInput: (event: Event) => void;
     _onReservationChange: (event: Event) => void;
     _onPickerClick: (event: Event) => void;
-    _onPermitSelectChange: (event: Event) => void;
 
     constructor() {
       super();
@@ -155,11 +148,6 @@ import { ensureTranslations } from "./localize";
       this._configEntriesPromise = null;
       this._configEntryTitleById = new Map();
       this._permitLabelsByDeviceId = new Map();
-      this._permitOptions = [];
-      this._permitOptionsLoaded = false;
-      this._permitOptionsLoading = false;
-      this._permitOptionsLoadPromise = null;
-      this._selectedEntryId = null;
       this._statusState = createStatusState();
       this._reservationStartedHandler = null;
       this._requestRender = createRenderScheduler(() => this.requestUpdate());
@@ -173,8 +161,6 @@ import { ensureTranslations } from "./localize";
       this._onReservationChange = (event: Event) =>
         this._handleReservationChange(event);
       this._onPickerClick = (event: Event) => this._handlePickerClick(event);
-      this._onPermitSelectChange = (event: Event) =>
-        this._handlePermitSelectChange(event);
     }
 
     connectedCallback(): void {
@@ -206,10 +192,13 @@ import { ensureTranslations } from "./localize";
       return getActiveCardConfigForm(hass);
     }
 
+    static getConfigElement(): HTMLElement {
+      return document.createElement("city-visitor-parking-active-card-editor");
+    }
+
     static getStubConfig(): CardConfig {
       return {
         type: `custom:${CARD_TYPE}`,
-        title: getCardText("active_name"),
       };
     }
 
@@ -220,12 +209,7 @@ import { ensureTranslations } from "./localize";
         );
       }
       this._config = { ...config };
-      if (this._config.config_entry_id) {
-        this._selectedEntryId = null;
-      }
       this._requestRender();
-      this._ensurePermitOptions();
-      this._maybeSelectSinglePermit();
       void this._maybeLoadActiveReservations();
     }
 
@@ -233,8 +217,6 @@ import { ensureTranslations } from "./localize";
       this._hass = hass;
       void ensureTranslations(this._hass).then(() => this.requestUpdate());
       this._requestRender();
-      this._ensurePermitOptions();
-      this._maybeSelectSinglePermit();
       void this._maybeLoadActiveReservations();
     }
 
@@ -278,8 +260,11 @@ import { ensureTranslations } from "./localize";
           this._activeReservationsLoadedFor = target;
           return;
         }
-        this._permitLabelsByDeviceId =
-          await this._getPermitLabelsByDeviceId(devices);
+        const entryTitles = await this._getConfigEntryTitles();
+        this._permitLabelsByDeviceId = resolvePermitLabelsByDevice(
+          devices,
+          entryTitles,
+        );
         type ActiveReservationsResult = {
           active_reservations?: ActiveReservation[];
           reservation_update_fields?: string[];
@@ -360,58 +345,11 @@ import { ensureTranslations } from "./localize";
       const title = this._config.title || "";
       const icon = this._config.icon;
       const controlsDisabled = this._isInEditor();
-      const activeEntryId = this._getActiveEntryId();
-      const showPermitPicker =
-        !this._config.config_entry_id &&
-        !(this._permitOptionsLoaded && this._permitOptions.length === 1);
-      const permitPlaceholderKey = "message.select_permit";
-      const permitPlaceholder = this._localize(permitPlaceholderKey);
-      const permitPlaceholderText =
-        permitPlaceholder === permitPlaceholderKey ? "" : permitPlaceholder;
-      const permitSelectedText = activeEntryId
-        ? this._permitOptions.find((entry) => entry.id === activeEntryId)
-            ?.primary || activeEntryId
-        : permitPlaceholderText;
-      const permitSelectValue = activeEntryId ?? PERMIT_PLACEHOLDER_VALUE;
-      const permitSelectDisabled =
-        controlsDisabled || this._permitOptionsLoading;
 
       return html`
         <ha-card @click=${this._onActionClick}>
           ${renderCardHeader(title, icon, html, nothing)}
           <div class="card-content">
-            ${showPermitPicker
-              ? html`
-                  <div class="row">
-                    <ha-select
-                      id="permitSelect"
-                      .label=${this._localize("field.permit")}
-                      .value=${permitSelectValue}
-                      .selectedText=${permitSelectedText}
-                      ?disabled=${permitSelectDisabled}
-                      @selected=${this._onPermitSelectChange}
-                    >
-                      <mwc-list-item value=${PERMIT_PLACEHOLDER_VALUE}>
-                        ${permitPlaceholderText}
-                      </mwc-list-item>
-                      ${this._permitOptions.map((entry) => {
-                        const secondaryText = entry.secondary;
-                        return html`<mwc-list-item
-                          value=${entry.id}
-                          ?twoline=${Boolean(secondaryText)}
-                        >
-                          <span>${entry.primary}</span>
-                          ${secondaryText
-                            ? html`<span slot="secondary"
-                                >${secondaryText}</span
-                              >`
-                            : nothing}
-                        </mwc-list-item>`;
-                      })}
-                    </ha-select>
-                  </div>
-                `
-              : nothing}
             ${this._renderActiveReservations(controlsDisabled)}
             ${renderStatusAlert(this._statusState, html, nothing)}
           </div>
@@ -425,22 +363,8 @@ import { ensureTranslations } from "./localize";
         !this._activeReservationsLoading &&
         !this._activeReservationsError &&
         !hasReservations;
-      const showSpinner =
-        this._activeReservationsLoading && !this._suppressLoadingIndicator;
       return html`
         <div class="row active-reservations">
-          ${showSpinner
-            ? html`
-                <div class="row spinner">
-                  <ha-spinner size="small"></ha-spinner>
-                  <span
-                    >${this._localize(
-                      "message.loading_active_reservations",
-                    )}</span
-                  >
-                </div>
-              `
-            : nothing}
           ${this._activeReservationsError
             ? html`
                 <ha-alert alert-type="warning">
@@ -470,27 +394,22 @@ import { ensureTranslations } from "./localize";
       const permitLabel = reservation.device_id
         ? this._permitLabelsByDeviceId.get(reservation.device_id)
         : null;
-      const updateFields =
-        reservation.device_id &&
-        this._reservationUpdateFieldsByDevice[reservation.device_id]
-          ? this._reservationUpdateFieldsByDevice[reservation.device_id]
-          : [];
+      const updateFields = this._getReservationUpdateFields(
+        reservation.device_id,
+      );
       const allowStart = updateFields.includes("start_time");
       const allowEnd = updateFields.includes("end_time");
       const isBusy = this._reservationInFlight.has(reservation.reservation_id);
-      const inputOverrides = this._reservationInputValues.get(
+      const startValue = this._getReservationInputValue(
         reservation.reservation_id,
+        "start",
+        formatOptionalDateTimeLocal(reservation.start_time),
       );
-      const startOverride = inputOverrides?.start;
-      const endOverride = inputOverrides?.end;
-      const startValue =
-        startOverride !== undefined
-          ? startOverride
-          : formatOptionalDateTimeLocal(reservation.start_time);
-      const endValue =
-        endOverride !== undefined
-          ? endOverride
-          : formatOptionalDateTimeLocal(reservation.end_time);
+      const endValue = this._getReservationInputValue(
+        reservation.reservation_id,
+        "end",
+        formatOptionalDateTimeLocal(reservation.end_time),
+      );
       return html`
         <div class="active-reservation">
           <div class="active-reservation-summary">
@@ -560,18 +479,11 @@ import { ensureTranslations } from "./localize";
     }
 
     _handleReservationInput(event: Event): void {
-      const target = event.target as ValueElement | null;
-      if (!target) {
+      const reservationField = this._getReservationField(event);
+      if (!reservationField) {
         return;
       }
-      const element = target as HTMLElement;
-      const reservationId = element.dataset.reservationId ?? "";
-      const field = element.dataset.field;
-      if (!reservationId || (field !== "start" && field !== "end")) {
-        return;
-      }
-      const fieldKey: "start" | "end" = field === "start" ? "start" : "end";
-      const value = target.value ?? "";
+      const { reservationId, fieldKey, value } = reservationField;
       const current = this._reservationInputValues.get(reservationId) ?? {};
       this._reservationInputValues.set(reservationId, {
         ...current,
@@ -583,58 +495,65 @@ import { ensureTranslations } from "./localize";
       if (this._isInEditor()) {
         return;
       }
+      const reservationField = this._getReservationField(event);
+      if (!reservationField) {
+        return;
+      }
+      const { reservationId } = reservationField;
+      this._handleReservationInput(event);
+      void this._handleActiveReservationUpdate(reservationId);
+    }
+
+    _getReservationField(event: Event): {
+      reservationId: string;
+      fieldKey: "start" | "end";
+      value: string;
+    } | null {
       const target = event.target as ValueElement | null;
       if (!target) {
-        return;
+        return null;
       }
       const element = target as HTMLElement;
       const reservationId = element.dataset.reservationId ?? "";
       const field = element.dataset.field;
       if (!reservationId || (field !== "start" && field !== "end")) {
-        return;
+        return null;
       }
-      this._handleReservationInput(event);
-      void this._handleActiveReservationUpdate(reservationId);
-    }
-
-    _handlePermitSelectChange(event: Event): void {
-      if (this._isInEditor()) {
-        return;
-      }
-      const detail = (event as CustomEvent<{ value?: string | null }>).detail;
-      const target = event.currentTarget as ValueElement | null;
-      const value = detail?.value ?? target?.value ?? "";
-      const nextValue = value === PERMIT_PLACEHOLDER_VALUE ? "" : (value ?? "");
-      this._handlePermitChange(nextValue);
-    }
-
-    _handlePermitChange(value: string): void {
-      const nextEntryId = value || null;
-      if (nextEntryId === this._selectedEntryId) {
-        return;
-      }
-      this._selectedEntryId = nextEntryId;
-      this._activeReservationsLoadedFor = null;
-      this._requestRender();
-      void this._maybeLoadActiveReservations(true);
+      const fieldKey: "start" | "end" = field === "start" ? "start" : "end";
+      return { reservationId, fieldKey, value: target.value ?? "" };
     }
 
     _handlePickerClick(event: Event): void {
       showPicker(event, this._isInEditor());
     }
 
+    _getReservationUpdateFields(deviceId: string | undefined): string[] {
+      if (!deviceId) {
+        return [];
+      }
+      return this._reservationUpdateFieldsByDevice[deviceId] ?? [];
+    }
+
+    _getReservationInputValue(
+      reservationId: string,
+      fieldKey: "start" | "end",
+      fallback: string,
+    ): string {
+      const inputOverrides = this._reservationInputValues.get(reservationId);
+      const override = inputOverrides?.[fieldKey];
+      return override !== undefined ? override : fallback;
+    }
+
     _setStatus(message: string, type: StatusType, clearAfterMs?: number): void {
-      setStatusState(
-        this._statusState,
+      useStatusState(this._statusState, this._requestRender).set(
         message,
         type,
-        () => this._requestRender(),
         clearAfterMs,
       );
     }
 
     _clearStatus(): void {
-      clearStatusState(this._statusState, () => this._requestRender());
+      useStatusState(this._statusState, this._requestRender).clear();
     }
 
     async _handleActiveReservationUpdate(reservationId: string): Promise<void> {
@@ -656,8 +575,7 @@ import { ensureTranslations } from "./localize";
       }
       this._reservationInFlight.add(reservationId);
       this._requestRender();
-      const updateFields =
-        this._reservationUpdateFieldsByDevice[deviceId] ?? [];
+      const updateFields = this._getReservationUpdateFields(deviceId);
       const allowStart = updateFields.includes("start_time");
       const allowEnd = updateFields.includes("end_time");
       if (!allowStart && !allowEnd) {
@@ -665,16 +583,19 @@ import { ensureTranslations } from "./localize";
         this._requestRender();
         return;
       }
-      const inputOverrides = this._reservationInputValues.get(reservationId);
       const startValue = allowStart
-        ? inputOverrides?.start !== undefined
-          ? inputOverrides.start.trim()
-          : formatOptionalDateTimeLocal(reservation.start_time)
+        ? this._getReservationInputValue(
+            reservationId,
+            "start",
+            formatOptionalDateTimeLocal(reservation.start_time),
+          ).trim()
         : "";
       const endValue = allowEnd
-        ? inputOverrides?.end !== undefined
-          ? inputOverrides.end.trim()
-          : formatOptionalDateTimeLocal(reservation.end_time)
+        ? this._getReservationInputValue(
+            reservationId,
+            "end",
+            formatOptionalDateTimeLocal(reservation.end_time),
+          ).trim()
         : "";
       if ((allowStart && !startValue) || (allowEnd && !endValue)) {
         this._setStatus(
@@ -685,19 +606,12 @@ import { ensureTranslations } from "./localize";
         this._requestRender();
         return;
       }
-      const parseDate = (value: string | null | undefined): Date | null => {
-        if (!value) {
-          return null;
-        }
-        const date = new Date(value);
-        return Number.isNaN(date.getTime()) ? null : date;
-      };
       const startDate = allowStart
-        ? parseDate(startValue)
-        : parseDate(reservation.start_time);
+        ? parseDateTimeValue(startValue)
+        : parseDateTimeValue(reservation.start_time);
       const endDate = allowEnd
-        ? parseDate(endValue)
-        : parseDate(reservation.end_time);
+        ? parseDateTimeValue(endValue)
+        : parseDateTimeValue(reservation.end_time);
       if ((allowStart && !startDate) || (allowEnd && !endDate)) {
         this._setStatus(
           this._localize("message.start_end_required"),
@@ -790,76 +704,6 @@ import { ensureTranslations } from "./localize";
       await this._maybeLoadActiveReservations(true);
     }
 
-    _ensurePermitOptions(): void {
-      if (this._config?.config_entry_id || !this._hass) {
-        return;
-      }
-      if (this._permitOptionsLoaded || this._permitOptionsLoadPromise) {
-        return;
-      }
-      void this._loadPermitOptions();
-    }
-
-    _maybeSelectSinglePermit(): void {
-      if (this._config?.config_entry_id) {
-        return;
-      }
-      if (!this._permitOptionsLoaded || this._permitOptions.length !== 1) {
-        return;
-      }
-      if (this._getActiveEntryId()) {
-        return;
-      }
-      this._handlePermitChange(this._permitOptions[0].id);
-    }
-
-    async _loadPermitOptions(): Promise<void> {
-      if (!this._hass || this._config?.config_entry_id) {
-        return;
-      }
-      if (this._permitOptionsLoadPromise) {
-        return this._permitOptionsLoadPromise;
-      }
-      this._permitOptionsLoading = true;
-      this._requestRender();
-      const loadPromise = (async () => {
-        try {
-          const result = await fetchPermitEntries(this._hass!);
-          this._permitOptions = buildPermitOptions(result);
-          this._permitOptionsLoaded = true;
-          this._maybeSelectSinglePermit();
-        } catch {
-          this._permitOptions = [];
-          this._permitOptionsLoaded = false;
-        } finally {
-          this._permitOptionsLoading = false;
-          this._permitOptionsLoadPromise = null;
-          this._requestRender();
-        }
-      })();
-      this._permitOptionsLoadPromise = loadPromise;
-      return loadPromise;
-    }
-
-    async _getPermitLabelsByDeviceId(
-      devices: DeviceEntry[],
-    ): Promise<Map<string, string>> {
-      const entryTitles = await this._getConfigEntryTitles();
-      const labels = new Map<string, string>();
-      for (const device of devices) {
-        const entryIds = Array.isArray(device.config_entries)
-          ? device.config_entries
-          : [];
-        const entryId =
-          entryIds.find((id) => entryTitles.has(id)) ?? entryIds[0];
-        if (!entryId) {
-          continue;
-        }
-        labels.set(device.id, entryTitles.get(entryId) ?? entryId);
-      }
-      return labels;
-    }
-
     async _getConfigEntryTitles(): Promise<Map<string, string>> {
       if (!this._hass) {
         return new Map();
@@ -867,9 +711,9 @@ import { ensureTranslations } from "./localize";
       if (this._configEntriesPromise) {
         return this._configEntriesPromise;
       }
-      const promise = fetchPermitEntries(this._hass)
-        .then((entries) => {
-          this._configEntryTitleById = buildPermitTitleMap(entries);
+      const promise = fetchPermitTitleMap(this._hass)
+        .then((entryTitles) => {
+          this._configEntryTitleById = entryTitles;
           return this._configEntryTitleById;
         })
         .catch(() => {
@@ -892,13 +736,7 @@ import { ensureTranslations } from "./localize";
       }
       const devicesPromise = this._hass
         .callWS<DeviceEntry[]>({ type: "config/device_registry/list" })
-        .then((devices) =>
-          devices.filter((device) =>
-            (device.identifiers ?? []).some(
-              (identifier: [string, string]) => identifier[0] === DOMAIN,
-            ),
-          ),
-        )
+        .then((devices) => filterDomainDevices(devices))
         .finally(() => {
           this._devicesPromise = null;
         });
@@ -907,7 +745,7 @@ import { ensureTranslations } from "./localize";
     }
 
     _getActiveEntryId(): string | null {
-      return this._config?.config_entry_id || this._selectedEntryId;
+      return getConfigEntryId(this._config);
     }
 
     _isInEditor(): boolean {
@@ -915,34 +753,11 @@ import { ensureTranslations } from "./localize";
     }
   }
 
-  const registerCard = (): void => {
-    registerCustomCard(
-      CARD_TYPE,
-      CityVisitorParkingActiveCard,
-      getCardText("active_name"),
-      getCardText("active_description"),
-    );
-  };
-  const getHassLanguage = (
-    hass: HomeAssistant | null | undefined,
-  ): string | undefined => {
-    const hassLanguage =
-      typeof hass?.language === "string" ? hass.language : undefined;
-    const localeLanguage =
-      hass && typeof hass.locale === "object" && hass.locale
-        ? (hass.locale as { language?: unknown }).language
-        : undefined;
-    return (
-      hassLanguage ||
-      (typeof localeLanguage === "string" ? localeLanguage : undefined)
-    );
-  };
-  const registerCardWithTranslations = (attempt = 0): void => {
-    const hass = getGlobalHass<HomeAssistant>();
-    void ensureTranslations(hass).then(registerCard);
-    if (!getHassLanguage(hass) && attempt < 20) {
-      window.setTimeout(() => registerCardWithTranslations(attempt + 1), 500);
-    }
-  };
-  registerCardWithTranslations();
+  registerCustomCardWithTranslations(
+    CARD_TYPE,
+    CityVisitorParkingActiveCard,
+    "name",
+    "",
+  );
+  hideCustomCardFromPicker(CARD_TYPE);
 })();

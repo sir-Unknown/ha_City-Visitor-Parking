@@ -1,103 +1,3 @@
-// src/localize.ts
-var DEFAULT_LANGUAGE = "en";
-var translationsCache = /* @__PURE__ */ new Map();
-var translationsInFlight = /* @__PURE__ */ new Map();
-var getGlobalHass = () => {
-  const globalHass = window.hass;
-  if (globalHass) {
-    return globalHass;
-  }
-  return null;
-};
-var getStoredLanguage = () => {
-  try {
-    return localStorage.getItem("selectedLanguage") ?? void 0;
-  } catch {
-    return void 0;
-  }
-};
-var getLanguage = (target) => {
-  const globalHass = getGlobalHass();
-  const documentLanguage = document.documentElement.lang || void 0;
-  const storedLanguage = getStoredLanguage();
-  if (!target || typeof target === "function") {
-    return globalHass?.language || globalHass?.locale?.language || documentLanguage || storedLanguage || navigator.language || DEFAULT_LANGUAGE;
-  }
-  return target.language || target.locale?.language || globalHass?.language || globalHass?.locale?.language || documentLanguage || storedLanguage || DEFAULT_LANGUAGE;
-};
-var getBaseUrl = () => new URL(".", import.meta.url).toString().replace(/\/$/, "");
-var fetchTranslations = async (baseUrl, language) => {
-  const response = await fetch(
-    `${baseUrl}/translations/${language}.json`
-  ).catch(() => null);
-  if (!response || !response.ok) {
-    return null;
-  }
-  try {
-    return await response.json();
-  } catch {
-    return null;
-  }
-};
-var ensureTranslations = async (target) => {
-  const language = getLanguage(target);
-  if (translationsCache.has(language)) {
-    return;
-  }
-  const inFlight = translationsInFlight.get(language);
-  if (inFlight) {
-    await inFlight;
-    return;
-  }
-  const loadPromise = (async () => {
-    const baseUrl = getBaseUrl();
-    const languageStrings = await fetchTranslations(baseUrl, language);
-    if (languageStrings) {
-      translationsCache.set(language, languageStrings);
-      return;
-    }
-    const baseLanguage = language.split("-")[0];
-    if (baseLanguage && baseLanguage !== language) {
-      const baseStrings = await fetchTranslations(baseUrl, baseLanguage);
-      if (baseStrings) {
-        translationsCache.set(language, baseStrings);
-        return;
-      }
-    }
-    const fallbackStrings = await fetchTranslations(baseUrl, DEFAULT_LANGUAGE);
-    translationsCache.set(language, fallbackStrings ?? {});
-  })();
-  translationsInFlight.set(language, loadPromise);
-  await loadPromise;
-  translationsInFlight.delete(language);
-};
-var localize = (target, key) => {
-  const language = getLanguage(target);
-  const strings = translationsCache.get(language) || translationsCache.get(DEFAULT_LANGUAGE);
-  if (strings) {
-    const directValue = strings[key];
-    if (typeof directValue === "string") {
-      return directValue;
-    }
-    const cardStrings = strings.card;
-    if (cardStrings && typeof cardStrings === "object") {
-      const parts = key.split(".");
-      let current = cardStrings;
-      for (const part of parts) {
-        if (!current || typeof current !== "object") {
-          current = void 0;
-          break;
-        }
-        current = current[part];
-      }
-      if (typeof current === "string") {
-        return current;
-      }
-    }
-  }
-  return key;
-};
-
 // node_modules/@lit/reactive-element/css-tag.js
 var t = globalThis;
 var e = t.ShadowRoot && (void 0 === t.ShadyCSS || t.ShadyCSS.nativeShadow) && "adoptedStyleSheets" in Document.prototype && "replace" in CSSStyleSheet.prototype;
@@ -649,6 +549,140 @@ var o4 = s3.litElementPolyfillSupport;
 o4?.({ LitElement: i4 });
 (s3.litElementVersions ?? (s3.litElementVersions = [])).push("4.2.2");
 
+// src/localize.ts
+var DEFAULT_LANGUAGE = "en";
+var translationsCache = /* @__PURE__ */ new Map();
+var translationsInFlight = /* @__PURE__ */ new Map();
+var getGlobalHass = () => {
+  const globalHass = window.hass;
+  if (globalHass) {
+    return globalHass;
+  }
+  return null;
+};
+var getStoredLanguage = () => {
+  try {
+    return localStorage.getItem("selectedLanguage") ?? void 0;
+  } catch {
+    return void 0;
+  }
+};
+var getLanguage = (target) => {
+  const globalHass = getGlobalHass();
+  const documentLanguage = document.documentElement.lang || void 0;
+  const storedLanguage = getStoredLanguage();
+  if (!target || typeof target === "function") {
+    return globalHass?.language || globalHass?.locale?.language || documentLanguage || storedLanguage || navigator.language || DEFAULT_LANGUAGE;
+  }
+  return target.language || target.locale?.language || globalHass?.language || globalHass?.locale?.language || documentLanguage || storedLanguage || DEFAULT_LANGUAGE;
+};
+var getBaseUrl = () => new URL(".", import.meta.url).toString().replace(/\/$/, "");
+var fetchTranslations = async (baseUrl, language) => {
+  const response = await fetch(
+    `${baseUrl}/translations/${language}.json`
+  ).catch(() => null);
+  if (!response || !response.ok) {
+    return null;
+  }
+  try {
+    return await response.json();
+  } catch {
+    return null;
+  }
+};
+var ensureTranslations = async (target) => {
+  const language = getLanguage(target);
+  if (translationsCache.has(language)) {
+    return;
+  }
+  const inFlight = translationsInFlight.get(language);
+  if (inFlight) {
+    await inFlight;
+    return;
+  }
+  const loadPromise = (async () => {
+    const baseUrl = getBaseUrl();
+    const languageStrings = await fetchTranslations(baseUrl, language);
+    if (languageStrings) {
+      translationsCache.set(language, languageStrings);
+      return;
+    }
+    const baseLanguage = language.split("-")[0];
+    if (baseLanguage && baseLanguage !== language) {
+      const baseStrings = await fetchTranslations(baseUrl, baseLanguage);
+      if (baseStrings) {
+        translationsCache.set(language, baseStrings);
+        return;
+      }
+    }
+    const fallbackStrings = await fetchTranslations(baseUrl, DEFAULT_LANGUAGE);
+    translationsCache.set(language, fallbackStrings ?? {});
+  })();
+  translationsInFlight.set(language, loadPromise);
+  await loadPromise;
+  translationsInFlight.delete(language);
+};
+var localize = (target, key) => {
+  const language = getLanguage(target);
+  const strings = translationsCache.get(language) || translationsCache.get(DEFAULT_LANGUAGE);
+  if (strings) {
+    const directValue = strings[key];
+    if (typeof directValue === "string") {
+      return directValue;
+    }
+    const cardStrings = strings.card;
+    if (cardStrings && typeof cardStrings === "object") {
+      const parts = key.split(".");
+      let current = cardStrings;
+      for (const part of parts) {
+        if (!current || typeof current !== "object") {
+          current = void 0;
+          break;
+        }
+        current = current[part];
+      }
+      if (typeof current === "string") {
+        return current;
+      }
+    }
+  }
+  return key;
+};
+
+// src/card-editor-shared.ts
+var getFieldKey = (prefix, name) => {
+  const fieldName = name === "config_entry_id" ? "config_entry" : name;
+  return `${prefix}.${fieldName}`;
+};
+var buildFormHelpers = (localizeTarget, prefix) => ({
+  computeLabel: (schema) => {
+    const key = getFieldKey(`${prefix}.field`, schema.name);
+    const label = localize(localizeTarget, key);
+    return label === key ? "" : label;
+  },
+  computeHelper: (schema) => {
+    const key = getFieldKey(`${prefix}.description`, schema.name);
+    const helper = localize(localizeTarget, key);
+    return helper === key ? "" : helper;
+  }
+});
+var buildCardTypeOptions = (localizeTarget, prefix) => {
+  const newKey = `${prefix}.value.card_type.new`;
+  const activeKey = `${prefix}.value.card_type.active`;
+  const newLabel = localize(localizeTarget, newKey);
+  const activeLabel = localize(localizeTarget, activeKey);
+  return [
+    [
+      "custom:city-visitor-parking-card",
+      newLabel === newKey ? "New reservation card" : newLabel
+    ],
+    [
+      "custom:city-visitor-parking-active-card",
+      activeLabel === activeKey ? "Active reservations card" : activeLabel
+    ]
+  ];
+};
+
 // src/card-shared.ts
 var DOMAIN = "city_visitor_parking";
 var BASE_CARD_STYLES = i`
@@ -692,44 +726,114 @@ var BASE_CARD_STYLES = i`
 var getGlobalHass2 = () => window.hass;
 
 // src/city-visitor-parking-active-card-editor.ts
-var getFieldKey = (prefix, name) => {
-  const fieldName = name === "config_entry_id" ? "config_entry" : name;
-  return `${prefix}.${fieldName}`;
-};
-var getActiveCardConfigForm = async (hassOrLocalize) => {
-  const localizeTarget = hassOrLocalize && typeof hassOrLocalize !== "function" ? hassOrLocalize : getGlobalHass2() ?? hassOrLocalize;
-  await ensureTranslations(localizeTarget);
-  return {
+var buildSchema = (cardTypeOptions, displayOptionsExpanded, displayOptionsTitle) => [
+  {
+    type: "select",
+    name: "type",
+    default: "custom:city-visitor-parking-active-card",
+    options: cardTypeOptions
+  },
+  {
+    name: "title",
+    selector: { text: {} },
+    required: false
+  },
+  {
+    name: "icon",
+    selector: { icon: {} },
+    required: false
+  },
+  {
+    type: "expandable",
+    name: "display_options",
+    title: displayOptionsTitle,
+    expanded: displayOptionsExpanded,
+    flatten: true,
     schema: [
-      {
-        name: "title",
-        selector: { text: {} },
-        required: false
-      },
-      {
-        name: "icon",
-        selector: { icon: {} },
-        required: false
-      },
       {
         name: "config_entry_id",
         selector: { config_entry: { integration: DOMAIN } },
         required: false
       }
-    ],
-    computeLabel: (schema) => {
-      const key = getFieldKey("active_editor.field", schema.name);
-      const label = localize(localizeTarget, key);
-      return label === key ? "" : label;
-    },
-    computeHelper: (schema) => {
-      const key = getFieldKey("active_editor.description", schema.name);
-      const helper = localize(localizeTarget, key);
-      return helper === key ? "" : helper;
+    ]
+  }
+];
+var CityVisitorParkingActiveCardEditor = class extends i4 {
+  setConfig(config) {
+    this._config = config;
+  }
+  _handleValueChanged(ev) {
+    ev.stopPropagation();
+    this._config = ev.detail.value;
+    this.dispatchEvent(
+      new CustomEvent("config-changed", {
+        detail: { config: ev.detail.value }
+      })
+    );
+  }
+  render() {
+    if (!this.hass) {
+      return b2``;
     }
+    const localizeTarget = this.hass;
+    void ensureTranslations(localizeTarget);
+    const { computeLabel, computeHelper } = buildFormHelpers(
+      localizeTarget,
+      "active_editor"
+    );
+    const cardTypeOptions = buildCardTypeOptions(
+      localizeTarget,
+      "active_editor"
+    );
+    const displayOptionsTitle = localize(
+      localizeTarget,
+      "active_editor.field.display_options"
+    );
+    const displayOptionsExpanded = Boolean(this._config?.config_entry_id);
+    return b2`
+      <ha-form
+        .hass=${this.hass}
+        .data=${this._config ?? {}}
+        .schema=${buildSchema(
+      cardTypeOptions,
+      displayOptionsExpanded,
+      displayOptionsTitle
+    )}
+        .computeLabel=${computeLabel}
+        .computeHelper=${computeHelper}
+        @value-changed=${this._handleValueChanged}
+      ></ha-form>
+    `;
+  }
+};
+CityVisitorParkingActiveCardEditor.properties = {
+  hass: { attribute: false },
+  _config: { state: true }
+};
+customElements.define(
+  "city-visitor-parking-active-card-editor",
+  CityVisitorParkingActiveCardEditor
+);
+var getActiveCardConfigForm = async (hassOrLocalize) => {
+  const localizeTarget = hassOrLocalize && typeof hassOrLocalize !== "function" ? hassOrLocalize : getGlobalHass2() ?? hassOrLocalize;
+  await ensureTranslations(localizeTarget);
+  const { computeLabel, computeHelper } = buildFormHelpers(
+    localizeTarget,
+    "active_editor"
+  );
+  const cardTypeOptions = buildCardTypeOptions(localizeTarget, "active_editor");
+  const displayOptionsTitle = localize(
+    localizeTarget,
+    "active_editor.field.display_options"
+  );
+  return {
+    schema: buildSchema(cardTypeOptions, false, displayOptionsTitle),
+    computeLabel,
+    computeHelper
   };
 };
 export {
+  CityVisitorParkingActiveCardEditor,
   getActiveCardConfigForm
 };
 /*! Bundled license information:
