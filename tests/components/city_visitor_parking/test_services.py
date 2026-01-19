@@ -68,6 +68,7 @@ if TYPE_CHECKING:
 
 EXPECTED_COUNT = 2
 
+
 async def test_service_routing_targets_single_entry(hass: HomeAssistant) -> None:
     """Services should target a single entry via device_id."""
     await async_setup_services(hass)
