@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from collections.abc import Iterable, Mapping
+import time
+from collections.abc import Awaitable, Iterable, Mapping
 from datetime import UTC, datetime, timedelta
-from typing import TYPE_CHECKING, Protocol, cast
+from typing import TYPE_CHECKING, Protocol, TypeVar, cast
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
@@ -59,6 +60,7 @@ from .models import (
 from .time_windows import windows_for_today
 
 _LOGGER = logging.getLogger(__name__)
+_T = TypeVar("_T")
 
 
 class CityVisitorParkingCoordinator(DataUpdateCoordinator[CoordinatorData]):
@@ -97,10 +99,23 @@ class CityVisitorParkingCoordinator(DataUpdateCoordinator[CoordinatorData]):
                 self._entry_title,
                 self._permit_id,
             )
+
+            async def _timed(label: str, coro: Awaitable[_T]) -> _T:
+                started = time.perf_counter()
+                try:
+                    return await coro
+                finally:
+                    _LOGGER.debug(
+                        "Provider %s %s duration: %.3fs",
+                        self._entry_title,
+                        label,
+                        time.perf_counter() - started,
+                    )
+
             permit, reservations, favorites = await asyncio.gather(
-                self._provider.get_permit(),
-                self._provider.list_reservations(),
-                self._provider.list_favorites(),
+                _timed("get_permit", self._provider.get_permit()),
+                _timed("list_reservations", self._provider.list_reservations()),
+                _timed("list_favorites", self._provider.list_favorites()),
             )
             _LOGGER.debug(
                 "Fetched data for %s (permit %s): reservations=%s favorites=%s",

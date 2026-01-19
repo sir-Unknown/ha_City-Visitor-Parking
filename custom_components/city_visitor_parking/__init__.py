@@ -27,7 +27,6 @@ from homeassistant.exceptions import (
 )
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.typing import ConfigType
-from homeassistant.setup import async_when_setup
 from pycityvisitorparking import AuthError, NetworkError
 from pycityvisitorparking.exceptions import PyCityVisitorParkingError
 
@@ -96,8 +95,8 @@ CONFIG_SCHEMA: Final[Callable[[ConfigType], ConfigType]] = _config_entry_only_sc
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     """Set up the City visitor parking integration."""
 
-    async_when_setup(hass, "http", _async_register_frontend)
-    async_when_setup(hass, "lovelace", _async_register_lovelace_resources)
+    await _async_register_frontend(hass, "http")
+    await _async_register_lovelace_resources(hass, "lovelace")
     _LOGGER.debug("Setting up services and websocket API")
     await async_setup_services(hass)
     await async_setup_websocket(hass)
@@ -295,7 +294,7 @@ async def _async_register_frontend(hass: HomeAssistant, _component: str) -> None
         return
 
     dist_path = Path(__file__).parent / "frontend" / "dist"
-    if not dist_path.is_dir():
+    if not await hass.async_add_executor_job(dist_path.is_dir):
         _LOGGER.error("Frontend assets directory is missing: %s", dist_path)
         return
 
@@ -307,7 +306,7 @@ async def _async_register_frontend(hass: HomeAssistant, _component: str) -> None
             cache_headers=False,
         )
     ]
-    if translations_path.is_dir():
+    if await hass.async_add_executor_job(translations_path.is_dir):
         static_paths.append(
             StaticPathConfig(
                 url_path="/city_visitor_parking/translations",
@@ -349,7 +348,7 @@ async def _async_register_lovelace_resources(
         resources_store.loaded = True
 
     dist_path = Path(__file__).parent / "frontend" / "dist"
-    if not dist_path.is_dir():
+    if not await hass.async_add_executor_job(dist_path.is_dir):
         _LOGGER.error("Frontend assets directory is missing: %s", dist_path)
         return
     desired_files: list[str] = [
@@ -359,8 +358,13 @@ async def _async_register_lovelace_resources(
     desired_urls: dict[str, str] = {}
     for filename in desired_files:
         base_url = f"/city_visitor_parking/{filename}"
+        file_path = dist_path / filename
         try:
-            version = int((dist_path / filename).stat().st_mtime)
+            version = int(
+                await hass.async_add_executor_job(
+                    lambda: file_path.stat().st_mtime
+                )
+            )
             desired_urls[base_url] = f"{base_url}?v={version}"
         except FileNotFoundError:
             desired_urls[base_url] = base_url
