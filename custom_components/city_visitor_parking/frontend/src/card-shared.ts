@@ -25,6 +25,19 @@ export type DeviceEntry = {
   config_entries?: string[];
 };
 
+export type PermitEntry = {
+  entry_id: string;
+  title?: string | null;
+};
+
+export type PermitOption = {
+  id: string;
+  primary: string;
+  secondary: string;
+};
+
+export const PERMIT_PLACEHOLDER_VALUE = "__permit_placeholder__";
+
 export type StatusType = "info" | "warning" | "success";
 export type StatusState = {
   message: string;
@@ -76,6 +89,60 @@ export const BASE_CARD_STYLES = css`
     font-size: 0.85rem;
   }
 `;
+
+const splitPermitLabel = (
+  label: string,
+  entryId: string,
+): { primary: string; secondary: string } => {
+  const trimmed = label.trim();
+  if (!trimmed) {
+    return { primary: entryId, secondary: "" };
+  }
+  const parts = trimmed
+    .split(" - ")
+    .map((part) => part.trim())
+    .filter(Boolean);
+  if (parts.length > 1) {
+    return { primary: parts[0], secondary: parts.slice(1).join(" - ") };
+  }
+  if (trimmed !== entryId) {
+    return { primary: trimmed, secondary: entryId };
+  }
+  return { primary: trimmed, secondary: "" };
+};
+
+export const buildPermitOptions = (entries: PermitEntry[]): PermitOption[] =>
+  entries
+    .map((entry) => {
+      const label = entry.title || entry.entry_id;
+      const { primary, secondary } = splitPermitLabel(label, entry.entry_id);
+      return {
+        id: entry.entry_id,
+        primary,
+        secondary,
+      };
+    })
+    .sort(
+      (first, second) =>
+        first.primary.localeCompare(second.primary) ||
+        first.secondary.localeCompare(second.secondary),
+    );
+
+export const buildPermitTitleMap = (
+  entries: PermitEntry[],
+): Map<string, string> =>
+  new Map(
+    entries.map((entry) => [entry.entry_id, entry.title || entry.entry_id]),
+  );
+
+export const fetchPermitEntries = async (
+  hass: HomeAssistant,
+): Promise<PermitEntry[]> =>
+  hass.callWS<PermitEntry[]>({
+    type: "config_entries/get",
+    type_filter: ["device", "hub", "service"],
+    domain: DOMAIN,
+  });
 
 const errorMessage = (
   err: unknown,

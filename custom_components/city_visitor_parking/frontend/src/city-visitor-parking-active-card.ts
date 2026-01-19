@@ -2,12 +2,16 @@ import { LitElement, css, html, nothing, type TemplateResult } from "lit";
 import {
   BASE_CARD_STYLES,
   DOMAIN,
+  PERMIT_PLACEHOLDER_VALUE,
   RESERVATION_STARTED_EVENT,
+  buildPermitOptions,
+  buildPermitTitleMap,
   clearStatusState,
   createErrorMessage,
   createLocalize,
   createRenderScheduler,
   createStatusState,
+  fetchPermitEntries,
   formatOptionalDateTimeLocal,
   getCardText,
   getGlobalHass,
@@ -22,6 +26,7 @@ import {
   showPicker,
   type DeviceEntry,
   type HomeAssistant,
+  type PermitOption,
   type StatusState,
   type StatusType,
 } from "./card-shared";
@@ -118,6 +123,11 @@ import { ensureTranslations } from "./localize";
     _configEntriesPromise: Promise<Map<string, string>> | null;
     _configEntryTitleById: Map<string, string>;
     _permitLabelsByDeviceId: Map<string, string>;
+    _permitOptions: PermitOption[];
+    _permitOptionsLoaded: boolean;
+    _permitOptionsLoading: boolean;
+    _permitOptionsLoadPromise: Promise<void> | null;
+    _selectedEntryId: string | null;
     _statusState: StatusState;
     _reservationStartedHandler: (() => void) | null;
     _requestRender: () => void;
@@ -129,6 +139,7 @@ import { ensureTranslations } from "./localize";
     _onReservationInput: (event: Event) => void;
     _onReservationChange: (event: Event) => void;
     _onPickerClick: (event: Event) => void;
+    _onPermitSelectChange: (event: Event) => void;
 
     constructor() {
       super();
@@ -144,6 +155,11 @@ import { ensureTranslations } from "./localize";
       this._configEntriesPromise = null;
       this._configEntryTitleById = new Map();
       this._permitLabelsByDeviceId = new Map();
+      this._permitOptions = [];
+      this._permitOptionsLoaded = false;
+      this._permitOptionsLoading = false;
+      this._permitOptionsLoadPromise = null;
+      this._selectedEntryId = null;
       this._statusState = createStatusState();
       this._reservationStartedHandler = null;
       this._requestRender = createRenderScheduler(() => this.requestUpdate());
@@ -157,6 +173,8 @@ import { ensureTranslations } from "./localize";
       this._onReservationChange = (event: Event) =>
         this._handleReservationChange(event);
       this._onPickerClick = (event: Event) => this._handlePickerClick(event);
+      this._onPermitSelectChange = (event: Event) =>
+        this._handlePermitSelectChange(event);
     }
 
     connectedCallback(): void {
@@ -202,7 +220,12 @@ import { ensureTranslations } from "./localize";
         );
       }
       this._config = { ...config };
+      if (this._config.config_entry_id) {
+        this._selectedEntryId = null;
+      }
       this._requestRender();
+      this._ensurePermitOptions();
+      this._maybeSelectSinglePermit();
       void this._maybeLoadActiveReservations();
     }
 
@@ -210,6 +233,8 @@ import { ensureTranslations } from "./localize";
       this._hass = hass;
       void ensureTranslations(this._hass).then(() => this.requestUpdate());
       this._requestRender();
+      this._ensurePermitOptions();
+      this._maybeSelectSinglePermit();
       void this._maybeLoadActiveReservations();
     }
 
@@ -227,7 +252,8 @@ import { ensureTranslations } from "./localize";
       if (!isHassRunning(this._hass)) {
         return;
       }
-      const target = this._config.config_entry_id ?? "all";
+      const entryId = this._getActiveEntryId();
+      const target = entryId ?? "all";
       if (
         this._activeReservationsLoading ||
         (!force &&
@@ -242,11 +268,9 @@ import { ensureTranslations } from "./localize";
       this._requestRender();
       try {
         let devices = await this._getDomainDevices();
-        if (this._config.config_entry_id) {
+        if (entryId) {
           devices = devices.filter((device) =>
-            (device.config_entries ?? []).includes(
-              this._config!.config_entry_id!,
-            ),
+            (device.config_entries ?? []).includes(entryId),
           );
         }
         if (!devices.length) {
@@ -336,11 +360,58 @@ import { ensureTranslations } from "./localize";
       const title = this._config.title || "";
       const icon = this._config.icon;
       const controlsDisabled = this._isInEditor();
+      const activeEntryId = this._getActiveEntryId();
+      const showPermitPicker =
+        !this._config.config_entry_id &&
+        !(this._permitOptionsLoaded && this._permitOptions.length === 1);
+      const permitPlaceholderKey = "message.select_permit";
+      const permitPlaceholder = this._localize(permitPlaceholderKey);
+      const permitPlaceholderText =
+        permitPlaceholder === permitPlaceholderKey ? "" : permitPlaceholder;
+      const permitSelectedText = activeEntryId
+        ? this._permitOptions.find((entry) => entry.id === activeEntryId)
+            ?.primary || activeEntryId
+        : permitPlaceholderText;
+      const permitSelectValue = activeEntryId ?? PERMIT_PLACEHOLDER_VALUE;
+      const permitSelectDisabled =
+        controlsDisabled || this._permitOptionsLoading;
 
       return html`
         <ha-card @click=${this._onActionClick}>
           ${renderCardHeader(title, icon, html, nothing)}
           <div class="card-content">
+            ${showPermitPicker
+              ? html`
+                  <div class="row">
+                    <ha-select
+                      id="permitSelect"
+                      .label=${this._localize("field.permit")}
+                      .value=${permitSelectValue}
+                      .selectedText=${permitSelectedText}
+                      ?disabled=${permitSelectDisabled}
+                      @selected=${this._onPermitSelectChange}
+                    >
+                      <mwc-list-item value=${PERMIT_PLACEHOLDER_VALUE}>
+                        ${permitPlaceholderText}
+                      </mwc-list-item>
+                      ${this._permitOptions.map((entry) => {
+                        const secondaryText = entry.secondary;
+                        return html`<mwc-list-item
+                          value=${entry.id}
+                          ?twoline=${Boolean(secondaryText)}
+                        >
+                          <span>${entry.primary}</span>
+                          ${secondaryText
+                            ? html`<span slot="secondary"
+                                >${secondaryText}</span
+                              >`
+                            : nothing}
+                        </mwc-list-item>`;
+                      })}
+                    </ha-select>
+                  </div>
+                `
+              : nothing}
             ${this._renderActiveReservations(controlsDisabled)}
             ${renderStatusAlert(this._statusState, html, nothing)}
           </div>
@@ -526,6 +597,28 @@ import { ensureTranslations } from "./localize";
       void this._handleActiveReservationUpdate(reservationId);
     }
 
+    _handlePermitSelectChange(event: Event): void {
+      if (this._isInEditor()) {
+        return;
+      }
+      const detail = (event as CustomEvent<{ value?: string | null }>).detail;
+      const target = event.currentTarget as ValueElement | null;
+      const value = detail?.value ?? target?.value ?? "";
+      const nextValue = value === PERMIT_PLACEHOLDER_VALUE ? "" : (value ?? "");
+      this._handlePermitChange(nextValue);
+    }
+
+    _handlePermitChange(value: string): void {
+      const nextEntryId = value || null;
+      if (nextEntryId === this._selectedEntryId) {
+        return;
+      }
+      this._selectedEntryId = nextEntryId;
+      this._activeReservationsLoadedFor = null;
+      this._requestRender();
+      void this._maybeLoadActiveReservations(true);
+    }
+
     _handlePickerClick(event: Event): void {
       showPicker(event, this._isInEditor());
     }
@@ -697,6 +790,57 @@ import { ensureTranslations } from "./localize";
       await this._maybeLoadActiveReservations(true);
     }
 
+    _ensurePermitOptions(): void {
+      if (this._config?.config_entry_id || !this._hass) {
+        return;
+      }
+      if (this._permitOptionsLoaded || this._permitOptionsLoadPromise) {
+        return;
+      }
+      void this._loadPermitOptions();
+    }
+
+    _maybeSelectSinglePermit(): void {
+      if (this._config?.config_entry_id) {
+        return;
+      }
+      if (!this._permitOptionsLoaded || this._permitOptions.length !== 1) {
+        return;
+      }
+      if (this._getActiveEntryId()) {
+        return;
+      }
+      this._handlePermitChange(this._permitOptions[0].id);
+    }
+
+    async _loadPermitOptions(): Promise<void> {
+      if (!this._hass || this._config?.config_entry_id) {
+        return;
+      }
+      if (this._permitOptionsLoadPromise) {
+        return this._permitOptionsLoadPromise;
+      }
+      this._permitOptionsLoading = true;
+      this._requestRender();
+      const loadPromise = (async () => {
+        try {
+          const result = await fetchPermitEntries(this._hass!);
+          this._permitOptions = buildPermitOptions(result);
+          this._permitOptionsLoaded = true;
+          this._maybeSelectSinglePermit();
+        } catch {
+          this._permitOptions = [];
+          this._permitOptionsLoaded = false;
+        } finally {
+          this._permitOptionsLoading = false;
+          this._permitOptionsLoadPromise = null;
+          this._requestRender();
+        }
+      })();
+      this._permitOptionsLoadPromise = loadPromise;
+      return loadPromise;
+    }
+
     async _getPermitLabelsByDeviceId(
       devices: DeviceEntry[],
     ): Promise<Map<string, string>> {
@@ -723,19 +867,9 @@ import { ensureTranslations } from "./localize";
       if (this._configEntriesPromise) {
         return this._configEntriesPromise;
       }
-      const promise = this._hass
-        .callWS<Array<{ entry_id: string; title?: string | null }>>({
-          type: "config_entries/get",
-          type_filter: ["device", "hub", "service"],
-          domain: DOMAIN,
-        })
+      const promise = fetchPermitEntries(this._hass)
         .then((entries) => {
-          this._configEntryTitleById = new Map(
-            entries.map((entry) => [
-              entry.entry_id,
-              entry.title || entry.entry_id,
-            ]),
-          );
+          this._configEntryTitleById = buildPermitTitleMap(entries);
           return this._configEntryTitleById;
         })
         .catch(() => {
@@ -770,6 +904,10 @@ import { ensureTranslations } from "./localize";
         });
       this._devicesPromise = devicesPromise;
       return devicesPromise;
+    }
+
+    _getActiveEntryId(): string | null {
+      return this._config?.config_entry_id || this._selectedEntryId;
     }
 
     _isInEditor(): boolean {
