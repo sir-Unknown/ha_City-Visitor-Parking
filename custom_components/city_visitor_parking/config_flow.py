@@ -181,7 +181,9 @@ class CityVisitorParkingConfigFlow(config_entries.ConfigFlow):
             base_url=entry.data.get(CONF_BASE_URL),
             api_url=entry.data.get(CONF_API_URL),
         )
-        self.context["title_placeholders"] = {"name": entry.title}
+        placeholders = {"name": entry.title}
+        self.context["title_placeholders"] = placeholders
+        self.context["description_placeholders"] = placeholders
         return await self.async_step_reauth_confirm()
 
     async def async_step_reconfigure(
@@ -196,7 +198,9 @@ class CityVisitorParkingConfigFlow(config_entries.ConfigFlow):
             return self.async_abort(reason="unknown")
 
         if user_input is None:
-            self.context["title_placeholders"] = {"name": entry.title}
+            placeholders = {"name": entry.title}
+            self.context["title_placeholders"] = placeholders
+            self.context["description_placeholders"] = placeholders
             schema = vol.Schema(
                 {
                     vol.Optional(
