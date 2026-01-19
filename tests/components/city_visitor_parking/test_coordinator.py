@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, time, timedelta
 from types import SimpleNamespace
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 from unittest.mock import AsyncMock
 
 import pytest
@@ -50,10 +50,16 @@ from custom_components.city_visitor_parking.time_windows import (
     windows_for_today,
 )
 
+if TYPE_CHECKING:
+    from types import ModuleType
 
-async def test_auto_end_reservation_once(hass) -> None:
+    from homeassistant.core import HomeAssistant
+
+EXPECTED_MINUTES = 15
+
+
+async def test_auto_end_reservation_once(hass: HomeAssistant) -> None:
     """Auto-end should only happen once per reservation within cooldown."""
-
     entry = _create_entry(auto_end=True)
     entry.add_to_hass(hass)
 
@@ -84,9 +90,10 @@ async def test_auto_end_reservation_once(hass) -> None:
     provider.end_reservation.assert_awaited_once()
 
 
-async def test_auth_failure_triggers_reauth(hass, pv_library) -> None:
+async def test_auth_failure_triggers_reauth(
+    hass: HomeAssistant, pv_library: ModuleType
+) -> None:
     """Auth errors should raise ConfigEntryAuthFailed."""
-
     entry = _create_entry(auto_end=False)
     entry.add_to_hass(hass)
 
@@ -105,9 +112,10 @@ async def test_auth_failure_triggers_reauth(hass, pv_library) -> None:
     assert isinstance(coordinator.last_exception, ConfigEntryAuthFailed)
 
 
-async def test_network_failure_raises_updatefailed(hass, pv_library) -> None:
+async def test_network_failure_raises_updatefailed(
+    hass: HomeAssistant, pv_library: ModuleType
+) -> None:
     """Network failures should raise UpdateFailed."""
-
     entry = _create_entry(auto_end=False)
     entry.add_to_hass(hass)
 
@@ -126,9 +134,8 @@ async def test_network_failure_raises_updatefailed(hass, pv_library) -> None:
     assert isinstance(coordinator.last_exception, UpdateFailed)
 
 
-async def test_unexpected_failure_raises_updatefailed(hass) -> None:
+async def test_unexpected_failure_raises_updatefailed(hass: HomeAssistant) -> None:
     """Unexpected failures should raise UpdateFailed."""
-
     entry = _create_entry(auto_end=False)
     entry.add_to_hass(hass)
 
@@ -148,9 +155,8 @@ async def test_unexpected_failure_raises_updatefailed(hass) -> None:
     assert coordinator._unavailable_logged is True
 
 
-async def test_coordinator_logs_recovery(hass) -> None:
+async def test_coordinator_logs_recovery(hass: HomeAssistant) -> None:
     """Coordinator should log availability recovery."""
-
     entry = _create_entry(auto_end=False)
     entry.add_to_hass(hass)
 
@@ -173,9 +179,10 @@ async def test_coordinator_logs_recovery(hass) -> None:
     assert coordinator._unavailable_logged is False
 
 
-async def test_auto_end_handles_provider_failure(hass, pv_library) -> None:
+async def test_auto_end_handles_provider_failure(
+    hass: HomeAssistant, pv_library: ModuleType
+) -> None:
     """Auto-end should swallow provider failures."""
-
     entry = _create_entry(auto_end=True)
     entry.add_to_hass(hass)
 
@@ -208,8 +215,7 @@ async def test_auto_end_handles_provider_failure(hass, pv_library) -> None:
 
 async def test_provider_protocol_raises() -> None:
     """Provider protocol defaults should raise when called."""
-
-    protocol = cast(Any, ProviderProtocol)
+    protocol = cast("Any", ProviderProtocol)
     with pytest.raises(NotImplementedError):
         await protocol.get_permit(object())
     with pytest.raises(NotImplementedError):
@@ -222,17 +228,25 @@ async def test_provider_protocol_raises() -> None:
 
 def test_normalize_helpers() -> None:
     """Normalization helpers should handle invalid input."""
-
-    assert _normalize_remaining_minutes(cast(Permit, {"remaining_balance": None})) == 0
-    assert _normalize_remaining_minutes(cast(Permit, {"remaining_balance": "bad"})) == 0
-    assert _normalize_remaining_minutes(cast(Permit, {"remaining_balance": "-5"})) == 0
-    assert _normalize_remaining_minutes(cast(Permit, {"remaining_balance": 15})) == 15
-    assert _normalize_remaining_minutes(cast(Permit, {"remaining_balance": []})) == 0
+    assert (
+        _normalize_remaining_minutes(cast("Permit", {"remaining_balance": None})) == 0
+    )
+    assert (
+        _normalize_remaining_minutes(cast("Permit", {"remaining_balance": "bad"})) == 0
+    )
+    assert (
+        _normalize_remaining_minutes(cast("Permit", {"remaining_balance": "-5"})) == 0
+    )
+    assert (
+        _normalize_remaining_minutes(cast("Permit", {"remaining_balance": 15}))
+        == EXPECTED_MINUTES
+    )
+    assert _normalize_remaining_minutes(cast("Permit", {"remaining_balance": []})) == 0
 
     now = datetime(2025, 1, 1, 8, 0, tzinfo=UTC)
     validity = _normalize_zone_validity(
         cast(
-            Permit,
+            "Permit",
             {
                 "zone_validity": [
                     {
@@ -249,7 +263,7 @@ def test_normalize_helpers() -> None:
         )
     )
     assert len(validity) == 1
-    assert _normalize_zone_validity(cast(Permit, {"zone_validity": {}})) == []
+    assert _normalize_zone_validity(cast("Permit", {"zone_validity": {}})) == []
 
     parsed = _as_utc_datetime("2025-01-01T10:00:00+00:00")
     assert parsed.tzinfo is not None
@@ -257,19 +271,19 @@ def test_normalize_helpers() -> None:
     assert parsed_tz.tzinfo is not None
     parsed_naive = _as_utc_datetime("2025-01-01T10:00:00")
     assert parsed_naive.tzinfo is not None
-    parsed_naive_dt = _as_utc_datetime(datetime(2025, 1, 1, 10, 0))
+    parsed_naive_dt = _as_utc_datetime(datetime(2025, 1, 1, 10, 0, tzinfo=UTC))
     assert parsed_naive_dt.tzinfo is not None
     with pytest.raises(ValueError):
         _as_utc_datetime("not-a-date")
     with pytest.raises(ValueError):
         _as_utc_datetime(123)
 
-    reservation = _normalize_reservations([cast(ProviderReservation, {"id": "res1"})])
+    reservation = _normalize_reservations([cast("ProviderReservation", {"id": "res1"})])
     assert reservation == []
     invalid_reservation = _normalize_reservations(
         [
             cast(
-                ProviderReservation,
+                "ProviderReservation",
                 {
                     "id": "res1",
                     "start_time": now.isoformat(),
@@ -280,13 +294,13 @@ def test_normalize_helpers() -> None:
     )
     assert invalid_reservation == []
     favorites = _normalize_favorites(
-        [cast(ProviderFavorite, {"license_plate": "AA1234"})]
+        [cast("ProviderFavorite", {"license_plate": "AA1234"})]
     )
     assert favorites == []
     favorites = _normalize_favorites(
         [
             cast(
-                ProviderFavorite,
+                "ProviderFavorite",
                 {"id": "fav1", "license_plate": "AA1234", "name": "Ada"},
             )
         ]
@@ -298,7 +312,6 @@ def test_normalize_helpers() -> None:
 
 def test_auto_end_cooldown() -> None:
     """Auto-end cooldown should prevent repeated attempts."""
-
     state = AutoEndState()
     now = datetime(2025, 1, 1, 12, 0, tzinfo=UTC)
     assert _should_attempt_auto_end(state, "res1", now) is True
@@ -306,9 +319,8 @@ def test_auto_end_cooldown() -> None:
     assert _should_attempt_auto_end(state, "res1", now) is False
 
 
-async def test_auto_end_skips_when_chargeable(hass) -> None:
+async def test_auto_end_skips_when_chargeable(hass: HomeAssistant) -> None:
     """Auto-end should skip when the zone is chargeable."""
-
     entry = _create_entry(auto_end=True)
     entry.add_to_hass(hass)
 
@@ -345,9 +357,8 @@ async def test_auto_end_skips_when_chargeable(hass) -> None:
     provider.end_reservation.assert_not_called()
 
 
-async def test_auto_end_skips_without_reservations(hass) -> None:
+async def test_auto_end_skips_without_reservations(hass: HomeAssistant) -> None:
     """Auto-end should skip when no active reservations exist."""
-
     entry = _create_entry(auto_end=True)
     entry.add_to_hass(hass)
 
@@ -378,9 +389,8 @@ async def test_auto_end_skips_without_reservations(hass) -> None:
     provider.end_reservation.assert_not_called()
 
 
-async def test_options_fallback_when_missing_entry(hass) -> None:
+async def test_options_fallback_when_missing_entry(hass: HomeAssistant) -> None:
     """Options should default to empty when config entry is missing."""
-
     entry = _create_entry(auto_end=False)
     entry.add_to_hass(hass)
 
@@ -396,9 +406,8 @@ async def test_options_fallback_when_missing_entry(hass) -> None:
     assert coordinator._options() == {}
 
 
-async def test_log_unavailable_once(hass) -> None:
+async def test_log_unavailable_once(hass: HomeAssistant) -> None:
     """Log unavailable should only set flag once."""
-
     entry = _create_entry(auto_end=False)
     entry.add_to_hass(hass)
 
@@ -417,7 +426,6 @@ async def test_log_unavailable_once(hass) -> None:
 
 def test_windows_for_today_with_overrides() -> None:
     """Overrides should override validity windows."""
-
     now = datetime(2025, 1, 6, 9, 0, tzinfo=UTC)
     overrides = {"mon": [{"start": "10:00", "end": "12:00"}]}
     windows = windows_for_today([], {CONF_OPERATING_TIME_OVERRIDES: overrides}, now)
@@ -428,7 +436,6 @@ def test_windows_for_today_with_overrides() -> None:
 
 def test_windows_for_today_fallback() -> None:
     """Fallback windows should filter by day."""
-
     now = datetime(2025, 1, 6, 9, 0, tzinfo=UTC)
     window = TimeRange(
         start=datetime(2025, 1, 6, 0, 0, tzinfo=UTC),
@@ -447,7 +454,6 @@ def test_windows_for_today_fallback() -> None:
 
 def test_override_helpers() -> None:
     """Override helpers should normalize values."""
-
     assert _as_time("08:00") is not None
     assert _as_time(time(9, 0)) == time(9, 0)
     assert _as_time(123) is None
@@ -457,7 +463,6 @@ def test_override_helpers() -> None:
 
 def test_compute_zone_availability_next_change() -> None:
     """Zone availability should return the end of the current window."""
-
     now = datetime(2025, 1, 6, 9, 30, tzinfo=UTC)
     window = TimeRange(
         start=datetime(2025, 1, 6, 9, 0, tzinfo=UTC),
@@ -471,7 +476,6 @@ def test_compute_zone_availability_next_change() -> None:
 
 def test_windows_for_today_invalid_overrides() -> None:
     """Invalid overrides should fall back to zone validity."""
-
     now = datetime(2025, 1, 6, 9, 0, tzinfo=UTC)
     local_now = dt_util.as_local(now)
     local_start = datetime.combine(local_now.date(), time.min, tzinfo=local_now.tzinfo)
@@ -490,9 +494,8 @@ def test_windows_for_today_invalid_overrides() -> None:
     assert windows
 
 
-def _create_entry(auto_end: bool):
+def _create_entry(auto_end: bool) -> MockConfigEntry:
     """Create a mock entry with options."""
-
     return MockConfigEntry(
         domain=DOMAIN,
         data={"permit_id": "permit"},

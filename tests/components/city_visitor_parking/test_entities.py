@@ -2,14 +2,12 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
 from datetime import UTC, datetime, time, timedelta
 from types import SimpleNamespace
-from typing import cast
+from typing import TYPE_CHECKING, cast
 from unittest.mock import AsyncMock, MagicMock
 
 from freezegun import freeze_time
-from homeassistant.helpers import entity_registry as er
 from homeassistant.util import dt as dt_util
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
@@ -46,10 +44,18 @@ from custom_components.city_visitor_parking.sensor import (
 )
 from custom_components.city_visitor_parking.time_windows import current_or_next_window
 
+if TYPE_CHECKING:
+    from collections.abc import Mapping
+
+    from homeassistant.helpers import entity_registry as er
+    from pytest import MonkeyPatch
+
+EXPECTED_REMAINING_HOURS = 2.0
+EXPECTED_REMAINING_MINUTES = 90
+
 
 async def test_entity_unique_id_and_device_info() -> None:
     """Entities should derive unique IDs from entry unique IDs."""
-
     coordinator = _make_coordinator(_sample_data())
     entry_one = _create_entry("provider:permit1:city")
     entry_two = _create_entry("provider:permit2:city")
@@ -69,7 +75,6 @@ async def test_entity_unique_id_and_device_info() -> None:
 
 async def test_zone_availability_uses_overrides() -> None:
     """Zone availability should reflect overrides for the current day."""
-
     now = datetime(2025, 1, 6, 9, 30, tzinfo=UTC)
     zone_validity = [
         TimeRange(
@@ -135,7 +140,6 @@ async def test_zone_availability_uses_overrides() -> None:
 
 async def test_next_chargeable_window_uses_overrides() -> None:
     """Next chargeable window should use overrides when configured."""
-
     now = datetime(2025, 1, 6, 9, 30, tzinfo=UTC)
     zone_validity = [
         TimeRange(
@@ -187,14 +191,13 @@ async def test_next_chargeable_window_uses_overrides() -> None:
 
 async def test_entity_async_update_respects_registry() -> None:
     """Entity updates should respect registry disabled state."""
-
     coordinator = MagicMock()
     coordinator.async_add_listener.return_value = lambda: None
     coordinator.async_request_refresh = AsyncMock()
     entry = _create_entry("provider:permit1:city")
 
     entity = CityVisitorParkingEntity(coordinator, entry, "base")
-    entity.registry_entry = cast(er.RegistryEntry, SimpleNamespace(disabled=True))
+    entity.registry_entry = cast("er.RegistryEntry", SimpleNamespace(disabled=True))
     await entity.async_update()
 
     coordinator.async_request_refresh.assert_not_called()
@@ -205,9 +208,10 @@ async def test_entity_async_update_respects_registry() -> None:
     coordinator.async_request_refresh.assert_awaited_once()
 
 
-async def test_sensors_handle_coordinator_update(monkeypatch) -> None:
+async def test_sensors_handle_coordinator_update(
+    monkeypatch: MonkeyPatch,
+) -> None:
     """Sensors should refresh values when coordinator updates."""
-
     now = datetime(2025, 1, 6, 9, 0, tzinfo=UTC)
     zone_window = TimeRange(
         start=now - timedelta(hours=1),
@@ -269,7 +273,7 @@ async def test_sensors_handle_coordinator_update(monkeypatch) -> None:
 
     assert active_sensor.native_value == 1
     assert future_sensor.native_value == 1
-    assert remaining_sensor.native_value == 2.0
+    assert remaining_sensor.native_value == EXPECTED_REMAINING_HOURS
     assert availability_sensor.native_value == STATE_CHARGEABLE
     assert provider_start.native_value == zone_window.start
     assert provider_end.native_value == zone_window.end
@@ -280,7 +284,6 @@ async def test_sensors_handle_coordinator_update(monkeypatch) -> None:
 
 def _sample_data(zone_availability: ZoneAvailability | None = None) -> CoordinatorData:
     """Create coordinator data for tests."""
-
     availability = zone_availability or ZoneAvailability(
         is_chargeable_now=True,
         next_change_time=None,
@@ -303,9 +306,8 @@ def _sample_data(zone_availability: ZoneAvailability | None = None) -> Coordinat
     )
 
 
-def _make_coordinator(data: CoordinatorData):
+def _make_coordinator(data: CoordinatorData) -> MagicMock:
     """Return a minimal coordinator mock."""
-
     coordinator = MagicMock()
     coordinator.data = data
     coordinator.async_add_listener.return_value = lambda: None
@@ -316,7 +318,6 @@ def _create_entry(
     unique_id: str, options: Mapping[str, object] | None = None
 ) -> MockConfigEntry:
     """Create a mock entry for entity tests."""
-
     return MockConfigEntry(
         domain=DOMAIN,
         data={},
@@ -328,7 +329,6 @@ def _create_entry(
 
 def test_sensor_helpers() -> None:
     """Sensor helper functions should normalize values."""
-
     data = _sample_data()
     data_no_active = CoordinatorData(
         permit_id=data.permit_id,
@@ -359,7 +359,7 @@ def test_sensor_helpers() -> None:
             ),
         ],
     )
-    assert _remaining_balance_minutes(data) == 90
+    assert _remaining_balance_minutes(data) == EXPECTED_REMAINING_MINUTES
     assert _next_end_time(data_no_active) is None
     assert _next_end_time(data_with_active) == datetime(2025, 1, 1, 7, 30, tzinfo=UTC)
     assert _as_utc_iso(None) == ""

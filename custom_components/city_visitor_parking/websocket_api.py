@@ -4,26 +4,28 @@ from __future__ import annotations
 
 import logging
 import time
-from collections.abc import Iterable
-from datetime import datetime
 from typing import TYPE_CHECKING, Final, cast
 
 import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.components import websocket_api
 from homeassistant.const import ATTR_CONFIG_ENTRY_ID
-from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
 from pycityvisitorparking.exceptions import PyCityVisitorParkingError
 
 if TYPE_CHECKING:
+    from collections.abc import Iterable
+    from datetime import datetime
+
+    from homeassistant.core import HomeAssistant
     from pycityvisitorparking import Favorite as ProviderFavorite
+
+    from .runtime_data import CityVisitorParkingRuntimeData
 else:
     ProviderFavorite = object
 
 from .const import DOMAIN, STATE_CHARGEABLE, STATE_FREE
 from .helpers import get_attr
-from .runtime_data import CityVisitorParkingRuntimeData
 from .time_windows import current_or_next_window_with_overrides
 
 WEBSOCKET_LIST_FAVORITES: Final[str] = "city_visitor_parking/favorites"
@@ -34,7 +36,6 @@ _LOGGER = logging.getLogger(__name__)
 
 async def async_setup_websocket(hass: HomeAssistant) -> None:
     """Set up WebSocket commands."""
-
     websocket_api.async_register_command(hass, _ws_list_favorites)
     websocket_api.async_register_command(hass, _ws_get_status)
 
@@ -52,10 +53,9 @@ async def _ws_list_favorites(
     msg: dict[str, object],
 ) -> None:
     """Return favorites for a single config entry."""
-
     request_started = time.perf_counter()
-    entry_id = cast(str, msg[ATTR_CONFIG_ENTRY_ID])
-    msg_id = cast(int, msg["id"])
+    entry_id = cast("str", msg[ATTR_CONFIG_ENTRY_ID])
+    msg_id = cast("int", msg["id"])
     entry = hass.config_entries.async_get_entry(entry_id)
     if (
         entry is None
@@ -96,10 +96,9 @@ async def _ws_get_status(
     msg: dict[str, object],
 ) -> None:
     """Return status and window details for a single config entry."""
-
     request_started = time.perf_counter()
-    entry_id = cast(str, msg[ATTR_CONFIG_ENTRY_ID])
-    msg_id = cast(int, msg["id"])
+    entry_id = cast("str", msg[ATTR_CONFIG_ENTRY_ID])
+    msg_id = cast("int", msg["id"])
     entry = hass.config_entries.async_get_entry(entry_id)
     if (
         entry is None
@@ -163,7 +162,6 @@ def _normalize_favorites(
     favorites: Iterable[ProviderFavorite],
 ) -> list[dict[str, str]]:
     """Normalize favorites to a JSON-serializable structure."""
-
     normalized: list[dict[str, str]] = []
     for favorite in favorites or []:
         favorite_id = get_attr(favorite, "id")
@@ -186,7 +184,6 @@ def _normalize_favorites(
 
 def _as_utc_iso(value: datetime | None) -> str | None:
     """Return a UTC ISO8601 timestamp string."""
-
     if value is None:
         return None
     return dt_util.as_utc(value).isoformat()

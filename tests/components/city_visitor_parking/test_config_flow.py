@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import time
 from types import SimpleNamespace
+from typing import TYPE_CHECKING, Protocol
 from unittest.mock import AsyncMock
 
 import voluptuous as vol
@@ -34,12 +35,17 @@ from custom_components.city_visitor_parking.helpers import (
 )
 from custom_components.city_visitor_parking.models import ProviderConfig
 
+if TYPE_CHECKING:
+    from types import ModuleType
+
+    from homeassistant.core import HomeAssistant
+    from pytest import MonkeyPatch
+
 KNOWN_MUNICIPALITY = "apeldoorn"
 
 
-async def test_municipality_dropdown_includes_other(hass) -> None:
+async def test_municipality_dropdown_includes_other(hass: HomeAssistant) -> None:
     """Ensure the municipality list includes "Other"."""
-
     result = await hass.config_entries.flow.async_init(
         DOMAIN, context={"source": "user"}
     )
@@ -53,9 +59,8 @@ async def test_municipality_dropdown_includes_other(hass) -> None:
     assert OTHER_OPTION in values
 
 
-async def test_known_municipality_skips_manual_step(hass) -> None:
+async def test_known_municipality_skips_manual_step(hass: HomeAssistant) -> None:
     """Known municipalities should jump to auth."""
-
     result = await hass.config_entries.flow.async_init(
         DOMAIN, context={"source": "user"}
     )
@@ -67,9 +72,8 @@ async def test_known_municipality_skips_manual_step(hass) -> None:
     assert result["step_id"] == "auth"
 
 
-async def test_other_municipality_requires_manual_fields(hass) -> None:
+async def test_other_municipality_requires_manual_fields(hass: HomeAssistant) -> None:
     """Other municipality must show manual provider fields."""
-
     result = await hass.config_entries.flow.async_init(
         DOMAIN, context={"source": "user"}
     )
@@ -83,10 +87,9 @@ async def test_other_municipality_requires_manual_fields(hass) -> None:
 
 
 async def test_other_municipality_list_providers_network_error(
-    hass, monkeypatch, pv_library
+    hass: HomeAssistant, monkeypatch: MonkeyPatch, pv_library: ModuleType
 ) -> None:
     """Provider list errors should surface in the form."""
-
     monkeypatch.setattr(
         "custom_components.city_visitor_parking.config_flow._async_list_providers",
         AsyncMock(side_effect=pv_library.NetworkError),
@@ -104,10 +107,9 @@ async def test_other_municipality_list_providers_network_error(
 
 
 async def test_other_municipality_list_providers_unknown_error(
-    hass, monkeypatch
+    hass: HomeAssistant, monkeypatch: MonkeyPatch
 ) -> None:
     """Unexpected provider list errors should map to unknown."""
-
     monkeypatch.setattr(
         "custom_components.city_visitor_parking.config_flow._async_list_providers",
         AsyncMock(side_effect=RuntimeError),
@@ -124,9 +126,10 @@ async def test_other_municipality_list_providers_unknown_error(
     assert result["errors"]["base"] == "unknown"
 
 
-async def test_other_municipality_manual_provider_flow(hass, monkeypatch) -> None:
+async def test_other_municipality_manual_provider_flow(
+    hass: HomeAssistant, monkeypatch: MonkeyPatch
+) -> None:
     """Manual provider step should proceed to auth."""
-
     monkeypatch.setattr(
         "custom_components.city_visitor_parking.config_flow._async_list_providers",
         AsyncMock(return_value=["manual"]),
@@ -152,9 +155,10 @@ async def test_other_municipality_manual_provider_flow(hass, monkeypatch) -> Non
     assert result["step_id"] == "auth"
 
 
-async def test_config_flow_success(hass, monkeypatch) -> None:
+async def test_config_flow_success(
+    hass: HomeAssistant, monkeypatch: MonkeyPatch
+) -> None:
     """Successful flow creates the entry with a permit title."""
-
     provider = AsyncMock()
     provider.get_permit.return_value = {"id": "PERMIT1", "name": "Permit One"}
     client = AsyncMock()
@@ -179,9 +183,10 @@ async def test_config_flow_success(hass, monkeypatch) -> None:
     assert result["data"][CONF_PERMIT_ID] == "PERMIT1"
 
 
-async def test_config_flow_invalid_auth(hass, monkeypatch, pv_library) -> None:
+async def test_config_flow_invalid_auth(
+    hass: HomeAssistant, monkeypatch: MonkeyPatch, pv_library: ModuleType
+) -> None:
     """Invalid credentials should be reported."""
-
     provider = AsyncMock()
     provider.login.side_effect = pv_library.AuthError
     client = AsyncMock()
@@ -205,9 +210,10 @@ async def test_config_flow_invalid_auth(hass, monkeypatch, pv_library) -> None:
     assert result["errors"]["base"] == "invalid_auth"
 
 
-async def test_config_flow_cannot_connect(hass, monkeypatch, pv_library) -> None:
+async def test_config_flow_cannot_connect(
+    hass: HomeAssistant, monkeypatch: MonkeyPatch, pv_library: ModuleType
+) -> None:
     """Network issues should map to cannot_connect."""
-
     provider = AsyncMock()
     provider.login.side_effect = pv_library.NetworkError
     client = AsyncMock()
@@ -231,9 +237,10 @@ async def test_config_flow_cannot_connect(hass, monkeypatch, pv_library) -> None
     assert result["errors"]["base"] == "cannot_connect"
 
 
-async def test_config_flow_unknown_error(hass, monkeypatch, pv_library) -> None:
+async def test_config_flow_unknown_error(
+    hass: HomeAssistant, monkeypatch: MonkeyPatch, pv_library: ModuleType
+) -> None:
     """Unknown errors should map to unknown."""
-
     provider = AsyncMock()
     provider.login.side_effect = pv_library.ProviderError
     client = AsyncMock()
@@ -257,9 +264,10 @@ async def test_config_flow_unknown_error(hass, monkeypatch, pv_library) -> None:
     assert result["errors"]["base"] == "unknown"
 
 
-async def test_reauth_flow_success(hass, monkeypatch) -> None:
+async def test_reauth_flow_success(
+    hass: HomeAssistant, monkeypatch: MonkeyPatch
+) -> None:
     """Reauthentication should update credentials."""
-
     provider = AsyncMock()
     provider.get_permit.return_value = {"id": "PERMIT1", "name": "Permit One"}
     client = AsyncMock()
@@ -285,9 +293,8 @@ async def test_reauth_flow_success(hass, monkeypatch) -> None:
     assert result["reason"] == "reauth_successful"
 
 
-async def test_reconfigure_flow_success(hass) -> None:
+async def test_reconfigure_flow_success(hass: HomeAssistant) -> None:
     """Reconfigure flow should update endpoint overrides."""
-
     entry = _create_entry()
     entry.add_to_hass(hass)
 
@@ -310,9 +317,10 @@ async def test_reconfigure_flow_success(hass) -> None:
     assert entry.data[CONF_API_URL] == "/api"
 
 
-async def test_reconfigure_flow_missing_data_aborts(hass) -> None:
+async def test_reconfigure_flow_missing_data_aborts(
+    hass: HomeAssistant,
+) -> None:
     """Reconfigure should abort when entry data is missing."""
-
     entry = MockConfigEntry(domain=DOMAIN, data={})
     entry.add_to_hass(hass)
 
@@ -331,9 +339,8 @@ async def test_reconfigure_flow_missing_data_aborts(hass) -> None:
     assert result["reason"] == "unknown"
 
 
-async def test_reconfigure_missing_entry_aborts(hass) -> None:
+async def test_reconfigure_missing_entry_aborts(hass: HomeAssistant) -> None:
     """Reconfigure should abort when the entry is missing."""
-
     result = await hass.config_entries.flow.async_init(
         DOMAIN,
         context={"source": "reconfigure", "entry_id": "missing"},
@@ -342,9 +349,8 @@ async def test_reconfigure_missing_entry_aborts(hass) -> None:
     assert result["reason"] == "unknown"
 
 
-async def test_reconfigure_missing_entry_id_aborts(hass) -> None:
+async def test_reconfigure_missing_entry_id_aborts(hass: HomeAssistant) -> None:
     """Reconfigure should abort when entry ID is missing from context."""
-
     flow = CityVisitorParkingConfigFlow()
     flow.hass = hass
     flow.context = {"source": "reconfigure"}
@@ -354,9 +360,10 @@ async def test_reconfigure_missing_entry_id_aborts(hass) -> None:
     assert result["reason"] == "unknown"
 
 
-async def test_reauth_flow_invalid_auth(hass, monkeypatch, pv_library) -> None:
+async def test_reauth_flow_invalid_auth(
+    hass: HomeAssistant, monkeypatch: MonkeyPatch, pv_library: ModuleType
+) -> None:
     """Reauth should surface invalid credentials."""
-
     provider = AsyncMock()
     provider.login.side_effect = pv_library.AuthError
     client = AsyncMock()
@@ -380,9 +387,8 @@ async def test_reauth_flow_invalid_auth(hass, monkeypatch, pv_library) -> None:
     assert result["errors"]["base"] == "invalid_auth"
 
 
-async def test_reauth_missing_entry_aborts(hass) -> None:
+async def test_reauth_missing_entry_aborts(hass: HomeAssistant) -> None:
     """Reauth should abort when the entry is missing."""
-
     result = await hass.config_entries.flow.async_init(
         DOMAIN,
         context={"source": "reauth", "entry_id": "missing"},
@@ -391,9 +397,8 @@ async def test_reauth_missing_entry_aborts(hass) -> None:
     assert result["reason"] == "unknown"
 
 
-async def test_reauth_missing_entry_id_aborts(hass) -> None:
+async def test_reauth_missing_entry_id_aborts(hass: HomeAssistant) -> None:
     """Reauth should abort when entry ID is missing from context."""
-
     flow = CityVisitorParkingConfigFlow()
     flow.hass = hass
     flow.context = {"source": "reauth"}
@@ -403,9 +408,8 @@ async def test_reauth_missing_entry_id_aborts(hass) -> None:
     assert result["reason"] == "unknown"
 
 
-async def test_validate_credentials_requires_provider(hass) -> None:
+async def test_validate_credentials_requires_provider(hass: HomeAssistant) -> None:
     """Credential validation should require provider config."""
-
     flow = CityVisitorParkingConfigFlow()
     flow.hass = hass
     errors: dict[str, str] = {}
@@ -416,9 +420,10 @@ async def test_validate_credentials_requires_provider(hass) -> None:
     assert errors["base"] == "unknown"
 
 
-async def test_validate_credentials_unexpected_error(hass, monkeypatch) -> None:
+async def test_validate_credentials_unexpected_error(
+    hass: HomeAssistant, monkeypatch: MonkeyPatch
+) -> None:
     """Unexpected errors during validation should map to unknown."""
-
     flow = CityVisitorParkingConfigFlow()
     flow.hass = hass
     flow._provider_config = ProviderConfig(
@@ -440,9 +445,10 @@ async def test_validate_credentials_unexpected_error(hass, monkeypatch) -> None:
     assert errors["base"] == "unknown"
 
 
-async def test_validate_credentials_no_permits(hass, monkeypatch) -> None:
+async def test_validate_credentials_no_permits(
+    hass: HomeAssistant, monkeypatch: MonkeyPatch
+) -> None:
     """Credential validation should report when no permits are returned."""
-
     flow = CityVisitorParkingConfigFlow()
     flow.hass = hass
     flow._provider_config = ProviderConfig(
@@ -470,7 +476,6 @@ async def test_validate_credentials_no_permits(hass, monkeypatch) -> None:
 
 def test_override_helper_parsing() -> None:
     """Helper parsing should validate overrides."""
-
     errors: dict[str, str] = {}
     assert _parse_time_windows(None, errors) == []
     assert _parse_time_windows(123, errors) == []
@@ -500,15 +505,27 @@ def test_override_helper_parsing() -> None:
     assert errors["base"] == "invalid_override_format"
 
 
-def _extract_option_values(selector) -> list[str]:
-    """Return option values from a selector field."""
+class _SelectorConfig(Protocol):
+    """Protocol for selector config objects."""
 
+    config: dict[str, object]
+
+
+def _extract_option_values(selector: dict[str, object] | _SelectorConfig) -> list[str]:
+    """Return option values from a selector field."""
     if isinstance(selector, dict):
-        selector = selector.get("selector", selector)
-        if "select" in selector:
-            options = selector["select"]["options"]
+        selector_dict = selector
+        nested = selector_dict.get("selector")
+        if isinstance(nested, dict):
+            selector_dict = nested
+        if "select" in selector_dict:
+            select_section = selector_dict.get("select")
+            if isinstance(select_section, dict):
+                options = select_section.get("options", [])
+            else:
+                options = []
         else:
-            options = selector.get("options", [])
+            options = selector_dict.get("options", [])
     else:
         options = selector.config["options"]
 
@@ -524,9 +541,8 @@ def _extract_option_values(selector) -> list[str]:
     return values
 
 
-def _create_entry():
+def _create_entry() -> MockConfigEntry:
     """Create a mock entry for reauth tests."""
-
     return MockConfigEntry(
         domain=DOMAIN,
         data={

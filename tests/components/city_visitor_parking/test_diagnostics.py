@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
-from typing import cast
+from typing import TYPE_CHECKING, cast
 from unittest.mock import AsyncMock
 
 from homeassistant.components.diagnostics import REDACTED
@@ -16,9 +16,6 @@ from custom_components.city_visitor_parking.const import (
     CONF_OPERATING_TIME_OVERRIDES,
     CONF_PROVIDER_ID,
     DOMAIN,
-)
-from custom_components.city_visitor_parking.coordinator import (
-    CityVisitorParkingCoordinator,
 )
 from custom_components.city_visitor_parking.diagnostics import (
     async_get_config_entry_diagnostics,
@@ -36,10 +33,18 @@ from custom_components.city_visitor_parking.runtime_data import (
     CityVisitorParkingRuntimeData,
 )
 
+if TYPE_CHECKING:
+    from homeassistant.core import HomeAssistant
 
-async def test_diagnostics_redacts_sensitive_data(hass) -> None:
+    from custom_components.city_visitor_parking.coordinator import (
+        CityVisitorParkingCoordinator,
+    )
+else:
+    CityVisitorParkingCoordinator = object
+
+
+async def test_diagnostics_redacts_sensitive_data(hass: HomeAssistant) -> None:
     """Diagnostics should redact credentials and summarize runtime data."""
-
     entry = MockConfigEntry(
         domain=DOMAIN,
         data={
@@ -89,7 +94,7 @@ async def test_diagnostics_redacts_sensitive_data(hass) -> None:
         last_update_success=True,
         last_update_success_time=datetime(2025, 1, 1, 9, 0, tzinfo=UTC),
     )
-    coordinator_typed = cast(CityVisitorParkingCoordinator, coordinator)
+    coordinator_typed = cast("CityVisitorParkingCoordinator", coordinator)
     entry.runtime_data = CityVisitorParkingRuntimeData(
         client=AsyncMock(),
         provider=AsyncMock(),
@@ -107,8 +112,8 @@ async def test_diagnostics_redacts_sensitive_data(hass) -> None:
 
     diagnostics = await async_get_config_entry_diagnostics(hass, entry)
 
-    entry_data = cast(dict[str, object], diagnostics["entry_data"])
-    runtime = cast(dict[str, object], diagnostics["runtime"])
+    entry_data = cast("dict[str, object]", diagnostics["entry_data"])
+    runtime = cast("dict[str, object]", diagnostics["runtime"])
     assert entry_data[CONF_USERNAME] == REDACTED
     assert entry_data[CONF_PASSWORD] == REDACTED
     assert runtime["permit_id"] == "permit"

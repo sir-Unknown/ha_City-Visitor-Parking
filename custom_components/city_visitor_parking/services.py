@@ -4,20 +4,18 @@ from __future__ import annotations
 
 import logging
 import time
-from collections.abc import Mapping
 from datetime import datetime, timedelta
-from typing import Final, NoReturn, Protocol, cast
+from typing import TYPE_CHECKING, Final, NoReturn, Protocol, cast
 
 import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.const import ATTR_DEVICE_ID
-from homeassistant.core import HomeAssistant, ServiceCall, SupportsResponse
+from homeassistant.core import SupportsResponse
 from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import selector
 from homeassistant.util import dt as dt_util
-from homeassistant.util.json import JsonValueType
 from pycityvisitorparking import ProviderError
 from pycityvisitorparking.exceptions import (
     AuthError,
@@ -37,8 +35,15 @@ from .const import (
     DOMAIN,
 )
 from .helpers import get_attr
-from .models import Favorite, Reservation
-from .runtime_data import CityVisitorParkingRuntimeData
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping
+
+    from homeassistant.core import HomeAssistant, ServiceCall
+    from homeassistant.util.json import JsonValueType
+
+    from .models import Favorite, Reservation
+    from .runtime_data import CityVisitorParkingRuntimeData
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -62,7 +67,7 @@ class _SelectorModule(Protocol):
         raise NotImplementedError
 
 
-SELECTOR = cast(_SelectorModule, selector).selector
+SELECTOR = cast("_SelectorModule", selector).selector
 DEVICE_SELECTOR: Final[selector.Selector[Mapping[str, object]]] = SELECTOR(
     {"device": {"integration": DOMAIN}}
 )
@@ -214,7 +219,6 @@ SERVICE_LIST_FAVORITES_SCHEMA: Final[vol.Schema] = vol.Schema(
 
 async def async_setup_services(hass: HomeAssistant) -> None:
     """Set up the services for the integration."""
-
     hass.services.async_register(
         DOMAIN,
         SERVICE_START_RESERVATION,
@@ -269,11 +273,10 @@ async def async_setup_services(hass: HomeAssistant) -> None:
 
 async def _async_handle_start_reservation(call: ServiceCall) -> None:
     """Handle reservation start service."""
-
     runtime = _runtime_from_call(call)
-    start = _as_utc(cast(datetime, call.data[ATTR_START_TIME]))
-    end = _as_utc(cast(datetime, call.data[ATTR_END_TIME]))
-    license_plate = cast(str, call.data[ATTR_LICENSE_PLATE])
+    start = _as_utc(cast("datetime", call.data[ATTR_START_TIME]))
+    end = _as_utc(cast("datetime", call.data[ATTR_END_TIME]))
+    license_plate = cast("str", call.data[ATTR_LICENSE_PLATE])
     now = dt_util.utcnow()
     min_start = now + timedelta(minutes=1)
     if start < min_start:
@@ -316,7 +319,6 @@ async def _async_handle_start_reservation(call: ServiceCall) -> None:
 
 async def _async_handle_update_reservation(call: ServiceCall) -> None:
     """Handle reservation update service."""
-
     runtime = _runtime_from_call(call)
     start_raw = call.data.get(ATTR_START_TIME)
     end_raw = call.data.get(ATTR_END_TIME)
@@ -400,7 +402,6 @@ async def _async_handle_update_reservation(call: ServiceCall) -> None:
 
 async def _async_handle_end_reservation(call: ServiceCall) -> None:
     """Handle reservation end service."""
-
     runtime = _runtime_from_call(call)
     reservation_id: str = call.data[ATTR_RESERVATION_ID]
     try:
@@ -420,7 +421,6 @@ async def _async_handle_end_reservation(call: ServiceCall) -> None:
 
 async def _async_handle_add_favorite(call: ServiceCall) -> None:
     """Handle add favorite service."""
-
     runtime = _runtime_from_call(call)
     name_raw = call.data.get(ATTR_NAME)
     name = name_raw if isinstance(name_raw, str) else None
@@ -442,7 +442,6 @@ async def _async_handle_add_favorite(call: ServiceCall) -> None:
 
 async def _async_handle_update_favorite(call: ServiceCall) -> None:
     """Handle update favorite service."""
-
     runtime = _runtime_from_call(call)
     license_plate_raw = call.data.get(ATTR_LICENSE_PLATE)
     name_raw = call.data.get(ATTR_NAME)
@@ -479,7 +478,6 @@ async def _async_handle_update_favorite(call: ServiceCall) -> None:
 
 async def _async_handle_remove_favorite(call: ServiceCall) -> None:
     """Handle remove favorite service."""
-
     runtime = _runtime_from_call(call)
     try:
         _LOGGER.debug("Removing favorite for device %s", call.data[ATTR_DEVICE_ID])
@@ -495,7 +493,6 @@ async def _async_handle_list_active_reservations(
     call: ServiceCall,
 ) -> dict[str, JsonValueType]:
     """Handle list active reservations service."""
-
     runtime = _runtime_from_call(call)
     request_started = time.perf_counter()
     reservation_update_fields = _reservation_update_fields(runtime)
@@ -580,7 +577,6 @@ async def _async_handle_list_active_reservations(
 
 async def _async_handle_list_favorites(call: ServiceCall) -> dict[str, JsonValueType]:
     """Handle list favorites service."""
-
     runtime = _runtime_from_call(call)
     try:
         favorites = await runtime.provider.list_favorites()
@@ -622,7 +618,6 @@ async def _fallback_update_reservation(
     license_plate: str | None,
 ) -> None:
     """Fallback update by canceling and recreating the reservation."""
-
     if start_time is None or end_time is None or license_plate is None:
         raise ServiceValidationError(
             translation_domain=DOMAIN,
@@ -667,7 +662,6 @@ async def _fallback_update_favorite(
     name: str | None,
 ) -> None:
     """Fallback update for favorites by remove and add."""
-
     if license_plate is None:
         raise ServiceValidationError(
             translation_domain=DOMAIN,
@@ -706,7 +700,6 @@ async def _fallback_update_favorite(
 
 def _runtime_from_call(call: ServiceCall) -> CityVisitorParkingRuntimeData:
     """Resolve runtime data from a service call."""
-
     hass: HomeAssistant = call.hass
     device_registry = dr.async_get(hass)
     device = device_registry.async_get(call.data[ATTR_DEVICE_ID])
@@ -732,7 +725,6 @@ def _runtime_from_call(call: ServiceCall) -> CityVisitorParkingRuntimeData:
 
 def _raise_invalid_target() -> NoReturn:
     """Raise when a service call targets an invalid entry."""
-
     raise ServiceValidationError(
         translation_domain=DOMAIN,
         translation_key="invalid_target",
@@ -741,13 +733,11 @@ def _raise_invalid_target() -> NoReturn:
 
 def _as_utc(value: datetime) -> datetime:
     """Normalize a datetime to UTC."""
-
     return dt_util.as_utc(value) if value.tzinfo else value.replace(tzinfo=dt_util.UTC)
 
 
 def _format_timestamp(value: datetime) -> str:
     """Format a datetime as an ISO 8601 UTC timestamp."""
-
     return (
         dt_util.as_utc(value).replace(microsecond=0).isoformat().replace("+00:00", "Z")
     )
@@ -755,14 +745,12 @@ def _format_timestamp(value: datetime) -> str:
 
 def _is_not_supported(err: ProviderError) -> bool:
     """Return True when the provider reports an unsupported operation."""
-
     message = str(err).lower()
     return "not supported" in message or "unsupported" in message
 
 
 def _normalize_plate(value: str | None) -> str:
     """Normalize a license plate for matching."""
-
     if not value:
         return ""
     return "".join(ch for ch in value.strip().upper() if ch.isalnum())
@@ -772,7 +760,6 @@ def _reservation_payload(
     reservation: Reservation, favorite_by_plate: dict[str, Favorite]
 ) -> dict[str, JsonValueType]:
     """Build reservation response payload with favorite metadata."""
-
     payload: dict[str, JsonValueType] = {
         ATTR_RESERVATION_ID: reservation.reservation_id,
         ATTR_START_TIME: _format_timestamp(reservation.start_time),
@@ -795,7 +782,6 @@ def _reservation_update_fields(
     runtime: CityVisitorParkingRuntimeData,
 ) -> list[str]:
     """Return normalized reservation update fields for a provider."""
-
     update_fields = getattr(runtime.provider, "reservation_update_fields", None)
     if update_fields is None:
         return []

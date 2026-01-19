@@ -2,15 +2,19 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping
-from typing import Final, Protocol, cast
+from typing import TYPE_CHECKING, Final, Protocol, cast
 
 from homeassistant.components import diagnostics as diagnostics_util
 from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
-from homeassistant.core import HomeAssistant
 
 from .const import CONF_AUTO_END, CONF_OPERATING_TIME_OVERRIDES
-from .runtime_data import CityVisitorParkingConfigEntry
+
+if TYPE_CHECKING:
+    from collections.abc import Iterable, Mapping
+
+    from homeassistant.core import HomeAssistant
+
+    from .runtime_data import CityVisitorParkingConfigEntry
 
 TO_REDACT: Final[list[str]] = [CONF_PASSWORD, CONF_USERNAME]
 
@@ -25,14 +29,13 @@ class _DiagnosticsModule(Protocol):
         raise NotImplementedError
 
 
-_async_redact_data = cast(_DiagnosticsModule, diagnostics_util).async_redact_data
+_async_redact_data = cast("_DiagnosticsModule", diagnostics_util).async_redact_data
 
 
 async def async_get_config_entry_diagnostics(
     hass: HomeAssistant, entry: CityVisitorParkingConfigEntry
 ) -> dict[str, object]:
     """Return diagnostics for a config entry."""
-
     coordinator = entry.runtime_data.coordinator
     data = coordinator.data
 
