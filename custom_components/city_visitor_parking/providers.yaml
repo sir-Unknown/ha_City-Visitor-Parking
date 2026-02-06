@@ -100,6 +100,12 @@ middelburg:
   base_url: "https://parkeren.middelburg.nl"
   api_url: "/DVSWebAPI/api"
 
+nijmegen:
+  municipality_name: Nijmegen
+  provider_id: dvsportal
+  base_url: "https://parkeerproducten.nijmegen.nl"
+  api_url: "/DVSWebAPI/api"
+
 nissewaard:
   municipality_name: Nissewaard
   provider_id: dvsportal
