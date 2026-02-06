@@ -101,7 +101,7 @@ middelburg:
   api_url: "/DVSWebAPI/api"
 
 nijmegen:
-  municipality_name: nijmegen
+  municipality_name: Nijmegen
   provider_id: dvsportal
   base_url: "https://parkeerproducten.nijmegen.nl"
   api_url: "/DVSWebAPI/api"
