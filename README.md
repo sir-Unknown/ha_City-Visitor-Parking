@@ -91,6 +91,7 @@ Supported municipalities (from `providers.yaml`):
 - Leiden
 - Leidschendam-Voorburg
 - Middelburg
+- Nijmegen
 - Nissewaard
 - Oldenzaal
 - Rijswijk
@@ -137,13 +138,13 @@ The exact polling interval is defined in the integration and may vary by provide
 
 ## Options
 
-- Paid time windows  
+- Paid time windows
   Define paid parking windows per weekday. Format: `HH:MM-HH:MM`. Multiple windows: `09:00-13:00, 14:00-17:30`.
 
-- Auto-end when free  
+- Auto-end when free
   End an active session automatically when parking becomes free.
 
-- Description  
+- Description
   Rename the config entry as shown in the UI.
 
 ## Entities
