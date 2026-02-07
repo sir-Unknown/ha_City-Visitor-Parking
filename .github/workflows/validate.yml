@@ -1,18 +1,162 @@
+name: Validate
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 0 * * *"
+  push:
+    branches: [main]
+    tags:
+      - "*"
+    paths-ignore:
+      - "**/*.md"
+      - "LICENSE"
+      - ".gitignore"
+      - ".github/dependabot.yml"
+      - "docs/**"
+  pull_request:
+    branches: [main]
+    paths-ignore:
+      - "**/*.md"
+      - "LICENSE"
+      - ".gitignore"
+      - ".github/dependabot.yml"
+      - "docs/**"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions: {}
+
 jobs:
-  pytest:
+  ruff:
+    name: Ruff (lint/format)
     runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v2
+      - name: Checkout the repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
       - name: Set up Python
-        uses: actions/setup-python@v2
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
         with:
-          python-version: '3.8'
+          python-version-file: ".python-version"
+          cache: "pip"
+
+      - name: Upgrade pip
+        run: python -m pip install --upgrade pip
+
+      - name: Install ruff
+        run: pip install "ruff==0.14.10"
+
+      - name: Ruff check
+        run: ruff check .
+
+      - name: Ruff format check
+        run: ruff format --check .
+
+  hassfest:
+    name: Hassfest validation
+    needs: [ruff]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout the repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Run hassfest validation
+        uses: home-assistant/actions/hassfest@55b4a5d23e09d627c2773c2ef82afa98904d65b4 # master
+
+  hacs:
+    name: HACS validation
+    needs: [ruff]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout the repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Run HACS validation
+        uses: hacs/action@d556e736723344f83838d08488c983a15381059a # 22.5.0
+        with:
+          category: integration
+        env:
+          REPOSITORY_REF: ${{ github.event_name == 'pull_request' && github.head_ref || github.ref_name }}
+
+  tests:
+    name: Pytest
+    needs: [ruff]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout the repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version-file: ".python-version"
+          cache: "pip"
+          cache-dependency-path: |
+            requirements.txt
+            requirements_test.txt
+
+      - name: Upgrade pip
+        run: python -m pip install --upgrade pip
+
       - name: Install dependencies
         run: |
-          pip install -r requirements.txt
-      - name: Run tests
+          pip install -r requirements.txt -r requirements_test.txt
+          pip install pytest-cov
+
+      - name: Run pytest (with coverage)
         env:
-          PYTHONPATH: .
-        run: |
-          pytest
+          PYTHONPATH: ${{ github.workspace }}
+        run: pytest tests/components/city_visitor_parking --cov=custom_components.city_visitor_parking --cov-report=term-missing
+
+  frontend:
+    name: Frontend build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: custom_components/city_visitor_parking/frontend
+    steps:
+      - name: Checkout the repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Set up Node.js
+        uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238 # v6.2.0
+        with:
+          node-version: "24"
+          cache: "yarn"
+          cache-dependency-path: custom_components/city_visitor_parking/frontend/yarn.lock
+
+      - name: Install frontend dependencies (locked)
+        if: ${{ hashFiles('custom_components/city_visitor_parking/frontend/yarn.lock') != '' }}
+        run: yarn install --non-interactive --frozen-lockfile
+
+      - name: Install frontend dependencies
+        if: ${{ hashFiles('custom_components/city_visitor_parking/frontend/yarn.lock') == '' }}
+        run: yarn install --non-interactive
+
+      - name: Clean frontend dist
+        run: rm -rf dist
+
+      - name: Build frontend
+        run: yarn build
+
+      - name: Lint frontend
+        run: yarn lint
+
+      - name: Test frontend
+        run: yarn test
