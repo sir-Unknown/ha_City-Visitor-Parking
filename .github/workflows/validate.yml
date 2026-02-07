@@ -117,6 +117,8 @@ jobs:
           pip install pytest-cov
 
       - name: Run pytest (with coverage)
+        env:
+          PYTHONPATH: ${{ github.workspace }}
         run: pytest tests/components/city_visitor_parking --cov=custom_components.city_visitor_parking --cov-report=term-missing
 
   frontend:
