@@ -199,6 +199,7 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
+custom_components/city_visitor_parking/frontend/.yarn/
 
 # PyPI configuration file
 .pypirc

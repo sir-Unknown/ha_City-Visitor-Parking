@@ -141,13 +141,16 @@ jobs:
           cache: "yarn"
           cache-dependency-path: custom_components/city_visitor_parking/frontend/yarn.lock
 
+      - name: Enable Corepack
+        run: corepack enable
+
       - name: Install frontend dependencies (locked)
         if: ${{ hashFiles('custom_components/city_visitor_parking/frontend/yarn.lock') != '' }}
-        run: yarn install --non-interactive --frozen-lockfile
+        run: yarn install --immutable
 
       - name: Install frontend dependencies
         if: ${{ hashFiles('custom_components/city_visitor_parking/frontend/yarn.lock') == '' }}
-        run: yarn install --non-interactive
+        run: yarn install
 
       - name: Clean frontend dist
         run: rm -rf dist
