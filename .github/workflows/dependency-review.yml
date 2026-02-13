@@ -10,15 +10,6 @@
 name: "Dependency review"
 on:
   workflow_dispatch:
-    inputs:
-      base_ref:
-        description: "Base ref to compare from (for example, refs/heads/main)"
-        required: true
-        type: string
-      head_ref:
-        description: "Head ref to compare to (for example, refs/heads/feature)"
-        required: true
-        type: string
   pull_request:
     branches: ["main"]
 
@@ -46,8 +37,8 @@ jobs:
         uses: actions/dependency-review-action@3c4e3dcb1aa7874d2c16be7d79418e9b7efd6261 # v4
         # Commonly enabled options, see https://github.com/actions/dependency-review-action#configuration-options for all available options.
         with:
-          base-ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || inputs.base_ref }}
-          head-ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || inputs.head_ref }}
+          base-ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || 'refs/heads/main' }}
+          head-ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
           comment-summary-in-pr: on-failure
           fail-on-severity: moderate
         #   deny-licenses: GPL-1.0-or-later, LGPL-2.0-or-later
