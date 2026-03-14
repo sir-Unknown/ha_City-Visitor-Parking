@@ -299,102 +299,43 @@ export const renderPermitSelect = (
   params: {
     label: string;
     value: string;
-    selectedText: string;
     disabled: boolean;
     placeholderText: string;
     options: PermitOption[];
     onSelected: (event: Event) => void;
   },
-): TemplateResult => html`
-  <div class="row">
-    <ha-select
-      id="permitSelect"
-      .label=${params.label}
-      .value=${params.value}
-      .selectedText=${params.selectedText}
-      ?disabled=${params.disabled}
-      @selected=${params.onSelected}
-    >
-      <mwc-list-item value=${PERMIT_PLACEHOLDER_VALUE}>
-        ${params.placeholderText}
-      </mwc-list-item>
-      ${renderPermitOptions(html, params.options)}
-    </ha-select>
-  </div>
-`;
-
-const permitOptionsCache = new WeakMap<
-  HtmlRenderer,
-  WeakMap<PermitOption[], TemplateResult[]>
->();
-const favoriteOptionsCache = new WeakMap<
-  HtmlRenderer,
-  WeakMap<FavoriteOption[], TemplateResult[]>
->();
-
-const getOptionsCache = <T>(
-  cache: WeakMap<HtmlRenderer, WeakMap<T[], TemplateResult[]>>,
-  html: HtmlRenderer,
-): WeakMap<T[], TemplateResult[]> => {
-  let cacheForHtml = cache.get(html);
-  if (!cacheForHtml) {
-    cacheForHtml = new WeakMap<T[], TemplateResult[]>();
-    cache.set(html, cacheForHtml);
+): TemplateResult => {
+  type OptionItem = { value: string; label: string; secondary?: string };
+  const selectOptions: OptionItem[] = [];
+  if (params.placeholderText) {
+    selectOptions.push({
+      value: PERMIT_PLACEHOLDER_VALUE,
+      label: params.placeholderText,
+    });
   }
-  return cacheForHtml;
-};
-
-const renderPermitOptions = (
-  html: HtmlRenderer,
-  options: PermitOption[],
-): TemplateResult[] => {
-  const cache = getOptionsCache(permitOptionsCache, html);
-  const cached = cache.get(options);
-  if (cached) {
-    return cached;
+  for (const entry of params.options) {
+    const opt: OptionItem = { value: entry.id, label: entry.primary };
+    if (entry.secondary) {
+      opt.secondary = entry.secondary;
+    }
+    selectOptions.push(opt);
   }
-  const rendered = options.map((entry) => {
-    const secondaryText = entry.secondary;
-    return html`<mwc-list-item
-      value=${entry.id}
-      ?twoline=${Boolean(secondaryText)}
-    >
-      <span>${entry.primary}</span>
-      ${secondaryText
-        ? html`<span slot="secondary">${secondaryText}</span>`
-        : nothing}
-    </mwc-list-item>`;
-  });
-  cache.set(options, rendered);
-  return rendered;
-};
-
-const renderFavoriteOptions = (
-  html: HtmlRenderer,
-  options: FavoriteOption[],
-): TemplateResult[] => {
-  const cache = getOptionsCache(favoriteOptionsCache, html);
-  const cached = cache.get(options);
-  if (cached) {
-    return cached;
-  }
-  const rendered = options.map((favorite: FavoriteOption) => {
-    const value = favorite.license_plate || favorite.id || "";
-    const label = favorite.name || favorite.license_plate || favorite.id || "";
-    const secondaryText =
-      favorite.name && favorite.license_plate ? favorite.license_plate : "";
-    return html`<mwc-list-item
-      value=${value}
-      ?twoline=${Boolean(secondaryText)}
-    >
-      <span>${label}</span>
-      ${secondaryText
-        ? html`<span slot="secondary">${secondaryText}</span>`
-        : nothing}
-    </mwc-list-item>`;
-  });
-  cache.set(options, rendered);
-  return rendered;
+  const selectValue =
+    params.value === PERMIT_PLACEHOLDER_VALUE && !params.placeholderText
+      ? ""
+      : params.value;
+  return html`
+    <div class="row">
+      <ha-select
+        id="permitSelect"
+        .label=${params.label}
+        .value=${selectValue}
+        .options=${selectOptions}
+        ?disabled=${params.disabled}
+        @selected=${params.onSelected}
+      ></ha-select>
+    </div>
+  `;
 };
 
 export const renderFavoriteSelect = (
@@ -402,7 +343,6 @@ export const renderFavoriteSelect = (
   params: {
     showFavorites: boolean;
     favoriteValue: string;
-    favoriteSelectedText: string;
     favoriteSelectDisabled: boolean;
     hasTarget: boolean;
     favoritesOptions: FavoriteOption[];
@@ -415,23 +355,32 @@ export const renderFavoriteSelect = (
   if (!params.showFavorites) {
     return nothing;
   }
+  type OptionItem = { value: string; label: string; secondary?: string };
+  const selectOptions: OptionItem[] = [];
+  if (params.hasTarget) {
+    selectOptions.push({
+      value: FAVORITE_PLACEHOLDER_VALUE,
+      label: params.localize("message.select_favorite"),
+    });
+  }
+  for (const favorite of params.favoritesOptions) {
+    const value = favorite.license_plate || favorite.id || "";
+    const label =
+      favorite.name || favorite.license_plate || favorite.id || "";
+    const opt: OptionItem = { value, label };
+    if (favorite.name && favorite.license_plate) {
+      opt.secondary = favorite.license_plate;
+    }
+    selectOptions.push(opt);
+  }
   const selectContent = html`<ha-select
     id="favorite"
     .label=${params.localize("field.favorite")}
     .value=${params.favoriteValue}
-    .selectedText=${params.favoriteSelectedText}
+    .options=${selectOptions}
     ?disabled=${params.favoriteSelectDisabled}
     @selected=${params.onSelected}
-  >
-    ${params.hasTarget
-      ? html`
-          <mwc-list-item value=${FAVORITE_PLACEHOLDER_VALUE}>
-            ${params.localize("message.select_favorite")}
-          </mwc-list-item>
-        `
-      : nothing}
-    ${renderFavoriteOptions(html, params.favoritesOptions)}
-  </ha-select>`;
+  ></ha-select>`;
   const wrappedSelect = params.wrapSelect
     ? params.wrapSelect(selectContent)
     : selectContent;
