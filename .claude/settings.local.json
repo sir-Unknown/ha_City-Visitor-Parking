@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git -C /workspaces/ha-dev/ha_City-Visitor-Parking status)",
+      "Bash(git -C /workspaces/ha-dev/ha-dev-workspace status)",
+      "Bash(git -C /workspaces/ha-dev/ha-dev-workspace diff)",
+      "Bash(git -C /workspaces/ha-dev/ha-dev-workspace diff --staged)",
+      "Bash(git -C /workspaces/ha-dev/ha-dev-workspace log --oneline -5)"
+    ]
+  }
+}
