@@ -822,92 +822,63 @@ var renderCardHeader = (title, icon, html, nothingValue) => {
     </h1>
   `;
 };
-var renderPermitSelect = (html, params) => html`
-  <div class="row">
-    <ha-select
-      id="permitSelect"
-      .label=${params.label}
-      .value=${params.value}
-      .selectedText=${params.selectedText}
-      ?disabled=${params.disabled}
-      @selected=${params.onSelected}
-    >
-      <mwc-list-item value=${PERMIT_PLACEHOLDER_VALUE}>
-        ${params.placeholderText}
-      </mwc-list-item>
-      ${renderPermitOptions(html, params.options)}
-    </ha-select>
-  </div>
-`;
-var permitOptionsCache = /* @__PURE__ */ new WeakMap();
-var favoriteOptionsCache = /* @__PURE__ */ new WeakMap();
-var getOptionsCache = (cache, html) => {
-  let cacheForHtml = cache.get(html);
-  if (!cacheForHtml) {
-    cacheForHtml = /* @__PURE__ */ new WeakMap();
-    cache.set(html, cacheForHtml);
+var renderPermitSelect = (html, params) => {
+  const selectOptions = [];
+  if (params.placeholderText) {
+    selectOptions.push({
+      value: PERMIT_PLACEHOLDER_VALUE,
+      label: params.placeholderText
+    });
   }
-  return cacheForHtml;
-};
-var renderPermitOptions = (html, options) => {
-  const cache = getOptionsCache(permitOptionsCache, html);
-  const cached = cache.get(options);
-  if (cached) {
-    return cached;
+  for (const entry of params.options) {
+    const opt = { value: entry.id, label: entry.primary };
+    if (entry.secondary) {
+      opt.secondary = entry.secondary;
+    }
+    selectOptions.push(opt);
   }
-  const rendered = options.map((entry) => {
-    const secondaryText = entry.secondary;
-    return html`<mwc-list-item
-      value=${entry.id}
-      ?twoline=${Boolean(secondaryText)}
-    >
-      <span>${entry.primary}</span>
-      ${secondaryText ? html`<span slot="secondary">${secondaryText}</span>` : A}
-    </mwc-list-item>`;
-  });
-  cache.set(options, rendered);
-  return rendered;
-};
-var renderFavoriteOptions = (html, options) => {
-  const cache = getOptionsCache(favoriteOptionsCache, html);
-  const cached = cache.get(options);
-  if (cached) {
-    return cached;
-  }
-  const rendered = options.map((favorite) => {
-    const value = favorite.license_plate || favorite.id || "";
-    const label = favorite.name || favorite.license_plate || favorite.id || "";
-    const secondaryText = favorite.name && favorite.license_plate ? favorite.license_plate : "";
-    return html`<mwc-list-item
-      value=${value}
-      ?twoline=${Boolean(secondaryText)}
-    >
-      <span>${label}</span>
-      ${secondaryText ? html`<span slot="secondary">${secondaryText}</span>` : A}
-    </mwc-list-item>`;
-  });
-  cache.set(options, rendered);
-  return rendered;
+  const selectValue = params.value === PERMIT_PLACEHOLDER_VALUE && !params.placeholderText ? "" : params.value;
+  return html`
+    <div class="row">
+      <ha-select
+        id="permitSelect"
+        .label=${params.label}
+        .value=${selectValue}
+        .options=${selectOptions}
+        ?disabled=${params.disabled}
+        @selected=${params.onSelected}
+      ></ha-select>
+    </div>
+  `;
 };
 var renderFavoriteSelect = (html, params) => {
   if (!params.showFavorites) {
     return A;
   }
+  const selectOptions = [];
+  if (params.hasTarget) {
+    selectOptions.push({
+      value: FAVORITE_PLACEHOLDER_VALUE,
+      label: params.localize("message.select_favorite")
+    });
+  }
+  for (const favorite of params.favoritesOptions) {
+    const value = favorite.license_plate || favorite.id || "";
+    const label = favorite.name || favorite.license_plate || favorite.id || "";
+    const opt = { value, label };
+    if (favorite.name && favorite.license_plate) {
+      opt.secondary = favorite.license_plate;
+    }
+    selectOptions.push(opt);
+  }
   const selectContent = html`<ha-select
     id="favorite"
     .label=${params.localize("field.favorite")}
     .value=${params.favoriteValue}
-    .selectedText=${params.favoriteSelectedText}
+    .options=${selectOptions}
     ?disabled=${params.favoriteSelectDisabled}
     @selected=${params.onSelected}
-  >
-    ${params.hasTarget ? html`
-          <mwc-list-item value=${FAVORITE_PLACEHOLDER_VALUE}>
-            ${params.localize("message.select_favorite")}
-          </mwc-list-item>
-        ` : A}
-    ${renderFavoriteOptions(html, params.favoritesOptions)}
-  </ha-select>`;
+  ></ha-select>`;
   const wrappedSelect = params.wrapSelect ? params.wrapSelect(selectContent) : selectContent;
   return html`
     <div class="row">
@@ -1711,16 +1682,6 @@ var getCardConfigForm = async (hassOrLocalize) => {
         removeFavorite
       };
     }
-    _getFavoriteSelectedText(favoriteValue, hasTarget) {
-      if (!hasTarget) {
-        return "";
-      }
-      if (!favoriteValue || favoriteValue === FAVORITE_PLACEHOLDER_VALUE) {
-        return this._localize("message.select_favorite");
-      }
-      const favorite = this._findFavoriteByValue(favoriteValue);
-      return favorite?.name || favorite?.license_plate || favoriteValue || "";
-    }
     render() {
       if (!this._config) {
         return b2``;
@@ -1759,7 +1720,7 @@ var getCardConfigForm = async (hassOrLocalize) => {
       const permitPlaceholderKey = "message.select_permit";
       const permitPlaceholder = localize2(permitPlaceholderKey);
       const permitPlaceholderText = permitPlaceholder === permitPlaceholderKey ? "" : permitPlaceholder;
-      const { selectedText: permitSelectedText, value: permitSelectValue } = getPermitSelectState(
+      const { value: permitSelectValue } = getPermitSelectState(
         activeEntryId,
         this._permitOptions,
         permitPlaceholderText
@@ -1768,10 +1729,6 @@ var getCardConfigForm = async (hassOrLocalize) => {
       const { showAddFavorite, showRemoveFavorite, removeFavorite } = this._getFavoriteActionState();
       const favoriteRemoveDisabled = controlsDisabled || this._favoriteRemoveInFlight;
       const favoritesOptions = this._favorites;
-      const favoriteSelectedText = this._getFavoriteSelectedText(
-        favoriteValue,
-        hasTarget
-      );
       const favoriteSelectDisabled = controlsDisabled || this._favoritesLoading;
       const startDisabled = controlsDisabled || !hasDevice || this._startInFlight;
       return b2`
@@ -1785,7 +1742,6 @@ var getCardConfigForm = async (hassOrLocalize) => {
             ${showPermitPicker ? renderPermitSelect(b2, {
         label: localize2("field.permit"),
         value: permitSelectValue,
-        selectedText: permitSelectedText,
         disabled: permitSelectDisabled,
         placeholderText: permitPlaceholderText,
         options: this._permitOptions,
@@ -1794,7 +1750,6 @@ var getCardConfigForm = async (hassOrLocalize) => {
             ${renderFavoriteSelect(b2, {
         showFavorites,
         favoriteValue,
-        favoriteSelectedText,
         favoriteSelectDisabled,
         hasTarget,
         favoritesOptions,
@@ -1901,22 +1856,6 @@ var getCardConfigForm = async (hassOrLocalize) => {
         if (!showAddFavorite) {
           this._addFavoriteChecked = false;
           this._requestRender();
-        }
-      }
-      if (this._config.show_favorites && this._translationsReady) {
-        const favoriteSelect = this.renderRoot?.querySelector("#favorite");
-        if (favoriteSelect) {
-          const activeEntryId = this._getActiveEntryId();
-          const hasTarget = Boolean(activeEntryId);
-          const priorFavorite = this._getInputValue("favorite");
-          const favoriteValue = hasTarget ? priorFavorite && priorFavorite !== FAVORITE_PLACEHOLDER_VALUE ? priorFavorite : FAVORITE_PLACEHOLDER_VALUE : "";
-          const selectedText = this._getFavoriteSelectedText(
-            favoriteValue,
-            hasTarget
-          );
-          if (favoriteSelect.selectedText !== selectedText) {
-            favoriteSelect.selectedText = selectedText;
-          }
         }
       }
     }
