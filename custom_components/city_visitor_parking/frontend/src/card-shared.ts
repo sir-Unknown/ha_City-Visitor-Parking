@@ -365,8 +365,7 @@ export const renderFavoriteSelect = (
   }
   for (const favorite of params.favoritesOptions) {
     const value = favorite.license_plate || favorite.id || "";
-    const label =
-      favorite.name || favorite.license_plate || favorite.id || "";
+    const label = favorite.name || favorite.license_plate || favorite.id || "";
     const opt: OptionItem = { value, label };
     if (favorite.name && favorite.license_plate) {
       opt.secondary = favorite.license_plate;

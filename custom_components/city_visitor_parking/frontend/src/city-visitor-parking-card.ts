@@ -864,7 +864,6 @@ import { ensureTranslations } from "./localize";
           this._requestRender();
         }
       }
-
     }
 
     _scheduleFavoriteActionsUpdate(): void {
