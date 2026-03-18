@@ -117,13 +117,25 @@ def _error_key(
     return f"{base_key}_detail" if detail_present else base_key
 
 
+def _reservation_error_key(
+    err: PyCityVisitorParkingError, detail_present: bool
+) -> str:
+    """Return the translation key for a reservation failure."""
+    return _error_key(err, "reservation", detail_present)
+
+
+def _favorite_error_key(err: PyCityVisitorParkingError, detail_present: bool) -> str:
+    """Return the translation key for a favorite failure."""
+    return _error_key(err, "favorite", detail_present)
+
+
 def _raise_reservation_error(err: PyCityVisitorParkingError) -> NoReturn:
     """Raise a translated Home Assistant error for reservation failures."""
     detail = _error_detail(err)
     _LOGGER.debug("Reservation request failed: %s: %s", type(err).__name__, err)
     raise HomeAssistantError(
         translation_domain=DOMAIN,
-        translation_key=_error_key(err, "reservation", detail is not None),
+        translation_key=_reservation_error_key(err, detail is not None),
         translation_placeholders={"detail": detail} if detail else None,
     ) from err
 
@@ -140,7 +152,7 @@ def _raise_favorite_error(err: PyCityVisitorParkingError | TypeError) -> NoRetur
     _LOGGER.debug("Favorite request failed: %s: %s", type(err).__name__, err)
     raise HomeAssistantError(
         translation_domain=DOMAIN,
-        translation_key=_error_key(err, "favorite", detail is not None),
+        translation_key=_favorite_error_key(err, detail is not None),
         translation_placeholders={"detail": detail} if detail else None,
     ) from err
 
