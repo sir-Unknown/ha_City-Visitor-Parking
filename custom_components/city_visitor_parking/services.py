@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import re
 import time
 from datetime import datetime, timedelta
 from typing import TYPE_CHECKING, Final, NoReturn, Protocol, cast
@@ -108,20 +109,10 @@ def _error_base_key(err: PyCityVisitorParkingError, prefix: str) -> str:
     return f"{prefix}_{suffix}"
 
 
-def _reservation_error_key(err: PyCityVisitorParkingError, detail_present: bool) -> str:
-    """Return the translation key for a reservation failure."""
-    base_key = _error_base_key(err, "reservation")
-    if detail_present:
-        return f"{base_key}_detail"
-    return base_key
-
-
-def _favorite_error_key(err: PyCityVisitorParkingError, detail_present: bool) -> str:
-    """Return the translation key for a favorite failure."""
-    base_key = _error_base_key(err, "favorite")
-    if detail_present:
-        return f"{base_key}_detail"
-    return base_key
+def _error_key(err: PyCityVisitorParkingError, prefix: str, detail_present: bool) -> str:
+    """Return the translation key for an operation failure."""
+    base_key = _error_base_key(err, prefix)
+    return f"{base_key}_detail" if detail_present else base_key
 
 
 def _raise_reservation_error(err: PyCityVisitorParkingError) -> NoReturn:
@@ -130,7 +121,7 @@ def _raise_reservation_error(err: PyCityVisitorParkingError) -> NoReturn:
     _LOGGER.debug("Reservation request failed: %s: %s", type(err).__name__, err)
     raise HomeAssistantError(
         translation_domain=DOMAIN,
-        translation_key=_reservation_error_key(err, detail is not None),
+        translation_key=_error_key(err, "reservation", detail is not None),
         translation_placeholders={"detail": detail} if detail else None,
     ) from err
 
@@ -147,7 +138,7 @@ def _raise_favorite_error(err: PyCityVisitorParkingError | TypeError) -> NoRetur
     _LOGGER.debug("Favorite request failed: %s: %s", type(err).__name__, err)
     raise HomeAssistantError(
         translation_domain=DOMAIN,
-        translation_key=_favorite_error_key(err, detail is not None),
+        translation_key=_error_key(err, "favorite", detail is not None),
         translation_placeholders={"detail": detail} if detail else None,
     ) from err
 
@@ -528,9 +519,9 @@ async def _async_handle_list_active_reservations(
                 translation_domain=DOMAIN,
                 translation_key="reservation_operation_failed",
             )
-    data = getattr(runtime.coordinator, "data", None)
-    reservations = getattr(data, "reservations", []) if data else []
-    favorites = getattr(data, "favorites", []) if data else []
+    data = runtime.coordinator.data
+    reservations = data.reservations if data else []
+    favorites = data.favorites if data else []
     now = dt_util.utcnow()
     visible = [
         reservation for reservation in reservations if reservation.end_time > now
@@ -749,11 +740,14 @@ def _is_not_supported(err: ProviderError) -> bool:
     return "not supported" in message or "unsupported" in message
 
 
+_PLATE_RE: Final = re.compile(r"[^A-Z0-9]")
+
+
 def _normalize_plate(value: str | None) -> str:
     """Normalize a license plate for matching."""
     if not value:
         return ""
-    return "".join(ch for ch in value.strip().upper() if ch.isalnum())
+    return _PLATE_RE.sub("", value.strip().upper())
 
 
 def _reservation_payload(

@@ -236,24 +236,29 @@ class CityVisitorParkingCoordinator(DataUpdateCoordinator[CoordinatorData]):
         self._unavailable_logged = True
 
 
+def _parse_time_range(item: object) -> TimeRange | None:
+    """Parse start_time/end_time from an item into a valid TimeRange, or None."""
+    start = get_attr(item, "start_time")
+    end = get_attr(item, "end_time")
+    if start is None or end is None:
+        return None
+    start_dt = _as_utc_datetime(start)
+    end_dt = _as_utc_datetime(end)
+    if start_dt >= end_dt:
+        return None
+    return TimeRange(start=start_dt, end=end_dt)
+
+
 def _normalize_zone_validity(permit: Permit) -> list[TimeRange]:
     """Normalize zone validity blocks to TimeRange objects in UTC."""
     raw_blocks = get_attr(permit, "zone_validity")
     if not isinstance(raw_blocks, list):
-        raw_blocks = []
-    blocks_raw = cast("list[object]", raw_blocks)
-    blocks: list[TimeRange] = []
-    for block in blocks_raw:
-        start = get_attr(block, "start_time")
-        end = get_attr(block, "end_time")
-        if start is None or end is None:
-            continue
-        start_dt = _as_utc_datetime(start)
-        end_dt = _as_utc_datetime(end)
-        if start_dt >= end_dt:
-            continue
-        blocks.append(TimeRange(start=start_dt, end=end_dt))
-    return blocks
+        return []
+    return [
+        time_range
+        for block in cast("list[object]", raw_blocks)
+        if (time_range := _parse_time_range(block)) is not None
+    ]
 
 
 def _normalize_remaining_minutes(permit: Permit) -> int:
@@ -277,20 +282,17 @@ def _normalize_reservations(
     normalized: list[Reservation] = []
     for reservation in reservations or []:
         reservation_id = get_attr(reservation, "id")
-        start = get_attr(reservation, "start_time")
-        end = get_attr(reservation, "end_time")
+        if reservation_id is None:
+            continue
+        time_range = _parse_time_range(reservation)
+        if time_range is None:
+            continue
         license_plate = get_attr(reservation, "license_plate")
-        if reservation_id is None or start is None or end is None:
-            continue
-        start_dt = _as_utc_datetime(start)
-        end_dt = _as_utc_datetime(end)
-        if start_dt >= end_dt:
-            continue
         normalized.append(
             Reservation(
                 reservation_id=str(reservation_id),
-                start_time=start_dt,
-                end_time=end_dt,
+                start_time=time_range.start,
+                end_time=time_range.end,
                 license_plate=str(license_plate) if license_plate else None,
             )
         )
