@@ -1,0 +1,88 @@
+name: Sync Python version from HA Core
+
+on:
+  schedule:
+    - cron: "0 6 * * 1" # every Monday at 06:00 UTC
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  sync:
+    name: Sync Python version
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Fetch HA core Python version
+        id: ha_core
+        run: |
+          VERSION=$(curl -sf \
+            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            "https://raw.githubusercontent.com/home-assistant/core/dev/.python-version" \
+            | tr -d '[:space:]')
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "minor=${VERSION%.*}" >> "$GITHUB_OUTPUT"
+
+      - name: Read current Python version
+        id: current
+        run: |
+          VERSION=$(cat .python-version | tr -d '[:space:]')
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "minor=${VERSION%.*}" >> "$GITHUB_OUTPUT"
+
+      - name: Open PR if version changed
+        if: steps.ha_core.outputs.version != steps.current.outputs.version
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NEW_VERSION: ${{ steps.ha_core.outputs.version }}
+          NEW_MINOR: ${{ steps.ha_core.outputs.minor }}
+          OLD_VERSION: ${{ steps.current.outputs.version }}
+          OLD_MINOR: ${{ steps.current.outputs.minor }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          BRANCH="bump/python-${NEW_VERSION}"
+          git checkout -b "$BRANCH"
+
+          echo "$NEW_VERSION" > .python-version
+
+          # Update mypy.ini if major.minor changed (e.g. 3.14 → 3.15)
+          if [ "$NEW_MINOR" != "$OLD_MINOR" ]; then
+            sed -i "s/python_version = ${OLD_MINOR}/python_version = ${NEW_MINOR}/" mypy.ini
+          fi
+
+          git add .python-version mypy.ini
+          git commit -m "Bump Python version to ${NEW_VERSION}"
+          git push origin "$BRANCH"
+
+          gh pr create \
+            --title "Bump Python version to ${NEW_VERSION}" \
+            --body "$(cat <<EOF
+          ## Sync Python version from HA Core
+
+          Home Assistant Core bumped from \`${OLD_VERSION}\` to \`${NEW_VERSION}\`.
+
+          **Source:** [\`home-assistant/core\` dev branch](https://github.com/home-assistant/core/blob/dev/.python-version)
+
+          ### Changes
+          - \`.python-version\`: \`${OLD_VERSION}\` → \`${NEW_VERSION}\`$([ "$NEW_MINOR" != "$OLD_MINOR" ] && echo "
+          - \`mypy.ini\`: \`python_version\` \`${OLD_MINOR}\` → \`${NEW_MINOR}\`" || echo "")
+
+          ### Checklist
+          - [ ] CI passes
+          - [ ] Verify compatibility with \`${NEW_VERSION}\`
+          EOF
+          )" \
+            --head "$BRANCH" \
+            --base main
+
+      - name: Already up to date
+        if: steps.ha_core.outputs.version == steps.current.outputs.version
+        run: echo "Python version is already ${{ steps.current.outputs.version }} — nothing to do."

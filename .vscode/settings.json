@@ -1,0 +1,16 @@
+{
+  "ruff.path": ["/home/vscode/.local/bin/ruff"],
+  "python.testing.pytestEnabled": true,
+  "python.testing.pytestArgs": ["tests"],
+
+  "editor.formatOnSave": true,
+  "editor.defaultFormatter": "charliermarsh.ruff",
+
+  "editor.codeActionsOnSave": {
+    "source.fixAll.ruff": "explicit",
+    "source.organizeImports.ruff": "explicit"
+  },
+
+  "files.insertFinalNewline": true,
+  "files.trimTrailingWhitespace": true
+}
