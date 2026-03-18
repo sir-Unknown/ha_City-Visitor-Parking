@@ -104,5 +104,8 @@ def _as_time(value: object) -> time | None:
     if isinstance(value, time):
         return value
     if isinstance(value, str):
-        return time.fromisoformat(value)
+        try:
+            return time.fromisoformat(value)
+        except ValueError:
+            return None
     return None

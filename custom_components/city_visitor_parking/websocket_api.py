@@ -40,6 +40,25 @@ async def async_setup_websocket(hass: HomeAssistant) -> None:
     websocket_api.async_register_command(hass, _ws_get_status)
 
 
+def _get_loaded_entry(
+    hass: HomeAssistant,
+    connection: websocket_api.ActiveConnection,
+    msg: dict[str, object],
+) -> object | None:
+    """Return a loaded config entry or send an error and return None."""
+    entry_id = cast("str", msg[ATTR_CONFIG_ENTRY_ID])
+    msg_id = cast("int", msg["id"])
+    entry = hass.config_entries.async_get_entry(entry_id)
+    if (
+        entry is None
+        or entry.domain != DOMAIN
+        or entry.state is not config_entries.ConfigEntryState.LOADED
+    ):
+        connection.send_error(msg_id, "invalid_target", "Invalid target")
+        return None
+    return entry
+
+
 @websocket_api.websocket_command(
     {
         vol.Required("type"): WEBSOCKET_LIST_FAVORITES,
@@ -54,15 +73,9 @@ async def _ws_list_favorites(
 ) -> None:
     """Return favorites for a single config entry."""
     request_started = time.perf_counter()
-    entry_id = cast("str", msg[ATTR_CONFIG_ENTRY_ID])
     msg_id = cast("int", msg["id"])
-    entry = hass.config_entries.async_get_entry(entry_id)
-    if (
-        entry is None
-        or entry.domain != DOMAIN
-        or entry.state is not config_entries.ConfigEntryState.LOADED
-    ):
-        connection.send_error(msg_id, "invalid_target", "Invalid target")
+    entry = _get_loaded_entry(hass, connection, msg)
+    if entry is None:
         return
 
     runtime: CityVisitorParkingRuntimeData = entry.runtime_data
@@ -97,15 +110,9 @@ async def _ws_get_status(
 ) -> None:
     """Return status and window details for a single config entry."""
     request_started = time.perf_counter()
-    entry_id = cast("str", msg[ATTR_CONFIG_ENTRY_ID])
     msg_id = cast("int", msg["id"])
-    entry = hass.config_entries.async_get_entry(entry_id)
-    if (
-        entry is None
-        or entry.domain != DOMAIN
-        or entry.state is not config_entries.ConfigEntryState.LOADED
-    ):
-        connection.send_error(msg_id, "invalid_target", "Invalid target")
+    entry = _get_loaded_entry(hass, connection, msg)
+    if entry is None:
         return
 
     runtime: CityVisitorParkingRuntimeData = entry.runtime_data
