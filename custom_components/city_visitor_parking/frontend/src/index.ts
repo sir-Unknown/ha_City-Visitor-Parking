@@ -230,9 +230,9 @@ const openDateTimePickerForField = (field: Element | null): void => {
   const input =
     field instanceof HTMLInputElement
       ? (field as PickerInputElement)
-      : ((field as HTMLElement).shadowRoot?.querySelector("input") as
-          | PickerInputElement
-          | null);
+      : ((field as HTMLElement).shadowRoot?.querySelector(
+          "input",
+        ) as PickerInputElement | null);
   if (!input) return;
   if (typeof input.showPicker === "function") {
     input.showPicker();
@@ -291,7 +291,6 @@ type ZoneStatus = {
 
 type ValueElement = HTMLElement & { value?: string };
 type PickerInputElement = HTMLInputElement & { showPicker?: () => void };
-
 
 type StatusType = "info" | "warning" | "success";
 type StatusState = {
@@ -564,8 +563,7 @@ const renderFavoriteSelect = (params: {
       first.value.localeCompare(second.value),
   );
   selectOptions.push(...favoriteItems);
-  const inputValue =
-    params.favoriteValue;
+  const inputValue = params.favoriteValue;
 
   const selectContent = html`
     <ha-selector
@@ -1841,9 +1839,10 @@ const getActiveCardConfigForm = createConfigFormGetter(
       const detail = (event as CustomEvent<{ value?: string | null }>).detail;
       const target = event.currentTarget as ValueElement | null;
       const hasDetailValue =
-        detail != null &&
-        Object.prototype.hasOwnProperty.call(detail, "value");
-      const value = hasDetailValue ? (detail.value ?? "") : (target?.value ?? "");
+        detail != null && Object.prototype.hasOwnProperty.call(detail, "value");
+      const value = hasDetailValue
+        ? (detail.value ?? "")
+        : (target?.value ?? "");
       const nextValue = value ?? "";
       this._handlePermitChange(nextValue);
     }
@@ -1859,8 +1858,7 @@ const getActiveCardConfigForm = createConfigFormGetter(
           (node.id === "favorite" || node.getAttribute("id") === "favorite"),
       );
       const hasDetailValue =
-        detail != null &&
-        Object.prototype.hasOwnProperty.call(detail, "value");
+        detail != null && Object.prototype.hasOwnProperty.call(detail, "value");
       const selectedValue = hasDetailValue
         ? (detail.value ?? "")
         : (select?.value ?? pathValueElement?.value ?? "");
@@ -2224,7 +2222,8 @@ const getActiveCardConfigForm = createConfigFormGetter(
         }
         if (
           !inputElement &&
-          (node instanceof HTMLInputElement || node instanceof HTMLTextAreaElement)
+          (node instanceof HTMLInputElement ||
+            node instanceof HTMLTextAreaElement)
         ) {
           inputElement = node;
         }
@@ -2701,7 +2700,8 @@ const getActiveCardConfigForm = createConfigFormGetter(
         !name && reservation.device_id
           ? this._getPendingReservationName(reservation.device_id, license)
           : null;
-      const identify = name || pendingName || license || reservation.reservation_id;
+      const identify =
+        name || pendingName || license || reservation.reservation_id;
       const permitLabel = reservation.device_id
         ? this._permitLabelsByDeviceId.get(reservation.device_id)
         : null;
@@ -2715,8 +2715,10 @@ const getActiveCardConfigForm = createConfigFormGetter(
         reservation.reservation_id,
       );
       const startValue =
-        this._getReservationInputOverride(reservation.reservation_id, "start") ??
-        formatOptionalDateTimeLocal(reservation.start_time);
+        this._getReservationInputOverride(
+          reservation.reservation_id,
+          "start",
+        ) ?? formatOptionalDateTimeLocal(reservation.start_time);
       const endValue =
         this._getReservationInputOverride(reservation.reservation_id, "end") ??
         formatOptionalDateTimeLocal(reservation.end_time);
@@ -2897,7 +2899,8 @@ const getActiveCardConfigForm = createConfigFormGetter(
         }
         if (
           !inputElement &&
-          (node instanceof HTMLInputElement || node instanceof HTMLTextAreaElement)
+          (node instanceof HTMLInputElement ||
+            node instanceof HTMLTextAreaElement)
         ) {
           inputElement = node;
         }
