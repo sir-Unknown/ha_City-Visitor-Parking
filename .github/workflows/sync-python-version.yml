@@ -49,7 +49,12 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
           BRANCH="bump/python-${NEW_VERSION}"
-          git checkout -b "$BRANCH"
+          if git ls-remote --exit-code --heads origin "$BRANCH" >/dev/null 2>&1; then
+            git fetch origin "$BRANCH"
+            git checkout -B "$BRANCH" "origin/$BRANCH"
+          else
+            git checkout -b "$BRANCH"
+          fi
 
           echo "$NEW_VERSION" > .python-version
 
@@ -62,8 +67,23 @@ jobs:
           fi
 
           git add .python-version mypy.ini pyproject.toml pyrightconfig.json
-          git commit -m "Bump Python version to ${NEW_VERSION}"
-          git push origin "$BRANCH"
+          if ! git diff --cached --quiet; then
+            git commit -m "Bump Python version to ${NEW_VERSION}"
+            git push origin "$BRANCH"
+          else
+            echo "No file changes to commit for ${NEW_VERSION}"
+          fi
+
+          EXISTING_PR="$(gh pr list \
+            --state open \
+            --base main \
+            --head "$BRANCH" \
+            --json number \
+            --jq '.[0].number // empty')"
+          if [ -n "$EXISTING_PR" ]; then
+            echo "Open PR #$EXISTING_PR already exists for $BRANCH. Skipping PR creation."
+            exit 0
+          fi
 
           gh pr create \
             --title "Bump Python version to ${NEW_VERSION}" \
