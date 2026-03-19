@@ -4,6 +4,9 @@ commitish: "main"
 change-template: "- $TITLE (#$NUMBER)"
 no-changes-template: "- No changes"
 categories:
+  - title: "⚠️ Breaking Changes"
+    labels:
+      - "breaking-change"
   - title: "Added"
     labels:
       - "feature"
