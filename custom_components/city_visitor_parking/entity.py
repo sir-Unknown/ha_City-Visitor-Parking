@@ -30,10 +30,13 @@ class CityVisitorParkingEntity(
         self,
         coordinator: CityVisitorParkingCoordinator,
         entry: CityVisitorParkingConfigEntry,
+        key: str | None = None,
     ) -> None:
         """Initialize the entity."""
         super().__init__(coordinator)
         self._entry: CityVisitorParkingConfigEntry = entry
+        if key is not None:
+            self._entity_key = key
         municipality = entry.data.get(CONF_MUNICIPALITY)
         permit_id = entry.data.get(CONF_PERMIT_ID)
         device_name = (

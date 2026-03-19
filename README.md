@@ -170,10 +170,12 @@ type: custom:city-visitor-parking-card
 title: Visitor parking
 ```
 
-If you use YAML dashboards, add these as `module` resources:
+If you use YAML dashboards, add this as a `module` resource:
 
 - `/city_visitor_parking/city-visitor-parking-card.js`
-- `/city_visitor_parking/city-visitor-parking-active-card.js`
+
+Breaking change: the `city-visitor-parking-active-card.js` resource URL is no
+longer served. See [MIGRATION.md](MIGRATION.md).
 
 More details: [docs/cards.md](docs/cards.md)
 
