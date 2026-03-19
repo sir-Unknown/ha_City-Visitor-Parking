@@ -33,7 +33,6 @@ from custom_components.city_visitor_parking.const import (
 )
 
 if TYPE_CHECKING:
-    from os import stat_result
     from types import ModuleType
 
     from homeassistant.core import HomeAssistant
@@ -263,10 +262,10 @@ async def test_register_lovelace_resources_missing_dist(
     assert "lovelace_resources_registered" not in hass.data[DOMAIN]
 
 
-async def test_register_lovelace_resources_updates_and_creates(
+async def test_register_lovelace_resources_updates_existing(
     hass: HomeAssistant, monkeypatch: MonkeyPatch
 ) -> None:
-    """Lovelace resources should update and create entries."""
+    """Lovelace resources should update existing matching entries."""
 
     class FakeResourceCollection:
         """Minimal resources collection for tests."""
@@ -324,25 +323,79 @@ async def test_register_lovelace_resources_updates_and_creates(
     resources = FakeResourceCollection()
     hass.data[LOVELACE_DATA] = SimpleNamespace(resources=resources)
 
-    original_stat = Path.stat
-
-    def _fake_stat(self: Path, *, follow_symlinks: bool = True) -> stat_result:
-        if self.name == "city-visitor-parking-active-card.js":
-            raise FileNotFoundError
-        return original_stat(self, follow_symlinks=follow_symlinks)
-
-    monkeypatch.setattr(Path, "stat", _fake_stat)
-
     await init_module._async_register_lovelace_resources(hass, "lovelace")
 
     assert resources.load_calls == 1
     assert resources.loaded is True
     assert resources.updated
-    assert resources.created
+    assert resources.created == []
     assert hass.data[DOMAIN]["lovelace_resources_registered"] is True
     update = resources.updated[0][1]
     assert CONF_URL in update
     assert CONF_RESOURCE_TYPE_WS in update
+
+
+async def test_register_lovelace_resources_creates_missing(
+    hass: HomeAssistant, monkeypatch: MonkeyPatch
+) -> None:
+    """Lovelace resources should create missing expected entries."""
+
+    class FakeResourceCollection:
+        """Minimal resources collection for tests."""
+
+        def __init__(self) -> None:
+            self.loaded = False
+            self.load_calls = 0
+            self.updated: list[tuple[str, dict[str, object]]] = []
+            self.created: list[dict[str, object]] = []
+            self._items: list[dict[str, object]] = [
+                {"id": "1", CONF_URL: None, "type": "js"},
+                {"id": "2", CONF_URL: "/other.js", "type": "js"},
+            ]
+
+        async def async_load(self) -> None:
+            """Track load calls."""
+            self.load_calls += 1
+
+        def async_items(self) -> list[dict[str, object]]:
+            """Return the stored items."""
+            return list(self._items)
+
+        async def async_update_item(
+            self, item_id: str, updates: dict[str, object]
+        ) -> None:
+            """Track updates."""
+            self.updated.append((item_id, updates))
+            for item in self._items:
+                item_id_value = item.get("id")
+                if isinstance(item_id_value, str) and item_id_value == item_id:
+                    item.update(updates)
+
+        async def async_create_item(self, item: dict[str, object]) -> None:
+            """Track creates."""
+            self.created.append(item)
+            self._items.append(item)
+
+    monkeypatch.setattr(
+        init_module, "ResourceStorageCollection", FakeResourceCollection
+    )
+
+    resources = FakeResourceCollection()
+    hass.data[LOVELACE_DATA] = SimpleNamespace(resources=resources)
+
+    await init_module._async_register_lovelace_resources(hass, "lovelace")
+
+    assert resources.load_calls == 1
+    assert resources.loaded is True
+    assert resources.updated == []
+    assert resources.created
+    created = resources.created[0]
+    created_url = created.get(CONF_URL)
+    assert isinstance(created_url, str)
+    assert (
+        created_url.split("?", 1)[0]
+        == "/city_visitor_parking/city-visitor-parking-card.js"
+    )
 
 
 def test_normalize_operating_time_overrides_filters_invalid() -> None:
