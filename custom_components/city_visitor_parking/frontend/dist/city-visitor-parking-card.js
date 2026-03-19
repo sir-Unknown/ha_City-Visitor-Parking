@@ -725,7 +725,9 @@ var applyZoneStatus = (context, status) => {
 var resetZoneStatusThrottle = (context) => context._zoneStatusTsByEntryId.clear();
 var openDateTimePickerForField = (field) => {
   if (!field) return;
-  const input = field instanceof HTMLInputElement ? field : field.shadowRoot?.querySelector("input");
+  const input = field instanceof HTMLInputElement ? field : field.shadowRoot?.querySelector(
+    "input"
+  );
   if (!input) return;
   if (typeof input.showPicker === "function") {
     input.showPicker();
@@ -1097,11 +1099,14 @@ var BaseLocalizedCard = class extends i4 {
     return this._inEditorCache;
   }
 };
-var registerCustomCard = (cardType, ctor, name, description) => {
+var defineElementIfMissing = (tagName, ctor) => {
   const scopedRegistry = window.__scopedElementsRegistry;
   for (const registry of [customElements, scopedRegistry]) {
-    if (registry && !registry.get(cardType)) registry.define(cardType, ctor);
+    if (registry && !registry.get(tagName)) registry.define(tagName, ctor);
   }
+};
+var registerCustomCard = (cardType, ctor, name, description) => {
+  defineElementIfMissing(cardType, ctor);
   const win = window;
   win.customCards = win.customCards || [];
   const existing = win.customCards.find((card) => card.type === cardType);
@@ -1114,22 +1119,13 @@ var registerCustomCard = (cardType, ctor, name, description) => {
 };
 var registerCustomCardWithTranslations = (cardType, ctor, nameKey, descriptionKey) => {
   const registerCard = () => {
-    registerCustomCard(
-      cardType,
-      ctor,
-      getCardText(nameKey),
-      descriptionKey ? getCardText(descriptionKey) : ""
-    );
+    const name = getCardText(nameKey) || cardType;
+    const description = descriptionKey ? getCardText(descriptionKey) : "";
+    registerCustomCard(cardType, ctor, name, description);
   };
-  const attemptRegister = (attempt = 0) => {
-    const hass = getGlobalHass();
-    if (getHassLanguage(hass) || attempt >= 20) {
-      void ensureTranslations(hass).then(registerCard);
-      return;
-    }
-    window.setTimeout(() => attemptRegister(attempt + 1), 500);
-  };
-  attemptRegister();
+  registerCard();
+  const hass = getGlobalHass();
+  void ensureTranslations(hass).then(registerCard);
 };
 var hideCustomCardFromPicker = (cardType) => {
   const applyPatch = (pickerCtor) => {
@@ -1256,7 +1252,7 @@ var CityVisitorParkingCardEditor = class extends BaseCardEditor {
     `;
   }
 };
-customElements.define(
+defineElementIfMissing(
   "city-visitor-parking-card-editor",
   CityVisitorParkingCardEditor
 );
@@ -1336,7 +1332,7 @@ var CityVisitorParkingActiveCardEditor = class extends BaseCardEditor {
     `;
   }
 };
-customElements.define(
+defineElementIfMissing(
   "city-visitor-parking-active-card-editor",
   CityVisitorParkingActiveCardEditor
 );
@@ -2594,7 +2590,10 @@ var getActiveCardConfigForm = createConfigFormGetter(
       const endButtonSuccess = this._endButtonSuccessByReservationId.has(
         reservation.reservation_id
       );
-      const startValue = this._getReservationInputOverride(reservation.reservation_id, "start") ?? formatOptionalDateTimeLocal(reservation.start_time);
+      const startValue = this._getReservationInputOverride(
+        reservation.reservation_id,
+        "start"
+      ) ?? formatOptionalDateTimeLocal(reservation.start_time);
       const endValue = this._getReservationInputOverride(reservation.reservation_id, "end") ?? formatOptionalDateTimeLocal(reservation.end_time);
       const startMin = formatOptionalDateTimeLocal(reservation.start_time);
       const endMin = startValue || startMin;
