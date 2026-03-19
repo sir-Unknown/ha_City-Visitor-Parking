@@ -39,6 +39,13 @@ from .models import ProviderConfig
 OTHER_OPTION: Final[str] = "other"
 SECTION_OPERATING_TIMES: Final[str] = "operating_times"
 
+_AUTH_SCHEMA: Final[vol.Schema] = vol.Schema(
+    {
+        vol.Required(CONF_USERNAME): cv.string,
+        vol.Required(CONF_PASSWORD): cv.string,
+    }
+)
+
 
 class _SelectorModule(Protocol):
     """Protocol for selector module helpers."""
@@ -163,14 +170,18 @@ class CityVisitorParkingConfigFlow(config_entries.ConfigFlow):
         """Handle the authentication step."""
         return await self._async_handle_auth(user_input, step_id="auth")
 
+    def _entry_from_context(self) -> config_entries.ConfigEntry | None:
+        """Return the config entry referenced by the flow context, or None."""
+        entry_id = self.context.get("entry_id")
+        if not isinstance(entry_id, str):
+            return None
+        return self.hass.config_entries.async_get_entry(entry_id)
+
     async def async_step_reauth(
         self, user_input: dict[str, object] | None = None
     ) -> config_entries.ConfigFlowResult:
         """Handle reauthentication."""
-        entry_id = self.context.get("entry_id")
-        if not isinstance(entry_id, str):
-            return self.async_abort(reason="unknown")
-        entry = self.hass.config_entries.async_get_entry(entry_id)
+        entry = self._entry_from_context()
         if entry is None:
             return self.async_abort(reason="unknown")
 
@@ -188,10 +199,7 @@ class CityVisitorParkingConfigFlow(config_entries.ConfigFlow):
         self, user_input: dict[str, object] | None = None
     ) -> config_entries.ConfigFlowResult:
         """Handle reconfiguration."""
-        entry_id = self.context.get("entry_id")
-        if not isinstance(entry_id, str):
-            return self.async_abort(reason="unknown")
-        entry = self.hass.config_entries.async_get_entry(entry_id)
+        entry = self._entry_from_context()
         if entry is None:
             return self.async_abort(reason="unknown")
 
@@ -254,15 +262,7 @@ class CityVisitorParkingConfigFlow(config_entries.ConfigFlow):
         """Validate credentials and move to the next step."""
         errors: dict[str, str] = {}
         if user_input is None:
-            return self.async_show_form(
-                step_id=step_id,
-                data_schema=vol.Schema(
-                    {
-                        vol.Required(CONF_USERNAME): cv.string,
-                        vol.Required(CONF_PASSWORD): cv.string,
-                    }
-                ),
-            )
+            return self.async_show_form(step_id=step_id, data_schema=_AUTH_SCHEMA)
 
         username = cast("str", user_input[CONF_USERNAME])
         password = cast("str", user_input[CONF_PASSWORD])
@@ -275,14 +275,7 @@ class CityVisitorParkingConfigFlow(config_entries.ConfigFlow):
         )
         if errors:
             return self.async_show_form(
-                step_id=step_id,
-                data_schema=vol.Schema(
-                    {
-                        vol.Required(CONF_USERNAME): cv.string,
-                        vol.Required(CONF_PASSWORD): cv.string,
-                    }
-                ),
-                errors=errors,
+                step_id=step_id, data_schema=_AUTH_SCHEMA, errors=errors
             )
 
         if self._reauth_entry is not None:
@@ -488,8 +481,8 @@ def _load_providers_sync() -> dict[str, ProviderConfig]:
         providers[key] = ProviderConfig(
             provider_id=str(config["provider_id"]),
             municipality_name=str(config["municipality_name"]),
-            base_url=str(config.get("base_url")) if config.get("base_url") else None,
-            api_url=str(config.get("api_url")) if config.get("api_url") else None,
+            base_url=_normalize_optional_text(config.get("base_url")),
+            api_url=_normalize_optional_text(config.get("api_url")),
         )
     return providers
 
