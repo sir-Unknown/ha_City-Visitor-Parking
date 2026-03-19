@@ -801,18 +801,25 @@ abstract class BaseLocalizedCard<TConfig> extends LitElement {
   }
 }
 
+const defineElementIfMissing = (
+  tagName: string,
+  ctor: CustomElementConstructor,
+): void => {
+  const scopedRegistry = (
+    window as Window & { __scopedElementsRegistry?: CustomElementRegistry }
+  ).__scopedElementsRegistry;
+  for (const registry of [customElements, scopedRegistry]) {
+    if (registry && !registry.get(tagName)) registry.define(tagName, ctor);
+  }
+};
+
 const registerCustomCard = (
   cardType: string,
   ctor: CustomElementConstructor,
   name: string,
   description: string,
 ): void => {
-  const scopedRegistry = (
-    window as Window & { __scopedElementsRegistry?: CustomElementRegistry }
-  ).__scopedElementsRegistry;
-  for (const registry of [customElements, scopedRegistry]) {
-    if (registry && !registry.get(cardType)) registry.define(cardType, ctor);
-  }
+  defineElementIfMissing(cardType, ctor);
   const win = window as Window & {
     customCards?: Array<{ type: string; name: string; description: string }>;
   };
@@ -833,22 +840,15 @@ const registerCustomCardWithTranslations = (
   descriptionKey: string,
 ): void => {
   const registerCard = (): void => {
-    registerCustomCard(
-      cardType,
-      ctor,
-      getCardText(nameKey),
-      descriptionKey ? getCardText(descriptionKey) : "",
-    );
+    const name = getCardText(nameKey) || cardType;
+    const description = descriptionKey ? getCardText(descriptionKey) : "";
+    registerCustomCard(cardType, ctor, name, description);
   };
-  const attemptRegister = (attempt = 0): void => {
-    const hass = getGlobalHass<HomeAssistant>();
-    if (getHassLanguage(hass) || attempt >= 20) {
-      void ensureTranslations(hass).then(registerCard);
-      return;
-    }
-    window.setTimeout(() => attemptRegister(attempt + 1), 500);
-  };
-  attemptRegister();
+  // Register immediately so Lovelace can instantiate the element before
+  // translations finish loading; then refresh picker metadata when ready.
+  registerCard();
+  const hass = getGlobalHass<HomeAssistant>();
+  void ensureTranslations(hass).then(registerCard);
 };
 
 type PickerCtor = CustomElementConstructor & {
@@ -1030,7 +1030,7 @@ class CityVisitorParkingCardEditor extends BaseCardEditor<ParkingCardEditorConfi
   }
 }
 
-customElements.define(
+defineElementIfMissing(
   "city-visitor-parking-card-editor",
   CityVisitorParkingCardEditor,
 );
@@ -1136,7 +1136,7 @@ class CityVisitorParkingActiveCardEditor extends BaseCardEditor<ActiveParkingCar
   }
 }
 
-customElements.define(
+defineElementIfMissing(
   "city-visitor-parking-active-card-editor",
   CityVisitorParkingActiveCardEditor,
 );
