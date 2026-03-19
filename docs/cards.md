@@ -32,10 +32,12 @@ title: Visitor parking
 
 Storage mode registers resources automatically.
 
-For YAML mode, add these as `module` resources:
+For YAML mode, add this as a `module` resource:
 
-- `/city_visitor_parking/city-visitor-parking-card.js`
-- `/city_visitor_parking/city-visitor-parking-active-card.js`
+- `/city_visitor_parking/city-visitor-parking.js`
+
+Breaking change: legacy resource URLs are no longer served.
+If you were using the old card bundle URLs, see [MIGRATION.md](../MIGRATION.md).
 
 ## Card troubleshooting
 
