@@ -117,9 +117,7 @@ def _error_key(
     return f"{base_key}_detail" if detail_present else base_key
 
 
-def _reservation_error_key(
-    err: PyCityVisitorParkingError, detail_present: bool
-) -> str:
+def _reservation_error_key(err: PyCityVisitorParkingError, detail_present: bool) -> str:
     """Return the translation key for a reservation failure."""
     return _error_key(err, "reservation", detail_present)
 
