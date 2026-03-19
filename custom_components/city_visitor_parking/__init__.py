@@ -229,7 +229,7 @@ def _install_zone_validity_logging(provider: object) -> None:
             return map_zone_validity(raw, fallback_zone=fallback_zone)
         return map_zone_validity(raw)
 
-    setattr(provider, "_map_zone_validity", _wrap)
+    cast("object", provider)._map_zone_validity = _wrap  # type: ignore[attr-defined]
 
 
 def _normalize_operating_time_overrides(

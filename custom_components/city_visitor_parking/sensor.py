@@ -22,7 +22,6 @@ if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
     from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-    from .coordinator import CityVisitorParkingCoordinator
     from .models import CoordinatorData, TimeRange
     from .runtime_data import CityVisitorParkingConfigEntry
 
