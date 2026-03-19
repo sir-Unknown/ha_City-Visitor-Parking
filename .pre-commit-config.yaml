@@ -72,8 +72,6 @@ repos:
         name: hassfest (city_visitor_parking)
         entry: bash scripts/run-hassfest.sh
         args:
-          - -m
-          - script.hassfest
           - --action
           - validate
           - --core-path

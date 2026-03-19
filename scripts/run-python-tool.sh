@@ -7,16 +7,33 @@ REPO_ROOT="$(git rev-parse --show-toplevel)"
 HA_CORE_DIR="${HA_CORE_DIR:-$REPO_ROOT/../homeassistant-core}"
 HA_VENV_PY="${HA_VENV_PY:-$HA_CORE_DIR/venv/bin/python}"
 
-if [[ -x "$HA_VENV_PY" ]]; then
-  PYTHON_BIN="$HA_VENV_PY"
-elif command -v python >/dev/null 2>&1; then
-  PYTHON_BIN="$(command -v python)"
-elif command -v python3 >/dev/null 2>&1; then
-  PYTHON_BIN="$(command -v python3)"
-else
-  echo "No Python interpreter found. Install Python or configure HA_VENV_PY." >&2
+select_python_bin() {
+  local candidate
+  local bin
+
+  if [[ -x "$HA_VENV_PY" ]] && "$HA_VENV_PY" -c "import sys; sys.exit(0)" >/dev/null 2>&1; then
+    echo "$HA_VENV_PY"
+    return 0
+  fi
+
+  for candidate in python python3; do
+    if ! command -v "$candidate" >/dev/null 2>&1; then
+      continue
+    fi
+    bin="$(command -v "$candidate")"
+    if "$bin" -c "import sys; sys.exit(0)" >/dev/null 2>&1; then
+      echo "$bin"
+      return 0
+    fi
+  done
+
+  return 1
+}
+
+PYTHON_BIN="$(select_python_bin)" || {
+  echo "No usable Python interpreter found. Install Python or configure HA_VENV_PY." >&2
   exit 127
-fi
+}
 
 TOOL_MODULE="${1:-}"
 if [[ -z "$TOOL_MODULE" ]]; then
