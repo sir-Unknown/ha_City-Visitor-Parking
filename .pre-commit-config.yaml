@@ -53,7 +53,7 @@ repos:
     hooks:
       - id: mypy
         name: mypy
-        entry: mypy
+        entry: bash scripts/run-python-tool.sh mypy
         language: system
         require_serial: true
         args:
@@ -63,7 +63,7 @@ repos:
         files: ^(custom_components|tests)/.+\.(py|pyi)$
       - id: pyright
         name: pyright
-        entry: pyright
+        entry: bash scripts/run-python-tool.sh pyright
         language: system
         pass_filenames: false
   - repo: local
@@ -72,8 +72,6 @@ repos:
         name: hassfest (city_visitor_parking)
         entry: bash scripts/run-hassfest.sh
         args:
-          - -m
-          - script.hassfest
           - --action
           - validate
           - --core-path
@@ -84,36 +82,38 @@ repos:
         pass_filenames: false
       - id: pytest
         name: pytest
-        entry: pytest
+        entry: bash scripts/run-python-tool.sh pytest
+        args:
+          - tests/components/city_visitor_parking
         language: system
         pass_filenames: false
       - id: frontend-eslint
         name: frontend eslint
-        entry: yarn --cwd custom_components/city_visitor_parking/frontend lint:eslint
+        entry: bash scripts/run-frontend-tool.sh lint:eslint
         language: system
         files: ^custom_components/city_visitor_parking/frontend/src/.*\.ts$
         pass_filenames: false
       - id: frontend-prettier
         name: frontend prettier
-        entry: yarn --cwd custom_components/city_visitor_parking/frontend lint:prettier --write
+        entry: bash scripts/run-frontend-tool.sh lint:prettier
         language: system
         files: ^custom_components/city_visitor_parking/frontend/src/.*\.(ts|json|md|css)$
         pass_filenames: false
       - id: frontend-types
         name: frontend types
-        entry: yarn --cwd custom_components/city_visitor_parking/frontend lint:types
+        entry: bash scripts/run-frontend-tool.sh lint:types
         language: system
         files: ^custom_components/city_visitor_parking/frontend/src/.*\.ts$|^custom_components/city_visitor_parking/frontend/tsconfig\.json$
         pass_filenames: false
       - id: frontend-test
         name: frontend test
-        entry: yarn --cwd custom_components/city_visitor_parking/frontend test
+        entry: bash scripts/run-frontend-tool.sh test
         language: system
         files: ^custom_components/city_visitor_parking/frontend/.*\.(ts|json|md|css)$
         pass_filenames: false
       - id: frontend-build
         name: frontend build
-        entry: yarn --cwd custom_components/city_visitor_parking/frontend build
+        entry: bash scripts/run-frontend-tool.sh build
         language: system
         files: ^custom_components/city_visitor_parking/frontend/.*\.(ts|json|md|css)$
         pass_filenames: false

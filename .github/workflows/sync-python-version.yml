@@ -22,19 +22,27 @@ jobs:
       - name: Fetch HA core Python version
         id: ha_core
         run: |
+          parse_minor() {
+            awk -F. '{ if (NF >= 2) print $1 "." $2; else print $1 }' <<<"$1"
+          }
           VERSION=$(curl -sf \
             -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
             "https://raw.githubusercontent.com/home-assistant/core/dev/.python-version" \
             | tr -d '[:space:]')
+          MINOR="$(parse_minor "$VERSION")"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "minor=${VERSION%.*}" >> "$GITHUB_OUTPUT"
+          echo "minor=$MINOR" >> "$GITHUB_OUTPUT"
 
       - name: Read current Python version
         id: current
         run: |
+          parse_minor() {
+            awk -F. '{ if (NF >= 2) print $1 "." $2; else print $1 }' <<<"$1"
+          }
           VERSION=$(cat .python-version | tr -d '[:space:]')
+          MINOR="$(parse_minor "$VERSION")"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "minor=${VERSION%.*}" >> "$GITHUB_OUTPUT"
+          echo "minor=$MINOR" >> "$GITHUB_OUTPUT"
 
       - name: Open PR if version changed
         if: steps.ha_core.outputs.version != steps.current.outputs.version
