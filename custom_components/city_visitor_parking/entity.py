@@ -24,12 +24,12 @@ class CityVisitorParkingEntity(
 
     _attr_has_entity_name: bool = True
     _attr_available: bool = True
+    _entity_key: str
 
     def __init__(
         self,
         coordinator: CityVisitorParkingCoordinator,
         entry: CityVisitorParkingConfigEntry,
-        key: str,
     ) -> None:
         """Initialize the entity."""
         super().__init__(coordinator)
@@ -41,7 +41,7 @@ class CityVisitorParkingEntity(
             if municipality and permit_id
             else entry.title
         )
-        self._attr_unique_id = f"{entry.unique_id}:{key}"
+        self._attr_unique_id = f"{entry.unique_id}:{self._entity_key}"
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, entry.entry_id)},
             name=device_name,
@@ -52,10 +52,15 @@ class CityVisitorParkingEntity(
         self._attr_extra_state_attributes: dict[str, object] = {
             ATTR_ATTRIBUTION: "Data provided by your municipality",
         }
+        self._update_from_coordinator()
+
+    def _update_from_coordinator(self) -> None:
+        """Update entity state from coordinator data. Override in subclasses."""
 
     @callback
     def _handle_coordinator_update(self) -> None:
-        """Update availability before writing state."""
+        """Update entity state and availability."""
+        self._update_from_coordinator()
         self._attr_available = self.coordinator.last_update_success
         super()._handle_coordinator_update()
 

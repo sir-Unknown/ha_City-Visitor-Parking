@@ -210,16 +210,12 @@ def _install_zone_validity_logging(provider: object) -> None:
             fallback = cast("Mapping[str, object]", fallback_zone)
             start_raw = fallback.get("start_time")
             end_raw = fallback.get("end_time")
-            has_candidates = False
-            if isinstance(raw, list):
-                raw_list = cast("list[object]", raw)
-                for item in raw_list:
-                    if not isinstance(item, Mapping):
-                        continue
-                    item_map = cast("Mapping[str, object]", item)
-                    if item_map.get("start_time") and item_map.get("end_time"):
-                        has_candidates = True
-                        break
+            has_candidates = isinstance(raw, list) and any(
+                isinstance(item, Mapping)
+                and cast("Mapping[str, object]", item).get("start_time")
+                and cast("Mapping[str, object]", item).get("end_time")
+                for item in cast("list[object]", raw)
+            )
             if not has_candidates and start_raw and end_raw:
                 _LOGGER.debug(
                     "Provider %s zone validity fallback details %s "
@@ -233,8 +229,7 @@ def _install_zone_validity_logging(provider: object) -> None:
             return map_zone_validity(raw, fallback_zone=fallback_zone)
         return map_zone_validity(raw)
 
-    attr_name = "_map_zone_validity"
-    setattr(provider, attr_name, _wrap)
+    cast("object", provider)._map_zone_validity = _wrap  # type: ignore[attr-defined]
 
 
 def _normalize_operating_time_overrides(
@@ -311,7 +306,7 @@ async def _async_register_frontend(hass: HomeAssistant, _component: str) -> None
             StaticPathConfig(
                 url_path="/city_visitor_parking/translations",
                 path=str(translations_path),
-                cache_headers=False,
+                cache_headers=True,
             )
         )
     else:
@@ -374,8 +369,7 @@ async def _async_get_desired_resource_urls(
         return None
 
     desired_files: list[str] = [
-        "city-visitor-parking-card.js",
-        "city-visitor-parking-active-card.js",
+        "city-visitor-parking.js",
     ]
     desired_urls: dict[str, str] = {}
     for filename in desired_files:
