@@ -2,27 +2,25 @@
 
 ## Frontend Bundle Consolidation
 
-The Lovelace frontend bundles were consolidated into a single file:
-
-- New resource URL: `/city_visitor_parking/city-visitor-parking.js`
-
-Legacy resource URLs are no longer served:
+The Lovelace frontend bundles were consolidated to a single served resource:
 
 - `/city_visitor_parking/city-visitor-parking-card.js`
+
+The legacy active-card resource URL is no longer served:
+
 - `/city_visitor_parking/city-visitor-parking-active-card.js`
 
 ### What to change
 
-For YAML dashboards, update your resources and keep only:
+For YAML dashboards, keep this resource:
 
 ```yaml
 resources:
-  - url: /city_visitor_parking/city-visitor-parking.js
+  - url: /city_visitor_parking/city-visitor-parking-card.js
     type: module
 ```
 
-Remove old `city-visitor-parking-card.js` and
-`city-visitor-parking-active-card.js` entries.
+Remove `city-visitor-parking-active-card.js` if it is still listed.
 
 ### After updating
 

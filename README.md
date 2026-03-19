@@ -172,11 +172,10 @@ title: Visitor parking
 
 If you use YAML dashboards, add this as a `module` resource:
 
-- `/city_visitor_parking/city-visitor-parking.js`
+- `/city_visitor_parking/city-visitor-parking-card.js`
 
-Breaking change: legacy frontend bundle URLs are no longer served.  
-If you previously used `city-visitor-parking-card.js` and/or
-`city-visitor-parking-active-card.js`, follow [MIGRATION.md](MIGRATION.md).
+Breaking change: the `city-visitor-parking-active-card.js` resource URL is no
+longer served. See [MIGRATION.md](MIGRATION.md).
 
 More details: [docs/cards.md](docs/cards.md)
 

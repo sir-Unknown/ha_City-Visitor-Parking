@@ -369,7 +369,7 @@ async def _async_get_desired_resource_urls(
         return None
 
     desired_files: list[str] = [
-        "city-visitor-parking.js",
+        "city-visitor-parking-card.js",
     ]
     desired_urls: dict[str, str] = {}
     for filename in desired_files:
