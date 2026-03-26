@@ -20,6 +20,13 @@ def normalize_override_windows(value: object) -> list[dict[str, object]]:
     return []
 
 
+def normalize_plate(value: str | None) -> str:
+    """Normalize a license plate for matching (uppercase alphanumeric only)."""
+    if not value:
+        return ""
+    return "".join(ch for ch in value.strip().upper() if ch.isalnum())
+
+
 def get_attr(obj: object, name: str) -> object | None:
     """Return attribute or mapping value for name."""
     if isinstance(obj, Mapping):

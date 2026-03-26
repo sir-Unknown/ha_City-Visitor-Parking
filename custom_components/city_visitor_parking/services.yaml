@@ -154,9 +154,33 @@ remove_favorite:
       selector:
         text: {}
 
-list_active_reservations:
-  name: List active reservations
-  description: Return active reservations for a permit, including license plate and favorite info when available.
+list_reservations:
+  name: List reservations
+  description: Return all non-expired reservations for a permit, including license plate and favorite info when available.
+  fields:
+    device_id:
+      name: Device
+      description: The visitor parking device to target.
+      required: true
+      selector:
+        device:
+          integration: city_visitor_parking
+
+get_status:
+  name: Get status
+  description: Return the current permit status and effective chargeable windows for a permit.
+  fields:
+    device_id:
+      name: Device
+      description: The visitor parking device to target.
+      required: true
+      selector:
+        device:
+          integration: city_visitor_parking
+
+get_entry_info:
+  name: Get entry info
+  description: Return non-sensitive metadata for a permit configuration.
   fields:
     device_id:
       name: Device

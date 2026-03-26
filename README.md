@@ -119,7 +119,7 @@ If your municipality/provider is missing, open an issue and include your municip
 - List and select permits.
 - Start, update, and end sessions.
 - Manage favorites (add, update, remove).
-- List favorites and active reservations for automations.
+- List favorites and reservations for automations.
 - Create sensors for status and balance.
 
 ## Known limitations
