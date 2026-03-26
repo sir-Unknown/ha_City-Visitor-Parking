@@ -600,9 +600,7 @@ async def _async_handle_list_favorites(call: ServiceCall) -> dict[str, JsonValue
 
     normalized: list[JsonValueType] = []
     for favorite in normalize_favorites(favorites):
-        payload: dict[str, JsonValueType] = {
-            ATTR_FAVORITE_ID: favorite.get("id", "")
-        }
+        payload: dict[str, JsonValueType] = {ATTR_FAVORITE_ID: favorite.get("id", "")}
         if "license_plate" in favorite:
             payload[ATTR_LICENSE_PLATE] = favorite["license_plate"]
         if "name" in favorite:
