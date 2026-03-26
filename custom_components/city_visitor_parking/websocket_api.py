@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import logging
 import time
-from datetime import datetime
 from typing import TYPE_CHECKING, Final, cast
 
 import voluptuous as vol
@@ -18,6 +17,8 @@ from .const import DOMAIN
 from .payloads import build_status_payload, normalize_favorites
 
 if TYPE_CHECKING:
+    from datetime import datetime
+
     from homeassistant.core import HomeAssistant
     from pycityvisitorparking import Favorite as ProviderFavorite
 
