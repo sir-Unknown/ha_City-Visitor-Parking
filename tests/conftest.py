@@ -6,8 +6,11 @@ import sys
 from dataclasses import dataclass
 from types import ModuleType
 from typing import Any, cast
+from unittest.mock import patch
 
 import pytest
+import pytest_asyncio
+from aiohttp.resolver import ThreadedResolver
 
 pytest_plugins = "pytest_homeassistant_custom_component"
 
@@ -122,6 +125,28 @@ sys.modules.setdefault("pycityvisitorparking.exceptions", exceptions_module)
 def _enable_custom_integrations(enable_custom_integrations: None) -> None:
     """Enable custom integrations for tests."""
     _ = enable_custom_integrations
+
+
+@pytest.fixture(autouse=True)
+def verify_cleanup() -> None:
+    """Override plugin cleanup verification for this sandboxed test environment."""
+
+
+@pytest_asyncio.fixture(autouse=True, scope="session", loop_scope="session")
+async def mock_zeroconf_resolver() -> None:
+    """Mock the HA aiohttp zeroconf resolver to avoid real pycares threads."""
+    resolver = ThreadedResolver()
+    resolver.real_close = resolver.close
+    patcher = patch(
+        "homeassistant.helpers.aiohttp_client._async_make_resolver",
+        return_value=resolver,
+    )
+    patcher.start()
+    try:
+        yield
+    finally:
+        patcher.stop()
+        await resolver.close()
 
 
 @pytest.fixture
