@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import time
+from datetime import datetime
 from typing import TYPE_CHECKING, Final, cast
 
 import voluptuous as vol
@@ -35,6 +36,13 @@ async def async_setup_websocket(hass: HomeAssistant) -> None:
     """Set up WebSocket commands."""
     websocket_api.async_register_command(hass, _ws_list_favorites)
     websocket_api.async_register_command(hass, _ws_get_status)
+
+
+def _as_utc_iso(value: datetime | None) -> str | None:
+    """Return a UTC ISO8601 timestamp string."""
+    if value is None:
+        return None
+    return dt_util.as_utc(value).isoformat()
 
 
 def _get_loaded_entry(
