@@ -56,6 +56,7 @@ SERVICE_END_RESERVATION: Final[str] = "end_reservation"
 SERVICE_ADD_FAVORITE: Final[str] = "add_favorite"
 SERVICE_UPDATE_FAVORITE: Final[str] = "update_favorite"
 SERVICE_REMOVE_FAVORITE: Final[str] = "remove_favorite"
+SERVICE_LIST_ACTIVE_RESERVATIONS: Final[str] = "list_active_reservations"
 SERVICE_LIST_RESERVATIONS: Final[str] = "list_reservations"
 SERVICE_LIST_FAVORITES: Final[str] = "list_favorites"
 SERVICE_GET_STATUS: Final[str] = "get_status"
@@ -275,6 +276,13 @@ async def async_setup_services(hass: HomeAssistant) -> None:
     hass.services.async_register(
         DOMAIN,
         SERVICE_LIST_RESERVATIONS,
+        _async_handle_list_reservations,
+        schema=SERVICE_LIST_RESERVATIONS_SCHEMA,
+        supports_response=SupportsResponse.ONLY,
+    )
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_LIST_ACTIVE_RESERVATIONS,
         _async_handle_list_reservations,
         schema=SERVICE_LIST_RESERVATIONS_SCHEMA,
         supports_response=SupportsResponse.ONLY,
@@ -573,6 +581,9 @@ async def _async_handle_list_reservations(
         "count": len(visible),
         "active_count": len(active),
         "future_count": len(future),
+        # Keep the legacy response key during the migration window so the
+        # existing card and automations do not break when only the backend updates.
+        "active_reservations": reservation_payloads,
         "reservations": reservation_payloads,
         "stale": stale,
         "reservation_update_fields": reservation_update_fields_json,

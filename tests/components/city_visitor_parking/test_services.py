@@ -916,6 +916,7 @@ async def test_service_list_reservations_response(
         ATTR_END_TIME,
     }
     reservations = response["reservations"]
+    assert response["active_reservations"] == reservations
     assert len(reservations) == EXPECTED_COUNT
     active_payload = next(
         item for item in reservations if item[ATTR_RESERVATION_ID] == "res1"

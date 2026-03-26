@@ -20,7 +20,6 @@ if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
     from pycityvisitorparking import Favorite as ProviderFavorite
 
-    from .models import CoordinatorData
     from .runtime_data import (
         CityVisitorParkingConfigEntry,
         CityVisitorParkingRuntimeData,
