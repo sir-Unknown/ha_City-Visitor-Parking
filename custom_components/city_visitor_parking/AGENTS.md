@@ -158,7 +158,7 @@ rules:
   await self.async_set_unique_id(device_unique_id)
   self._abort_if_unique_id_configured()
   ```
-- **Error Handling**: Define errors in `strings.json` under `config.error`
+- **Error Handling**: Define errors in `translations/en.json` under `config.error` and mirror them in other language files
 - **Step Methods**: Use standard naming (`async_step_user`, `async_step_discovery`, etc.)
 
 ### Integration Ownership
@@ -750,7 +750,7 @@ rules:
       translation_key="outdated_version",
   )
   ```
-- **Translation Strings Requirements**: Must contain user-actionable text in `strings.json`:
+- **Translation Strings Requirements**: Must contain user-actionable text in `translations/en.json`:
   ```json
   {
     "issues": {
@@ -821,7 +821,7 @@ rules:
       _attr_has_entity_name = True
       _attr_translation_key = "phase_voltage"
   ```
-- Create `strings.json` with translations:
+- Create `translations/en.json` with translations:
   ```json
   {
     "entity": {
@@ -844,7 +844,7 @@ rules:
       translation_key="end_date_before_start_date",
   )
   ```
-- Add to `strings.json`:
+- Add to `translations/en.json`:
   ```json
   {
     "exceptions": {
@@ -953,10 +953,7 @@ rules:
 
 ### Translations
 
-- **Update translations after strings.json changes**:
-  ```bash
-  python -m script.translations develop --all
-  ```
+- **Custom integrations**: Maintain full translation files directly in `translations/en.json` and `translations/<language>.json`
 
 ### Project Validation
 
@@ -983,7 +980,7 @@ homeassistant/components/my_integration/
 ├── coordinator.py      # Data update coordinator (if needed)
 ├── entity.py          # Base entity class (if shared patterns)
 ├── sensor.py          # Sensor platform
-├── strings.json        # User-facing text and translations
+├── translations/       # User-facing text per language
 ├── services.yaml       # Service definitions (if applicable)
 └── quality_scale.yaml  # Quality scale rule status
 ```
@@ -1000,7 +997,7 @@ homeassistant/components/my_integration/
 - [ ] `__init__.py` with `async_setup_entry` and `async_unload_entry`
 - [ ] `config_flow.py` with UI configuration support
 - [ ] `const.py` with `DOMAIN` constant
-- [ ] `strings.json` with at least config flow text
+- [ ] `translations/en.json` with at least config flow text
 - [ ] Platform files (`sensor.py`, etc.) as needed
 - [ ] `quality_scale.yaml` with rule status tracking
 
@@ -1239,7 +1236,7 @@ async def init_integration(
 
 - **Integration won't load**: Check `manifest.json` syntax and required fields
 - **Entities not appearing**: Verify `unique_id` and `has_entity_name` implementation
-- **Config flow errors**: Check `strings.json` entries and error handling
+- **Config flow errors**: Check `translations/en.json` entries and error handling
 - **Discovery not working**: Verify manifest discovery configuration and callbacks
 - **Tests failing**: Check mock setup and async context
 
