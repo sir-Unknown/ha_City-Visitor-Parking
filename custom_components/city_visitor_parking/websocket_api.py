@@ -14,7 +14,6 @@ from homeassistant.util import dt as dt_util
 from pycityvisitorparking.exceptions import PyCityVisitorParkingError
 
 from .const import DOMAIN
-from .models import CoordinatorData
 from .payloads import build_status_payload, normalize_favorites
 
 if TYPE_CHECKING:
@@ -121,7 +120,7 @@ async def _ws_get_status(
 
     runtime: CityVisitorParkingRuntimeData = entry.runtime_data
     try:
-        data = cast("CoordinatorData | None", runtime.coordinator.data)
+        data = runtime.coordinator.data
         stale = not runtime.coordinator.last_update_success
         now = dt_util.utcnow()
         if data is None:
