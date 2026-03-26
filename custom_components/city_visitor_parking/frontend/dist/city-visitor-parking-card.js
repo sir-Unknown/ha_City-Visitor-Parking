@@ -856,7 +856,7 @@ var formatDateTimeLocal = (date) => `${formatDate(date)}T${pad(date.getHours())}
 var HA_STARTING_MESSAGE_KEY = "ui.panel.lovelace.warning.starting";
 var getCardText = (key) => {
   const value = localize(getGlobalHass(), key);
-  return value === key ? "" : value;
+  return value === key ? null : value;
 };
 var getConfigEntryId = (config) => config?.config_entry_id ?? null;
 var filterDomainDevices = (devices, domain = DOMAIN) => devices.filter(
@@ -1076,7 +1076,6 @@ var BaseLocalizedCard = class extends i4 {
     this._hass = null;
     this._statusState = createStatusState();
     this._requestRender = createRenderScheduler(() => this.requestUpdate());
-    this._inEditorCache = null;
     this._localize = createLocalize(() => this._hass);
     this._errorMessage = createErrorMessage(() => this._hass);
   }
@@ -1093,10 +1092,7 @@ var BaseLocalizedCard = class extends i4 {
     clearStatusState(this._statusState, this._requestRender);
   }
   _isInEditor() {
-    if (this._inEditorCache === null) {
-      this._inEditorCache = isInEditor(this);
-    }
-    return this._inEditorCache;
+    return isInEditor(this);
   }
 };
 var defineElementIfMissing = (tagName, ctor) => {
@@ -1119,8 +1115,8 @@ var registerCustomCard = (cardType, ctor, name, description) => {
 };
 var registerCustomCardWithTranslations = (cardType, ctor, nameKey, descriptionKey) => {
   const registerCard = () => {
-    const name = getCardText(nameKey) || cardType;
-    const description = descriptionKey ? getCardText(descriptionKey) : "";
+    const name = getCardText(nameKey) ?? cardType;
+    const description = descriptionKey ? getCardText(descriptionKey) ?? "" : "";
     registerCustomCard(cardType, ctor, name, description);
   };
   registerCard();
@@ -1394,6 +1390,7 @@ var getActiveCardConfigForm = createConfigFormGetter(
       this._pendingPermitDefaultsEntryId = null;
       this._pendingPermitDefaultsForce = false;
       this._statusRefreshHandle = null;
+      this._statusVisibilityHandler = null;
       this._translationsReady = false;
       this._translationsLanguage = null;
       this._onClick = (event) => this._handleClick(event);
@@ -1469,10 +1466,6 @@ var getActiveCardConfigForm = createConfigFormGetter(
         resetZoneStatusThrottle(this);
       }
       this._syncEntryState(false);
-    }
-    connectedCallback() {
-      super.connectedCallback();
-      this._inEditorCache = null;
     }
     disconnectedCallback() {
       super.disconnectedCallback();
@@ -1939,8 +1932,7 @@ var getActiveCardConfigForm = createConfigFormGetter(
     _handlePermitChange(value) {
       if (!value) {
         this._selectedEntryId = null;
-        this._pendingPermitDefaultsEntryId = null;
-        this._pendingPermitDefaultsForce = false;
+        setPendingPermitDefaults(this, null);
         this._clearStatusRefresh();
         this._resetDeviceState();
         this._clearFormValues();
@@ -2006,18 +1998,31 @@ var getActiveCardConfigForm = createConfigFormGetter(
     _setupStatusRefresh(entryId) {
       this._clearStatusRefresh();
       if (!getConfigEntryId(this._config) || !entryId) return;
-      this._statusRefreshHandle = window.setInterval(() => {
+      const refresh = () => {
         if (!this._hass) return;
         const activeEntryId = this._getActiveEntryId();
         if (!activeEntryId || activeEntryId !== entryId) return;
         setPendingPermitDefaults(this, entryId);
         void this._loadZoneStatusForEntry(entryId);
-      }, STATUS_REFRESH_MS);
+      };
+      this._statusRefreshHandle = window.setInterval(refresh, STATUS_REFRESH_MS);
+      this._statusVisibilityHandler = () => {
+        if (document.visibilityState === "visible") refresh();
+      };
+      document.addEventListener("visibilitychange", this._statusVisibilityHandler);
     }
     _clearStatusRefresh() {
-      if (this._statusRefreshHandle === null) return;
-      window.clearInterval(this._statusRefreshHandle);
-      this._statusRefreshHandle = null;
+      if (this._statusRefreshHandle !== null) {
+        window.clearInterval(this._statusRefreshHandle);
+        this._statusRefreshHandle = null;
+      }
+      if (this._statusVisibilityHandler !== null) {
+        document.removeEventListener(
+          "visibilitychange",
+          this._statusVisibilityHandler
+        );
+        this._statusVisibilityHandler = null;
+      }
     }
     _setFavorites(favorites) {
       this._favorites = favorites;
@@ -2219,9 +2224,8 @@ var getActiveCardConfigForm = createConfigFormGetter(
       return { id: element.id, value };
     }
     _setInputValue(id, value) {
-      const safeValue = value ?? "";
-      if (this._formValues[id] === safeValue) return;
-      this._formValues[id] = safeValue;
+      if (this._formValues[id] === value) return;
+      this._formValues[id] = value;
       this._requestRender();
     }
     _syncEndWithStart() {
@@ -2347,7 +2351,7 @@ var getActiveCardConfigForm = createConfigFormGetter(
 })();
 (() => {
   const CARD_TYPE = "city-visitor-parking-active-card";
-  const SERVICE_LIST_ACTIVE_RESERVATIONS = "list_active_reservations";
+  const SERVICE_LIST_RESERVATIONS = "list_reservations";
   const SERVICE_UPDATE_RESERVATION = "update_reservation";
   const SERVICE_END_RESERVATION = "end_reservation";
   const UPDATE_START_FLAG = 1;
@@ -2368,6 +2372,7 @@ var getActiveCardConfigForm = createConfigFormGetter(
       this._reservationInFlight = /* @__PURE__ */ new Set();
       this._endButtonSuccessByReservationId = /* @__PURE__ */ new Set();
       this._endButtonSuccessTimeoutByReservationId = /* @__PURE__ */ new Map();
+      this._endButtonSuccessResolverByReservationId = /* @__PURE__ */ new Map();
       this._pendingReservationNameByKey = /* @__PURE__ */ new Map();
       this._reservationInputValues = /* @__PURE__ */ new Map();
       this._onActionClick = (event) => this._handleActionClick(event);
@@ -2377,7 +2382,6 @@ var getActiveCardConfigForm = createConfigFormGetter(
     }
     connectedCallback() {
       super.connectedCallback();
-      this._inEditorCache = null;
       if (!this._reservationStartedHandler) {
         this._reservationStartedHandler = (event) => {
           const detail = event.detail;
@@ -2400,6 +2404,10 @@ var getActiveCardConfigForm = createConfigFormGetter(
         window.clearTimeout(timeoutHandle);
       }
       this._endButtonSuccessTimeoutByReservationId.clear();
+      for (const resolve of this._endButtonSuccessResolverByReservationId.values()) {
+        resolve();
+      }
+      this._endButtonSuccessResolverByReservationId.clear();
       this._endButtonSuccessByReservationId.clear();
       this._pendingReservationNameByKey.clear();
       if (this._reservationStartedHandler) {
@@ -2476,7 +2484,7 @@ var getActiveCardConfigForm = createConfigFormGetter(
             (device) => this._hass.callWS({
               type: "call_service",
               domain: DOMAIN,
-              service: SERVICE_LIST_ACTIVE_RESERVATIONS,
+              service: SERVICE_LIST_RESERVATIONS,
               return_response: true,
               service_data: { device_id: device.id }
             })
@@ -2488,7 +2496,7 @@ var getActiveCardConfigForm = createConfigFormGetter(
         for (const [index, result] of results.entries()) {
           const device = devices[index];
           const response = result?.response ?? result;
-          const activeReservations = response?.active_reservations;
+          const activeReservations = response?.reservations;
           const updateFields = response?.reservation_update_fields;
           if (Array.isArray(updateFields)) {
             const updateFlags = (updateFields.includes("start_time") ? UPDATE_START_FLAG : 0) | (updateFields.includes("end_time") ? UPDATE_END_FLAG : 0);
@@ -2522,6 +2530,8 @@ var getActiveCardConfigForm = createConfigFormGetter(
             window.clearTimeout(timeoutHandle);
             this._endButtonSuccessTimeoutByReservationId.delete(reservationId);
           }
+          this._endButtonSuccessResolverByReservationId.get(reservationId)?.();
+          this._endButtonSuccessResolverByReservationId.delete(reservationId);
           this._endButtonSuccessByReservationId.delete(reservationId);
         }
       } catch (err) {
@@ -2826,12 +2836,16 @@ var getActiveCardConfigForm = createConfigFormGetter(
       const existingTimeout = this._endButtonSuccessTimeoutByReservationId.get(reservationId);
       if (existingTimeout !== void 0) {
         window.clearTimeout(existingTimeout);
+        this._endButtonSuccessResolverByReservationId.get(reservationId)?.();
+        this._endButtonSuccessResolverByReservationId.delete(reservationId);
       }
       this._endButtonSuccessByReservationId.add(reservationId);
       this._requestRender();
       return new Promise((resolve) => {
+        this._endButtonSuccessResolverByReservationId.set(reservationId, resolve);
         const timeoutHandle = window.setTimeout(() => {
           this._endButtonSuccessTimeoutByReservationId.delete(reservationId);
+          this._endButtonSuccessResolverByReservationId.delete(reservationId);
           this._endButtonSuccessByReservationId.delete(reservationId);
           this._requestRender();
           resolve();
