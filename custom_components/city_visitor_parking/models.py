@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
@@ -52,7 +53,7 @@ class ZoneAvailability:
 
     is_chargeable_now: bool
     next_change_time: datetime | None
-    windows_today: list[TimeRange]
+    windows_today: Sequence[TimeRange]
 
 
 @dataclass(frozen=True)
@@ -61,11 +62,11 @@ class CoordinatorData:
 
     permit_id: str
     permit_remaining_minutes: int
-    zone_validity: list[TimeRange]
-    reservations: list[Reservation]
-    favorites: list[Favorite]
+    zone_validity: Sequence[TimeRange]
+    reservations: Sequence[Reservation]
+    favorites: Sequence[Favorite]
     zone_availability: ZoneAvailability
-    active_reservations: list[Reservation]
+    active_reservations: Sequence[Reservation]
 
 
 def _default_attempts() -> dict[str, datetime]:
