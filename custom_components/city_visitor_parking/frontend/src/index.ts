@@ -838,7 +838,9 @@ const registerCustomCardWithTranslations = (
 ): void => {
   const registerCard = (): void => {
     const name = getCardText(nameKey) ?? cardType;
-    const description = descriptionKey ? (getCardText(descriptionKey) ?? "") : "";
+    const description = descriptionKey
+      ? (getCardText(descriptionKey) ?? "")
+      : "";
     registerCustomCard(cardType, ctor, name, description);
   };
   // Register immediately so Lovelace can instantiate the element before
@@ -1976,11 +1978,17 @@ const getActiveCardConfigForm = createConfigFormGetter(
         setPendingPermitDefaults(this, entryId);
         void this._loadZoneStatusForEntry(entryId);
       };
-      this._statusRefreshHandle = window.setInterval(refresh, STATUS_REFRESH_MS);
+      this._statusRefreshHandle = window.setInterval(
+        refresh,
+        STATUS_REFRESH_MS,
+      );
       this._statusVisibilityHandler = () => {
         if (document.visibilityState === "visible") refresh();
       };
-      document.addEventListener("visibilitychange", this._statusVisibilityHandler);
+      document.addEventListener(
+        "visibilitychange",
+        this._statusVisibilityHandler,
+      );
     }
 
     _clearStatusRefresh(): void {
@@ -3030,7 +3038,10 @@ const getActiveCardConfigForm = createConfigFormGetter(
       this._endButtonSuccessByReservationId.add(reservationId);
       this._requestRender();
       return new Promise((resolve) => {
-        this._endButtonSuccessResolverByReservationId.set(reservationId, resolve);
+        this._endButtonSuccessResolverByReservationId.set(
+          reservationId,
+          resolve,
+        );
         const timeoutHandle = window.setTimeout(() => {
           this._endButtonSuccessTimeoutByReservationId.delete(reservationId);
           this._endButtonSuccessResolverByReservationId.delete(reservationId);
