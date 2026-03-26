@@ -14,6 +14,7 @@ from homeassistant.util import dt as dt_util
 from pycityvisitorparking.exceptions import PyCityVisitorParkingError
 
 from .const import DOMAIN
+from .models import CoordinatorData
 from .payloads import build_status_payload, normalize_favorites
 
 if TYPE_CHECKING:
