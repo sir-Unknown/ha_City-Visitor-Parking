@@ -121,27 +121,23 @@ class CityVisitorParkingConfigFlow(config_entries.ConfigFlow):
         self, user_input: dict[str, object] | None = None
     ) -> config_entries.ConfigFlowResult:
         """Handle manual provider configuration."""
-        errors: dict[str, str] = {}
-        providers = []
         if user_input is None:
             try:
                 providers = await _async_list_providers()
             except NetworkError:
-                errors["base"] = "cannot_connect"
+                return self.async_abort(reason="cannot_connect")
             # Allowed in config flow
             except Exception as err:
                 _LOGGER.debug(
                     "Unexpected error while listing providers: %s",
                     type(err).__name__,
                 )
-                errors["base"] = "unknown"
+                return self.async_abort(reason="unknown")
 
-        provider_options = [
-            selector.SelectOptionDict(value=provider, label=provider)
-            for provider in providers
-        ]
-
-        if user_input is None or errors:
+            provider_options = [
+                selector.SelectOptionDict(value=provider, label=provider)
+                for provider in providers
+            ]
             schema = vol.Schema(
                 {
                     vol.Required(CONF_PROVIDER_ID): SELECTOR(
@@ -152,9 +148,7 @@ class CityVisitorParkingConfigFlow(config_entries.ConfigFlow):
                     vol.Optional(CONF_API_URL): cv.string,
                 }
             )
-            return self.async_show_form(
-                step_id="other", data_schema=schema, errors=errors
-            )
+            return self.async_show_form(step_id="other", data_schema=schema)
 
         self._provider_config = ProviderConfig(
             provider_id=cast("str", user_input[CONF_PROVIDER_ID]),
@@ -373,15 +367,11 @@ class CityVisitorParkingConfigFlow(config_entries.ConfigFlow):
         config_entry: config_entries.ConfigEntry,
     ) -> config_entries.OptionsFlow:
         """Return the options flow handler."""
-        return CityVisitorParkingOptionsFlow(config_entry)
+        return CityVisitorParkingOptionsFlow()
 
 
 class CityVisitorParkingOptionsFlow(config_entries.OptionsFlow):
     """Handle options for City visitor parking."""
-
-    def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
-        """Initialize options flow."""
-        self._config_entry: config_entries.ConfigEntry = config_entry
 
     async def async_step_init(
         self, user_input: dict[str, object] | None = None
@@ -413,11 +403,11 @@ class CityVisitorParkingOptionsFlow(config_entries.OptionsFlow):
         self, user_input: dict[str, object] | None, errors: dict[str, str]
     ) -> config_entries.ConfigFlowResult:
         """Show the options form."""
-        overrides = self._config_entry.options.get(CONF_OPERATING_TIME_OVERRIDES, {})
+        overrides = self.config_entry.options.get(CONF_OPERATING_TIME_OVERRIDES, {})
         if not isinstance(overrides, Mapping):
             overrides = {}
         overrides = cast("Mapping[str, object]", overrides)
-        defaults = {CONF_AUTO_END: self._config_entry.options.get(CONF_AUTO_END, False)}
+        defaults = {CONF_AUTO_END: self.config_entry.options.get(CONF_AUTO_END, False)}
         if user_input is not None:
             raw_auto_end = user_input.get(CONF_AUTO_END)
             if isinstance(raw_auto_end, bool):

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import inspect
 import logging
 import time
 from collections.abc import Callable, Mapping
@@ -132,8 +131,6 @@ async def async_setup_entry(
         base_url=provider_config.base_url,
         api_uri=provider_config.api_url,
     )
-    _install_zone_validity_logging(provider)
-
     login_started = time.perf_counter()
     try:
         await provider.login(
@@ -186,52 +183,6 @@ async def async_setup_entry(
     return True
 
 
-def _install_zone_validity_logging(provider: object) -> None:
-    """Add extra debug logging when zone validity falls back to the zone block."""
-    map_zone_validity = getattr(provider, "_map_zone_validity", None)
-    provider_id = getattr(provider, "provider_id", "unknown")
-    if not callable(map_zone_validity):
-        return
-
-    def _summarize_raw(raw: object) -> str:
-        if raw is None:
-            return "raw=None"
-        if isinstance(raw, list):
-            raw_list = cast("list[object]", raw)
-            return f"raw=list(count={len(raw_list)})"
-        return f"raw={type(raw).__name__}"
-
-    accepts_fallback = (
-        "fallback_zone" in inspect.signature(map_zone_validity).parameters
-    )
-
-    def _wrap(raw: object, *, fallback_zone: object | None = None) -> object:
-        if isinstance(fallback_zone, Mapping):
-            fallback = cast("Mapping[str, object]", fallback_zone)
-            start_raw = fallback.get("start_time")
-            end_raw = fallback.get("end_time")
-            has_candidates = isinstance(raw, list) and any(
-                isinstance(item, Mapping)
-                and cast("Mapping[str, object]", item).get("start_time")
-                and cast("Mapping[str, object]", item).get("end_time")
-                for item in cast("list[object]", raw)
-            )
-            if not has_candidates and start_raw and end_raw:
-                _LOGGER.debug(
-                    "Provider %s zone validity fallback details %s "
-                    "fallback_start=%s fallback_end=%s",
-                    provider_id,
-                    _summarize_raw(cast("object", raw)),
-                    start_raw,
-                    end_raw,
-                )
-        if accepts_fallback:
-            return map_zone_validity(raw, fallback_zone=fallback_zone)
-        return map_zone_validity(raw)
-
-    cast("object", provider)._map_zone_validity = _wrap  # type: ignore[attr-defined]
-
-
 def _normalize_operating_time_overrides(
     options: Mapping[str, object],
 ) -> OperatingTimeOverrides:
@@ -267,8 +218,6 @@ async def _async_update_listener(
     if overrides != runtime.operating_time_overrides:
         # Reload so the coordinator recomputes availability with new windows.
         await hass.config_entries.async_reload(entry.entry_id)
-        return
-    runtime.operating_time_overrides = overrides
 
 
 async def async_unload_entry(

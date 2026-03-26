@@ -25,6 +25,8 @@ if TYPE_CHECKING:
     from .models import CoordinatorData, TimeRange
     from .runtime_data import CityVisitorParkingConfigEntry
 
+PARALLEL_UPDATES = 0
+
 
 async def async_setup_entry(
     hass: HomeAssistant,
@@ -89,7 +91,7 @@ class RemainingTimeSensor(CityVisitorParkingEntity):
         remaining_minutes = _remaining_balance_minutes(self.coordinator.data)
         next_end_time = _next_end_time(self.coordinator.data)
         active_count = len(self.coordinator.data.active_reservations)
-        attributes = dict(self._attr_extra_state_attributes or {})
+        attributes = dict(self._attr_extra_state_attributes)
         attributes.update(
             {
                 "remaining_minutes": remaining_minutes,
@@ -126,20 +128,20 @@ class PermitZoneAvailabilitySensor(CityVisitorParkingEntity):
             self.coordinator.data.zone_validity,
             now,
         )
-        attributes = dict(self._attr_extra_state_attributes or {})
+        attributes = dict(self._attr_extra_state_attributes)
         attributes.update(
             {
                 "is_chargeable_now": availability.is_chargeable_now,
-                "Today provider": [
+                "today_provider": [
                     _timerange_to_dict(window) for window in provider_windows
                 ],
-                "Today user entered": [
+                "today_user_entered": [
                     _timerange_to_dict(window) for window in availability.windows_today
                 ],
-                "Next provider": _timerange_to_dict(provider_next_window)
+                "next_provider": _timerange_to_dict(provider_next_window)
                 if provider_next_window
                 else None,
-                "Next user entered": _timerange_to_dict(next_window)
+                "next_user_entered": _timerange_to_dict(next_window)
                 if next_window
                 else None,
             }
@@ -249,13 +251,13 @@ def _next_end_time(data: CoordinatorData) -> datetime | None:
 def _timerange_to_dict(window: TimeRange) -> dict[str, str]:
     """Convert a TimeRange to a dict with UTC ISO8601 strings."""
     return {
-        "start": _as_utc_iso(window.start),
-        "end": _as_utc_iso(window.end),
+        "start": dt_util.as_utc(window.start).isoformat(),
+        "end": dt_util.as_utc(window.end).isoformat(),
     }
 
 
-def _as_utc_iso(value: datetime | None) -> str:
-    """Return a UTC ISO8601 timestamp string."""
+def _as_utc_iso(value: datetime | None) -> str | None:
+    """Return a UTC ISO8601 timestamp string, or None when value is None."""
     if value is None:
-        return ""
+        return None
     return dt_util.as_utc(value).isoformat()
