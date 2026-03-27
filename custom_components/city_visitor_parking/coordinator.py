@@ -267,7 +267,7 @@ def _normalize_remaining_minutes(permit: Permit) -> int:
         if not isinstance(raw, int | float | str):
             return 0
         value = int(raw)
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return 0
     return max(0, value)
 

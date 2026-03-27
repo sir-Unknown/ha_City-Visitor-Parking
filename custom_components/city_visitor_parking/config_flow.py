@@ -122,17 +122,20 @@ class CityVisitorParkingConfigFlow(config_entries.ConfigFlow):
     ) -> config_entries.ConfigFlowResult:
         """Handle manual provider configuration."""
         if user_input is None:
+            errors: dict[str, str] = {}
             try:
                 providers = await _async_list_providers()
             except NetworkError:
-                return self.async_abort(reason="cannot_connect")
+                errors["base"] = "cannot_connect"
+                providers = []
             # Allowed in config flow
             except Exception as err:
                 _LOGGER.debug(
                     "Unexpected error while listing providers: %s",
                     type(err).__name__,
                 )
-                return self.async_abort(reason="unknown")
+                errors["base"] = "unknown"
+                providers = []
 
             provider_options = [
                 selector.SelectOptionDict(value=provider, label=provider)
@@ -148,7 +151,11 @@ class CityVisitorParkingConfigFlow(config_entries.ConfigFlow):
                     vol.Optional(CONF_API_URL): cv.string,
                 }
             )
-            return self.async_show_form(step_id="other", data_schema=schema)
+            return self.async_show_form(
+                step_id="other",
+                data_schema=schema,
+                errors=errors,
+            )
 
         self._provider_config = ProviderConfig(
             provider_id=cast("str", user_input[CONF_PROVIDER_ID]),
