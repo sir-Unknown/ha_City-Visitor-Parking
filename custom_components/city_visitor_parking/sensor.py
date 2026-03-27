@@ -91,7 +91,7 @@ class RemainingTimeSensor(CityVisitorParkingEntity):
         remaining_minutes = _remaining_balance_minutes(self.coordinator.data)
         next_end_time = _next_end_time(self.coordinator.data)
         active_count = len(self.coordinator.data.active_reservations)
-        attributes = dict(self._attr_extra_state_attributes)
+        attributes = dict(self._attr_extra_state_attributes or {})
         attributes.update(
             {
                 "remaining_minutes": remaining_minutes,
@@ -128,20 +128,20 @@ class PermitZoneAvailabilitySensor(CityVisitorParkingEntity):
             self.coordinator.data.zone_validity,
             now,
         )
-        attributes = dict(self._attr_extra_state_attributes)
+        attributes = dict(self._attr_extra_state_attributes or {})
         attributes.update(
             {
                 "is_chargeable_now": availability.is_chargeable_now,
-                "today_provider": [
+                "Today provider": [
                     _timerange_to_dict(window) for window in provider_windows
                 ],
-                "today_user_entered": [
+                "Today user entered": [
                     _timerange_to_dict(window) for window in availability.windows_today
                 ],
-                "next_provider": _timerange_to_dict(provider_next_window)
+                "Next provider": _timerange_to_dict(provider_next_window)
                 if provider_next_window
                 else None,
-                "next_user_entered": _timerange_to_dict(next_window)
+                "Next user entered": _timerange_to_dict(next_window)
                 if next_window
                 else None,
             }
@@ -251,13 +251,13 @@ def _next_end_time(data: CoordinatorData) -> datetime | None:
 def _timerange_to_dict(window: TimeRange) -> dict[str, str]:
     """Convert a TimeRange to a dict with UTC ISO8601 strings."""
     return {
-        "start": dt_util.as_utc(window.start).isoformat(),
-        "end": dt_util.as_utc(window.end).isoformat(),
+        "start": _as_utc_iso(window.start),
+        "end": _as_utc_iso(window.end),
     }
 
 
-def _as_utc_iso(value: datetime | None) -> str | None:
-    """Return a UTC ISO8601 timestamp string, or None when value is None."""
+def _as_utc_iso(value: datetime | None) -> str:
+    """Return a UTC ISO8601 timestamp string."""
     if value is None:
-        return None
+        return ""
     return dt_util.as_utc(value).isoformat()

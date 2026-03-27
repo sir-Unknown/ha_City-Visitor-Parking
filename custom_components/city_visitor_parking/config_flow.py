@@ -374,11 +374,15 @@ class CityVisitorParkingConfigFlow(config_entries.ConfigFlow):
         config_entry: config_entries.ConfigEntry,
     ) -> config_entries.OptionsFlow:
         """Return the options flow handler."""
-        return CityVisitorParkingOptionsFlow()
+        return CityVisitorParkingOptionsFlow(config_entry)
 
 
 class CityVisitorParkingOptionsFlow(config_entries.OptionsFlow):
     """Handle options for City visitor parking."""
+
+    def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
+        """Initialize options flow."""
+        self._config_entry: config_entries.ConfigEntry = config_entry
 
     async def async_step_init(
         self, user_input: dict[str, object] | None = None
@@ -410,11 +414,11 @@ class CityVisitorParkingOptionsFlow(config_entries.OptionsFlow):
         self, user_input: dict[str, object] | None, errors: dict[str, str]
     ) -> config_entries.ConfigFlowResult:
         """Show the options form."""
-        overrides = self.config_entry.options.get(CONF_OPERATING_TIME_OVERRIDES, {})
+        overrides = self._config_entry.options.get(CONF_OPERATING_TIME_OVERRIDES, {})
         if not isinstance(overrides, Mapping):
             overrides = {}
         overrides = cast("Mapping[str, object]", overrides)
-        defaults = {CONF_AUTO_END: self.config_entry.options.get(CONF_AUTO_END, False)}
+        defaults = {CONF_AUTO_END: self._config_entry.options.get(CONF_AUTO_END, False)}
         if user_input is not None:
             raw_auto_end = user_input.get(CONF_AUTO_END)
             if isinstance(raw_auto_end, bool):
