@@ -23,7 +23,6 @@ class CityVisitorParkingEntity(
     """Base entity for the integration."""
 
     _attr_has_entity_name: bool = True
-    _attr_available: bool = True
     _entity_key: str
 
     def __init__(
@@ -64,7 +63,6 @@ class CityVisitorParkingEntity(
     def _handle_coordinator_update(self) -> None:
         """Update entity state and availability."""
         self._update_from_coordinator()
-        self._attr_available = self.coordinator.last_update_success
         super()._handle_coordinator_update()
 
     async def async_update(self) -> None:

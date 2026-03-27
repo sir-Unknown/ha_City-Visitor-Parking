@@ -121,13 +121,13 @@ class CityVisitorParkingConfigFlow(config_entries.ConfigFlow):
         self, user_input: dict[str, object] | None = None
     ) -> config_entries.ConfigFlowResult:
         """Handle manual provider configuration."""
-        errors: dict[str, str] = {}
-        providers = []
         if user_input is None:
+            errors: dict[str, str] = {}
             try:
                 providers = await _async_list_providers()
             except NetworkError:
                 errors["base"] = "cannot_connect"
+                providers = []
             # Allowed in config flow
             except Exception as err:
                 _LOGGER.debug(
@@ -135,13 +135,12 @@ class CityVisitorParkingConfigFlow(config_entries.ConfigFlow):
                     type(err).__name__,
                 )
                 errors["base"] = "unknown"
+                providers = []
 
-        provider_options = [
-            selector.SelectOptionDict(value=provider, label=provider)
-            for provider in providers
-        ]
-
-        if user_input is None or errors:
+            provider_options = [
+                selector.SelectOptionDict(value=provider, label=provider)
+                for provider in providers
+            ]
             schema = vol.Schema(
                 {
                     vol.Required(CONF_PROVIDER_ID): SELECTOR(
@@ -153,7 +152,9 @@ class CityVisitorParkingConfigFlow(config_entries.ConfigFlow):
                 }
             )
             return self.async_show_form(
-                step_id="other", data_schema=schema, errors=errors
+                step_id="other",
+                data_schema=schema,
+                errors=errors,
             )
 
         self._provider_config = ProviderConfig(

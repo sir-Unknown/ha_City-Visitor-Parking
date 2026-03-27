@@ -25,6 +25,8 @@ if TYPE_CHECKING:
     from .models import CoordinatorData, TimeRange
     from .runtime_data import CityVisitorParkingConfigEntry
 
+PARALLEL_UPDATES = 0
+
 
 async def async_setup_entry(
     hass: HomeAssistant,

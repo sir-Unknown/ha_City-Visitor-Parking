@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from datetime import datetime, time, timedelta
 from typing import cast
 
@@ -13,7 +13,9 @@ from .helpers import normalize_override_windows
 from .models import TimeRange
 
 
-def current_or_next_window(windows: list[TimeRange], now: datetime) -> TimeRange | None:
+def current_or_next_window(
+    windows: Sequence[TimeRange], now: datetime
+) -> TimeRange | None:
     """Return the current or next chargeable window."""
     for window in sorted(windows, key=lambda item: item.start):
         if window.end <= now:
@@ -23,7 +25,7 @@ def current_or_next_window(windows: list[TimeRange], now: datetime) -> TimeRange
 
 
 def current_or_next_window_with_overrides(
-    zone_validity: list[TimeRange],
+    zone_validity: Sequence[TimeRange],
     options: Mapping[str, object],
     now: datetime,
 ) -> TimeRange | None:
@@ -46,7 +48,7 @@ def current_or_next_window_with_overrides(
 
 
 def windows_for_today(
-    zone_validity: list[TimeRange],
+    zone_validity: Sequence[TimeRange],
     options: Mapping[str, object],
     now: datetime,
 ) -> list[TimeRange]:

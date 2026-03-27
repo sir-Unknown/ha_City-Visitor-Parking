@@ -133,7 +133,6 @@ async def async_setup_entry(
         api_uri=provider_config.api_url,
     )
     _install_zone_validity_logging(provider)
-
     login_started = time.perf_counter()
     try:
         await provider.login(
@@ -267,8 +266,6 @@ async def _async_update_listener(
     if overrides != runtime.operating_time_overrides:
         # Reload so the coordinator recomputes availability with new windows.
         await hass.config_entries.async_reload(entry.entry_id)
-        return
-    runtime.operating_time_overrides = overrides
 
 
 async def async_unload_entry(
