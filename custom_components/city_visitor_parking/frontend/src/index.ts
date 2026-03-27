@@ -142,6 +142,7 @@ const normalizeMatchValue = (value: string | undefined | null): string =>
   String(value ?? "")
     .trim()
     .toLowerCase();
+// Strips all non-alphanumeric characters for matching purposes only (not for storage or display).
 const normalizePlateValue = (value: string | undefined | null): string =>
   normalizeMatchValue(value).replace(/[^a-z0-9]/g, "");
 
@@ -455,9 +456,9 @@ const formatDateTimeLocal = (date: Date): string =>
   `${formatDate(date)}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 
 const HA_STARTING_MESSAGE_KEY = "ui.panel.lovelace.warning.starting";
-const getCardText = (key: string): string => {
+const getCardText = (key: string): string | null => {
   const value = localize(getGlobalHass<LocalizeTarget>(), key);
-  return value === key ? "" : value;
+  return value === key ? null : value;
 };
 
 const getConfigEntryId = (
@@ -775,7 +776,6 @@ abstract class BaseLocalizedCard<TConfig> extends LitElement {
   _hass: HomeAssistant | null = null;
   _statusState = createStatusState();
   _requestRender = createRenderScheduler(() => this.requestUpdate());
-  _inEditorCache: boolean | null = null;
   _localize = createLocalize(() => this._hass);
   _errorMessage = createErrorMessage(() => this._hass);
 
@@ -794,10 +794,7 @@ abstract class BaseLocalizedCard<TConfig> extends LitElement {
   }
 
   _isInEditor(): boolean {
-    if (this._inEditorCache === null) {
-      this._inEditorCache = isInEditor(this);
-    }
-    return this._inEditorCache;
+    return isInEditor(this);
   }
 }
 
@@ -840,8 +837,10 @@ const registerCustomCardWithTranslations = (
   descriptionKey: string,
 ): void => {
   const registerCard = (): void => {
-    const name = getCardText(nameKey) || cardType;
-    const description = descriptionKey ? getCardText(descriptionKey) : "";
+    const name = getCardText(nameKey) ?? cardType;
+    const description = descriptionKey
+      ? (getCardText(descriptionKey) ?? "")
+      : "";
     registerCustomCard(cardType, ctor, name, description);
   };
   // Register immediately so Lovelace can instantiate the element before
@@ -1155,7 +1154,9 @@ const getActiveCardConfigForm = createConfigFormGetter(
   const CARD_TYPE = "city-visitor-parking-card";
   const WS_LIST_FAVORITES = "city_visitor_parking/favorites";
   const WS_GET_STATUS = "city_visitor_parking/status";
+  // Minimum interval between status fetches triggered by hass updates.
   const STATUS_THROTTLE_MS = 15000;
+  // Background polling interval for zone status (and on page visibility restore).
   const STATUS_REFRESH_MS = 60000;
 
   type ZoneStatusResponse = {
@@ -1263,6 +1264,7 @@ const getActiveCardConfigForm = createConfigFormGetter(
     _pendingPermitDefaultsEntryId: string | null = null;
     _pendingPermitDefaultsForce = false;
     _statusRefreshHandle: number | null = null;
+    _statusVisibilityHandler: (() => void) | null = null;
     _translationsReady = false;
     _translationsLanguage: string | null = null;
     _prevHaState?: string;
@@ -1351,11 +1353,6 @@ const getActiveCardConfigForm = createConfigFormGetter(
         resetZoneStatusThrottle(this);
       }
       this._syncEntryState(false);
-    }
-
-    connectedCallback(): void {
-      super.connectedCallback();
-      this._inEditorCache = null;
     }
 
     disconnectedCallback(): void {
@@ -1899,8 +1896,7 @@ const getActiveCardConfigForm = createConfigFormGetter(
     _handlePermitChange(value: string): void {
       if (!value) {
         this._selectedEntryId = null;
-        this._pendingPermitDefaultsEntryId = null;
-        this._pendingPermitDefaultsForce = false;
+        setPendingPermitDefaults(this, null);
         this._clearStatusRefresh();
         this._resetDeviceState();
         this._clearFormValues();
@@ -1975,19 +1971,38 @@ const getActiveCardConfigForm = createConfigFormGetter(
     _setupStatusRefresh(entryId: string | null): void {
       this._clearStatusRefresh();
       if (!getConfigEntryId(this._config) || !entryId) return;
-      this._statusRefreshHandle = window.setInterval(() => {
+      const refresh = (): void => {
         if (!this._hass) return;
         const activeEntryId = this._getActiveEntryId();
         if (!activeEntryId || activeEntryId !== entryId) return;
         setPendingPermitDefaults(this, entryId);
         void this._loadZoneStatusForEntry(entryId);
-      }, STATUS_REFRESH_MS);
+      };
+      this._statusRefreshHandle = window.setInterval(
+        refresh,
+        STATUS_REFRESH_MS,
+      );
+      this._statusVisibilityHandler = () => {
+        if (document.visibilityState === "visible") refresh();
+      };
+      document.addEventListener(
+        "visibilitychange",
+        this._statusVisibilityHandler,
+      );
     }
 
     _clearStatusRefresh(): void {
-      if (this._statusRefreshHandle === null) return;
-      window.clearInterval(this._statusRefreshHandle);
-      this._statusRefreshHandle = null;
+      if (this._statusRefreshHandle !== null) {
+        window.clearInterval(this._statusRefreshHandle);
+        this._statusRefreshHandle = null;
+      }
+      if (this._statusVisibilityHandler !== null) {
+        document.removeEventListener(
+          "visibilitychange",
+          this._statusVisibilityHandler,
+        );
+        this._statusVisibilityHandler = null;
+      }
     }
 
     _setFavorites(favorites: FavoriteItem[]): void {
@@ -2238,9 +2253,8 @@ const getActiveCardConfigForm = createConfigFormGetter(
     }
 
     _setInputValue(id: string, value: string): void {
-      const safeValue = value ?? "";
-      if (this._formValues[id] === safeValue) return;
-      this._formValues[id] = safeValue;
+      if (this._formValues[id] === value) return;
+      this._formValues[id] = value;
       this._requestRender();
     }
 
@@ -2342,7 +2356,7 @@ const getActiveCardConfigForm = createConfigFormGetter(
 
 (() => {
   const CARD_TYPE = "city-visitor-parking-active-card";
-  const SERVICE_LIST_ACTIVE_RESERVATIONS = "list_active_reservations";
+  const SERVICE_LIST_RESERVATIONS = "list_reservations";
   const SERVICE_UPDATE_RESERVATION = "update_reservation";
   const SERVICE_END_RESERVATION = "end_reservation";
   const UPDATE_START_FLAG = 1;
@@ -2431,6 +2445,7 @@ const getActiveCardConfigForm = createConfigFormGetter(
     _reservationInFlight = new Set<string>();
     _endButtonSuccessByReservationId = new Set<string>();
     _endButtonSuccessTimeoutByReservationId = new Map<string, number>();
+    _endButtonSuccessResolverByReservationId = new Map<string, () => void>();
     _pendingReservationNameByKey = new Map<
       string,
       { name: string; expiresAt: number }
@@ -2448,7 +2463,6 @@ const getActiveCardConfigForm = createConfigFormGetter(
 
     connectedCallback(): void {
       super.connectedCallback();
-      this._inEditorCache = null;
       if (!this._reservationStartedHandler) {
         this._reservationStartedHandler = (event: Event) => {
           const detail = (
@@ -2478,6 +2492,10 @@ const getActiveCardConfigForm = createConfigFormGetter(
         window.clearTimeout(timeoutHandle);
       }
       this._endButtonSuccessTimeoutByReservationId.clear();
+      for (const resolve of this._endButtonSuccessResolverByReservationId.values()) {
+        resolve();
+      }
+      this._endButtonSuccessResolverByReservationId.clear();
       this._endButtonSuccessByReservationId.clear();
       this._pendingReservationNameByKey.clear();
       if (this._reservationStartedHandler) {
@@ -2564,10 +2582,10 @@ const getActiveCardConfigForm = createConfigFormGetter(
           entryTitles,
         );
         type ActiveReservationsResult = {
-          active_reservations?: ActiveReservation[];
+          reservations?: ActiveReservation[];
           reservation_update_fields?: string[];
           response?: {
-            active_reservations?: ActiveReservation[];
+            reservations?: ActiveReservation[];
             reservation_update_fields?: string[];
           };
         };
@@ -2576,7 +2594,7 @@ const getActiveCardConfigForm = createConfigFormGetter(
             this._hass!.callWS<ActiveReservationsResult>({
               type: "call_service",
               domain: DOMAIN,
-              service: SERVICE_LIST_ACTIVE_RESERVATIONS,
+              service: SERVICE_LIST_RESERVATIONS,
               return_response: true,
               service_data: { device_id: device.id },
             }),
@@ -2588,7 +2606,7 @@ const getActiveCardConfigForm = createConfigFormGetter(
         for (const [index, result] of results.entries()) {
           const device = devices[index];
           const response = result?.response ?? result;
-          const activeReservations = response?.active_reservations;
+          const activeReservations = response?.reservations;
           const updateFields = response?.reservation_update_fields;
           if (Array.isArray(updateFields)) {
             const updateFlags =
@@ -2627,6 +2645,8 @@ const getActiveCardConfigForm = createConfigFormGetter(
             window.clearTimeout(timeoutHandle);
             this._endButtonSuccessTimeoutByReservationId.delete(reservationId);
           }
+          this._endButtonSuccessResolverByReservationId.get(reservationId)?.();
+          this._endButtonSuccessResolverByReservationId.delete(reservationId);
           this._endButtonSuccessByReservationId.delete(reservationId);
         }
       } catch (err: unknown) {
@@ -2700,7 +2720,7 @@ const getActiveCardConfigForm = createConfigFormGetter(
         !name && reservation.device_id
           ? this._getPendingReservationName(reservation.device_id, license)
           : null;
-      const identify =
+      const identify: string =
         name || pendingName || license || reservation.reservation_id;
       const permitLabel = reservation.device_id
         ? this._permitLabelsByDeviceId.get(reservation.device_id)
@@ -3012,12 +3032,19 @@ const getActiveCardConfigForm = createConfigFormGetter(
         this._endButtonSuccessTimeoutByReservationId.get(reservationId);
       if (existingTimeout !== undefined) {
         window.clearTimeout(existingTimeout);
+        this._endButtonSuccessResolverByReservationId.get(reservationId)?.();
+        this._endButtonSuccessResolverByReservationId.delete(reservationId);
       }
       this._endButtonSuccessByReservationId.add(reservationId);
       this._requestRender();
       return new Promise((resolve) => {
+        this._endButtonSuccessResolverByReservationId.set(
+          reservationId,
+          resolve,
+        );
         const timeoutHandle = window.setTimeout(() => {
           this._endButtonSuccessTimeoutByReservationId.delete(reservationId);
+          this._endButtonSuccessResolverByReservationId.delete(reservationId);
           this._endButtonSuccessByReservationId.delete(reservationId);
           this._requestRender();
           resolve();

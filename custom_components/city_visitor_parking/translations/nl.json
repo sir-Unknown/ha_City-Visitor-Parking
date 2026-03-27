@@ -218,9 +218,29 @@
         }
       }
     },
-    "list_active_reservations": {
-      "name": "Actieve reserveringen tonen",
-      "description": "Geeft actieve reserveringen voor een vergunning terug, inclusief kenteken en favorietgegevens indien beschikbaar.",
+    "list_reservations": {
+      "name": "Reserveringen tonen",
+      "description": "Geeft alle nog niet verlopen reserveringen voor een vergunning terug, inclusief kenteken en favorietgegevens indien beschikbaar.",
+      "fields": {
+        "device_id": {
+          "name": "Apparaat",
+          "description": "Het bezoekersparkeerapparaat om te gebruiken."
+        }
+      }
+    },
+    "get_status": {
+      "name": "Status ophalen",
+      "description": "Geeft de huidige vergunningstatus en effectieve betaalvensters voor een vergunning terug.",
+      "fields": {
+        "device_id": {
+          "name": "Apparaat",
+          "description": "Het bezoekersparkeerapparaat om te gebruiken."
+        }
+      }
+    },
+    "get_entry_info": {
+      "name": "Entry-info ophalen",
+      "description": "Geeft niet-gevoelige metadata voor een vergunningconfiguratie terug.",
       "fields": {
         "device_id": {
           "name": "Apparaat",
@@ -311,6 +331,9 @@
     },
     "favorite_operation_failed_detail": {
       "message": "De favoriet-aanvraag is mislukt: {detail}"
+    },
+    "status_operation_failed": {
+      "message": "De vergunningstatus kon niet worden geladen. Probeer het later opnieuw."
     },
     "invalid_target": {
       "message": "Het gekozen apparaat is niet beschikbaar."
