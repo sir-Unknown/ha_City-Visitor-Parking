@@ -2,13 +2,6 @@
   "include": ["custom_components/city_visitor_parking"],
   "extraPaths": ["../homeassistant-core"],
   "pythonVersion": "3.14",
-  "typeCheckingMode": "standard",
-  "reportMissingImports": "none",
-  "reportMissingModuleSource": "none",
-  "reportUnknownVariableType": "none",
-  "reportUnknownMemberType": "none",
-  "reportUnknownArgumentType": "none",
-  "reportUnknownParameterType": "none",
-  "reportUnknownLambdaType": "none",
-  "reportUnusedFunction": "none"
+  "typeCheckingMode": "strict",
+  "reportMissingImports": "none"
 }
