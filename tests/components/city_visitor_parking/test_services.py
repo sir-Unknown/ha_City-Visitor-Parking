@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime, time, timedelta
 from types import SimpleNamespace
 from typing import TYPE_CHECKING
 from unittest.mock import AsyncMock
@@ -13,6 +13,7 @@ from homeassistant import config_entries
 from homeassistant.const import ATTR_DEVICE_ID
 from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from homeassistant.helpers import device_registry as dr
+from homeassistant.util import dt as dt_util
 from pycityvisitorparking import AuthError, NetworkError, ProviderError, ValidationError
 from pycityvisitorparking.exceptions import PyCityVisitorParkingError
 from pytest_homeassistant_custom_component.common import (  # type: ignore[import-untyped]
@@ -26,6 +27,7 @@ from custom_components.city_visitor_parking.const import (
     ATTR_NAME,
     ATTR_RESERVATION_ID,
     ATTR_START_TIME,
+    CONF_AUTO_END,
     DOMAIN,
 )
 from custom_components.city_visitor_parking.models import (
@@ -34,6 +36,7 @@ from custom_components.city_visitor_parking.models import (
     Favorite,
     ProviderConfig,
     Reservation,
+    TimeRange,
     ZoneAvailability,
 )
 from custom_components.city_visitor_parking.runtime_data import (
@@ -42,8 +45,10 @@ from custom_components.city_visitor_parking.runtime_data import (
 from custom_components.city_visitor_parking.services import (
     SERVICE_ADD_FAVORITE,
     SERVICE_END_RESERVATION,
-    SERVICE_LIST_ACTIVE_RESERVATIONS,
+    SERVICE_GET_ENTRY_INFO,
+    SERVICE_GET_STATUS,
     SERVICE_LIST_FAVORITES,
+    SERVICE_LIST_RESERVATIONS,
     SERVICE_REMOVE_FAVORITE,
     SERVICE_START_RESERVATION,
     SERVICE_UPDATE_FAVORITE,
@@ -67,6 +72,18 @@ if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
 
 EXPECTED_COUNT = 2
+EXPECTED_REMAINING_MINUTES = 90
+
+
+def _override_range_for_day(now: datetime, start: time, end: time) -> TimeRange:
+    """Build the UTC range produced by a local-time override on the current day."""
+    local_now = dt_util.as_local(now)
+    start_local = datetime.combine(local_now.date(), start, tzinfo=local_now.tzinfo)
+    end_local = datetime.combine(local_now.date(), end, tzinfo=local_now.tzinfo)
+    return TimeRange(
+        start=dt_util.as_utc(start_local),
+        end=dt_util.as_utc(end_local),
+    )
 
 
 async def test_service_routing_targets_single_entry(hass: HomeAssistant) -> None:
@@ -479,10 +496,10 @@ async def test_update_reservation_not_supported_falls_back(
         )
 
 
-async def test_service_list_active_reservations_failure(
+async def test_service_list_reservations_failure(
     hass: HomeAssistant,
 ) -> None:
-    """List active reservations should fail when refresh has no data."""
+    """List reservations should fail when refresh has no data."""
     await async_setup_services(hass)
 
     entry, device, _provider = _create_entry_with_device(hass, "permit1")
@@ -494,7 +511,7 @@ async def test_service_list_active_reservations_failure(
     with pytest.raises(HomeAssistantError):
         await hass.services.async_call(
             DOMAIN,
-            SERVICE_LIST_ACTIVE_RESERVATIONS,
+            SERVICE_LIST_RESERVATIONS,
             {ATTR_DEVICE_ID: device.id},
             blocking=True,
             return_response=True,
@@ -644,10 +661,10 @@ async def test_service_remove_favorite_error(
         )
 
 
-async def test_service_list_active_reservations_last_update_failure(
+async def test_service_list_reservations_last_update_failure(
     hass: HomeAssistant,
 ) -> None:
-    """List active reservations should fail when last update failed."""
+    """List reservations should fail when last update failed."""
     await async_setup_services(hass)
 
     entry, device, _provider = _create_entry_with_device(hass, "permit1")
@@ -658,7 +675,7 @@ async def test_service_list_active_reservations_last_update_failure(
     with pytest.raises(HomeAssistantError):
         await hass.services.async_call(
             DOMAIN,
-            SERVICE_LIST_ACTIVE_RESERVATIONS,
+            SERVICE_LIST_RESERVATIONS,
             {ATTR_DEVICE_ID: device.id},
             blocking=True,
             return_response=True,
@@ -846,10 +863,10 @@ def test_is_not_supported_and_update_fields(hass: HomeAssistant) -> None:
     assert _reservation_update_fields(entry.runtime_data) == []
 
 
-async def test_service_list_active_reservations_response(
+async def test_service_list_reservations_response(
     hass: HomeAssistant,
 ) -> None:
-    """List active reservations should return normalized data."""
+    """List reservations should return normalized data."""
     await async_setup_services(hass)
 
     entry, device, provider = _create_entry_with_device(hass, "permit1")
@@ -896,7 +913,7 @@ async def test_service_list_active_reservations_response(
     with freeze_time(now):
         response = await hass.services.async_call(
             DOMAIN,
-            SERVICE_LIST_ACTIVE_RESERVATIONS,
+            SERVICE_LIST_RESERVATIONS,
             {ATTR_DEVICE_ID: device.id},
             blocking=True,
             return_response=True,
@@ -910,7 +927,8 @@ async def test_service_list_active_reservations_response(
         ATTR_START_TIME,
         ATTR_END_TIME,
     }
-    reservations = response["active_reservations"]
+    reservations = response["reservations"]
+    assert response["active_reservations"] == reservations
     assert len(reservations) == EXPECTED_COUNT
     active_payload = next(
         item for item in reservations if item[ATTR_RESERVATION_ID] == "res1"
@@ -920,8 +938,8 @@ async def test_service_list_active_reservations_response(
     assert active_payload["favorite_name"] == "Ada"
 
 
-async def test_service_list_active_reservations_stale(hass: HomeAssistant) -> None:
-    """List active reservations should mark stale on failed refresh."""
+async def test_service_list_reservations_stale(hass: HomeAssistant) -> None:
+    """List reservations should mark stale on failed refresh."""
     await async_setup_services(hass)
 
     entry, device, _provider = _create_entry_with_device(hass, "permit1")
@@ -953,13 +971,212 @@ async def test_service_list_active_reservations_stale(hass: HomeAssistant) -> No
     with freeze_time(now):
         response = await hass.services.async_call(
             DOMAIN,
-            SERVICE_LIST_ACTIVE_RESERVATIONS,
+            SERVICE_LIST_RESERVATIONS,
             {ATTR_DEVICE_ID: device.id},
             blocking=True,
             return_response=True,
         )
 
     assert response["stale"] is True
+
+
+async def test_service_get_status_response(hass: HomeAssistant) -> None:
+    """Get status should return effective and provider windows."""
+    await async_setup_services(hass)
+
+    entry, device, _provider = _create_entry_with_device(
+        hass,
+        "permit1",
+        options={
+            "operating_time_overrides": {
+                "mon": [{"start": "11:00", "end": "12:00"}],
+            },
+            CONF_AUTO_END: True,
+        },
+    )
+    now = datetime(2025, 1, 6, 10, 0, tzinfo=UTC)
+
+    provider_range = TimeRange(
+        start=datetime(2025, 1, 6, 9, 0, tzinfo=UTC),
+        end=datetime(2025, 1, 6, 17, 0, tzinfo=UTC),
+    )
+    effective_range = _override_range_for_day(now, time(11, 0), time(12, 0))
+    entry.runtime_data.coordinator.data = CoordinatorData(
+        permit_id="permit1",
+        permit_remaining_minutes=90,
+        zone_validity=[provider_range],
+        reservations=[],
+        favorites=[],
+        zone_availability=ZoneAvailability(
+            is_chargeable_now=False,
+            next_change_time=effective_range.start,
+            windows_today=[effective_range],
+        ),
+        active_reservations=[],
+    )
+    entry.runtime_data.coordinator.last_update_success = True
+    entry.runtime_data.coordinator.config_entry = entry
+
+    with freeze_time(now):
+        response = await hass.services.async_call(
+            DOMAIN,
+            SERVICE_GET_STATUS,
+            {ATTR_DEVICE_ID: device.id},
+            blocking=True,
+            return_response=True,
+        )
+
+    assert response["state"] == "free"
+    assert response["is_chargeable_now"] is False
+    assert response["window_kind"] == "next"
+    assert response["permit_id"] == "permit1"
+    assert response["remaining_minutes"] == EXPECTED_REMAINING_MINUTES
+    assert response["stale"] is False
+    assert response["provider_windows_today"] == [
+        {
+            "start": "2025-01-06T09:00:00+00:00",
+            "end": "2025-01-06T17:00:00+00:00",
+        }
+    ]
+    assert response["effective_windows_today"] == [
+        {
+            "start": effective_range.start.isoformat(),
+            "end": effective_range.end.isoformat(),
+        }
+    ]
+
+
+async def test_service_get_status_stale(hass: HomeAssistant) -> None:
+    """Get status should mark stale on failed refresh with cached data."""
+    await async_setup_services(hass)
+
+    entry, device, _provider = _create_entry_with_device(hass, "permit1")
+    now = datetime(2025, 1, 6, 10, 0, tzinfo=UTC)
+
+    window = TimeRange(
+        start=now - timedelta(hours=1),
+        end=now + timedelta(hours=1),
+    )
+    entry.runtime_data.coordinator.data = CoordinatorData(
+        permit_id="permit1",
+        permit_remaining_minutes=30,
+        zone_validity=[window],
+        reservations=[],
+        favorites=[],
+        zone_availability=ZoneAvailability(
+            is_chargeable_now=True,
+            next_change_time=window.end,
+            windows_today=[window],
+        ),
+        active_reservations=[],
+    )
+    entry.runtime_data.coordinator.last_update_success = False
+    entry.runtime_data.coordinator.last_exception = RuntimeError("boom")
+    entry.runtime_data.coordinator.config_entry = entry
+
+    with freeze_time(now):
+        response = await hass.services.async_call(
+            DOMAIN,
+            SERVICE_GET_STATUS,
+            {ATTR_DEVICE_ID: device.id},
+            blocking=True,
+            return_response=True,
+        )
+
+    assert response["stale"] is True
+
+
+async def test_service_get_status_stale_recomputes_consistent_windows(
+    hass: HomeAssistant,
+) -> None:
+    """Get status should recompute stale availability from the cached snapshot."""
+    await async_setup_services(hass)
+
+    entry, device, _provider = _create_entry_with_device(
+        hass,
+        "permit1",
+        options={
+            "operating_time_overrides": {
+                "mon": [{"start": "11:00", "end": "12:00"}],
+            }
+        },
+    )
+    now = datetime(2025, 1, 6, 10, 30, tzinfo=UTC)
+    effective_range = _override_range_for_day(now, time(11, 0), time(12, 0))
+
+    provider_range = TimeRange(
+        start=datetime(2025, 1, 6, 9, 0, tzinfo=UTC),
+        end=datetime(2025, 1, 6, 17, 0, tzinfo=UTC),
+    )
+    stale_effective_range = TimeRange(
+        start=datetime(2025, 1, 6, 8, 0, tzinfo=UTC),
+        end=datetime(2025, 1, 6, 9, 0, tzinfo=UTC),
+    )
+    entry.runtime_data.coordinator.data = CoordinatorData(
+        permit_id="permit1",
+        permit_remaining_minutes=45,
+        zone_validity=[provider_range],
+        reservations=[],
+        favorites=[],
+        zone_availability=ZoneAvailability(
+            is_chargeable_now=True,
+            next_change_time=stale_effective_range.end,
+            windows_today=[stale_effective_range],
+        ),
+        active_reservations=[],
+    )
+    entry.runtime_data.coordinator.last_update_success = False
+    entry.runtime_data.coordinator.last_exception = RuntimeError("boom")
+    entry.runtime_data.coordinator.config_entry = entry
+
+    with freeze_time(now):
+        response = await hass.services.async_call(
+            DOMAIN,
+            SERVICE_GET_STATUS,
+            {ATTR_DEVICE_ID: device.id},
+            blocking=True,
+            return_response=True,
+        )
+
+    assert response["stale"] is True
+    assert response["state"] == "free"
+    assert response["is_chargeable_now"] is False
+    assert response["window_kind"] == "next"
+    assert response["next_change_time"] == effective_range.start.isoformat()
+    assert response["effective_windows_today"] == [
+        {
+            "start": effective_range.start.isoformat(),
+            "end": effective_range.end.isoformat(),
+        }
+    ]
+
+
+async def test_service_get_entry_info_response(hass: HomeAssistant) -> None:
+    """Get entry info should return non-sensitive metadata."""
+    await async_setup_services(hass)
+
+    _entry, device, provider = _create_entry_with_device(
+        hass,
+        "permit1",
+        options={CONF_AUTO_END: True},
+    )
+    provider.reservation_update_fields = [ATTR_START_TIME, ATTR_END_TIME]
+
+    response = await hass.services.async_call(
+        DOMAIN,
+        SERVICE_GET_ENTRY_INFO,
+        {ATTR_DEVICE_ID: device.id},
+        blocking=True,
+        return_response=True,
+    )
+
+    assert response == {
+        "permit_id": "permit1",
+        "provider_id": "dvsportal",
+        "municipality_name": "City",
+        "auto_end_reservation_when_free": True,
+        "reservation_update_fields": [ATTR_START_TIME, ATTR_END_TIME],
+    }
 
 
 async def test_service_list_favorites_response(hass: HomeAssistant) -> None:
@@ -1007,7 +1224,7 @@ async def test_service_invalid_device_target(hass: HomeAssistant) -> None:
 
 
 def _create_entry_with_device(
-    hass: HomeAssistant, permit_id: str
+    hass: HomeAssistant, permit_id: str, options: dict[str, object] | None = None
 ) -> tuple[MockConfigEntry, dr.DeviceEntry, AsyncMock]:
     """Create a mock entry with device registry entry."""
     entry = MockConfigEntry(
@@ -1021,6 +1238,7 @@ def _create_entry_with_device(
         },
         unique_id=f"dvsportal:{permit_id}:city",
         title=f"City - {permit_id}",
+        options=options or {},
     )
     entry.add_to_hass(hass)
     entry.mock_state(hass, config_entries.ConfigEntryState.LOADED)
@@ -1029,6 +1247,7 @@ def _create_entry_with_device(
     coordinator = AsyncMock()
     coordinator.async_refresh = AsyncMock()
     coordinator.last_update_success = True
+    coordinator.config_entry = entry
 
     runtime = CityVisitorParkingRuntimeData(
         client=AsyncMock(),
