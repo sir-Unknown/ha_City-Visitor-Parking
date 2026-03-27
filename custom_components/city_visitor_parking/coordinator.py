@@ -19,11 +19,11 @@ from .helpers import get_attr
 from .models import (
     AutoEndState,
     CoordinatorData,
-    Favorite,
     Reservation,
     TimeRange,
     ZoneAvailability,
 )
+from .models import Favorite as CoordinatorFavorite
 from .time_windows import windows_for_today
 
 if TYPE_CHECKING:
@@ -169,11 +169,11 @@ class CityVisitorParkingCoordinator(DataUpdateCoordinator[CoordinatorData]):
         data = CoordinatorData(
             permit_id=self._permit_id,
             permit_remaining_minutes=remaining_minutes,
-            zone_validity=zone_validity,
-            reservations=normalized_reservations,
-            favorites=normalized_favorites,
+            zone_validity=tuple(zone_validity),
+            reservations=tuple(normalized_reservations),
+            favorites=tuple(normalized_favorites),
             zone_availability=zone_availability,
-            active_reservations=active_reservations,
+            active_reservations=tuple(active_reservations),
         )
         await self._async_maybe_auto_end(data)
         return data
@@ -222,11 +222,8 @@ class CityVisitorParkingCoordinator(DataUpdateCoordinator[CoordinatorData]):
         }
 
     def _options(self) -> Mapping[str, object]:
-        """Return options from the config entry or an empty mapping."""
-        config_entry = self.config_entry
-        if config_entry is None:
-            return {}
-        return config_entry.options
+        """Return options from the config entry."""
+        return self.config_entry.options if self.config_entry is not None else {}
 
     def _log_unavailable_once(self) -> None:
         """Log an unavailable message only once until recovery."""
@@ -299,9 +296,11 @@ def _normalize_reservations(
     return normalized
 
 
-def _normalize_favorites(favorites: Iterable[ProviderFavorite]) -> list[Favorite]:
+def _normalize_favorites(
+    favorites: Iterable[ProviderFavorite],
+) -> list[CoordinatorFavorite]:
     """Normalize favorite entries to Favorite objects."""
-    normalized: list[Favorite] = []
+    normalized: list[CoordinatorFavorite] = []
     for favorite in favorites or []:
         favorite_id = get_attr(favorite, "id")
         license_plate = get_attr(favorite, "license_plate")
@@ -309,7 +308,7 @@ def _normalize_favorites(favorites: Iterable[ProviderFavorite]) -> list[Favorite
         if favorite_id is None:
             continue
         normalized.append(
-            Favorite(
+            CoordinatorFavorite(
                 favorite_id=str(favorite_id),
                 license_plate=str(license_plate) if license_plate else None,
                 name=str(name) if name else None,
@@ -360,7 +359,7 @@ def _compute_zone_availability(
     return ZoneAvailability(
         is_chargeable_now=is_chargeable_now,
         next_change_time=next_change_time,
-        windows_today=windows_today,
+        windows_today=tuple(windows_today),
     )
 
 
