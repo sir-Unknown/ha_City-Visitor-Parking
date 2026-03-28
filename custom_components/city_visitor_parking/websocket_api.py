@@ -19,12 +19,15 @@ from .payloads import build_status_payload, normalize_favorites
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
     from pycityvisitorparking import Favorite as ProviderFavorite
+    from pycityvisitorparking.provider.base import BaseProvider
 
     from .models import CoordinatorData
     from .runtime_data import (
         CityVisitorParkingConfigEntry,
         CityVisitorParkingRuntimeData,
     )
+else:
+    BaseProvider = object
 
 WEBSOCKET_LIST_FAVORITES: Final[str] = "city_visitor_parking/favorites"
 WEBSOCKET_GET_STATUS: Final[str] = "city_visitor_parking/status"
@@ -77,8 +80,9 @@ async def _ws_list_favorites(
         return
 
     runtime: CityVisitorParkingRuntimeData = entry.runtime_data
+    provider: BaseProvider = runtime.provider
     try:
-        favorites: list[ProviderFavorite] = await runtime.provider.list_favorites()
+        favorites: list[ProviderFavorite] = await provider.list_favorites()
     except PyCityVisitorParkingError:
         _LOGGER.debug(
             "Favorites websocket fetch failed for %s (permit %s)",

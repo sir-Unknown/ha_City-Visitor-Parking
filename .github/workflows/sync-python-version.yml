@@ -71,10 +71,9 @@ jobs:
             NEW_RUFF_MINOR="${NEW_MINOR//./}"
             sed -E -i "s/^(python_version = )[0-9]+\.[0-9]+$/\1${NEW_MINOR}/" mypy.ini
             sed -E -i "s/^(target-version = \"py)[0-9]+(\")$/\1${NEW_RUFF_MINOR}\2/" pyproject.toml
-            sed -E -i "s/(\"pythonVersion\": \")[0-9]+\.[0-9]+(\")/\1${NEW_MINOR}\2/" pyrightconfig.json
           fi
 
-          git add .python-version mypy.ini pyproject.toml pyrightconfig.json
+          git add .python-version mypy.ini pyproject.toml
           if ! git diff --cached --quiet; then
             git commit -m "Bump Python version to ${NEW_VERSION}"
             git push origin "$BRANCH"
@@ -105,8 +104,7 @@ jobs:
           ### Changes
           - \`.python-version\`: \`${OLD_VERSION}\` → \`${NEW_VERSION}\`$([ "$NEW_MINOR" != "$OLD_MINOR" ] && echo "
           - \`mypy.ini\`: \`python_version\` \`${OLD_MINOR}\` → \`${NEW_MINOR}\`
-          - \`pyproject.toml\`: \`tool.ruff.target-version\` \`py${OLD_MINOR//./}\` → \`py${NEW_MINOR//./}\`
-          - \`pyrightconfig.json\`: \`pythonVersion\` \`${OLD_MINOR}\` → \`${NEW_MINOR}\`" || echo "")
+          - \`pyproject.toml\`: \`tool.ruff.target-version\` \`py${OLD_MINOR//./}\` → \`${NEW_MINOR//./}\`" || echo "")
 
           ### Checklist
           - [ ] CI passes
