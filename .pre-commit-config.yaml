@@ -24,6 +24,7 @@ repos:
         exclude: (.vscode|.devcontainer)
       - id: no-commit-to-branch
         args:
+          - --branch=main
           - --branch=dev
           - --branch=master
           - --branch=rc
