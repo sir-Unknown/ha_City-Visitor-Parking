@@ -573,6 +573,9 @@ async def _async_handle_list_reservations(
         "count": len(visible),
         "active_count": len(active),
         "future_count": len(future),
+        # Keep the legacy response key during the migration window so the
+        # existing card and automations do not break when only the backend updates.
+        "active_reservations": reservation_payloads,
         "reservations": reservation_payloads,
         "stale": stale,
         "reservation_update_fields": reservation_update_fields_json,
@@ -589,9 +592,7 @@ async def _async_handle_list_favorites(call: ServiceCall) -> dict[str, JsonValue
 
     normalized: list[JsonValueType] = []
     for favorite in normalize_favorites(favorites):
-        if "id" not in favorite:
-            continue
-        payload: dict[str, JsonValueType] = {ATTR_FAVORITE_ID: favorite["id"]}
+        payload: dict[str, JsonValueType] = {ATTR_FAVORITE_ID: favorite.get("id", "")}
         if "license_plate" in favorite:
             payload[ATTR_LICENSE_PLATE] = favorite["license_plate"]
         if "name" in favorite:

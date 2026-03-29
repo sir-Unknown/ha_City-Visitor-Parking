@@ -66,27 +66,27 @@ async def test_diagnostics_redacts_sensitive_data(hass: HomeAssistant) -> None:
     availability = ZoneAvailability(
         is_chargeable_now=True,
         next_change_time=None,
-        windows_today=[],
+        windows_today=(),
     )
     data = CoordinatorData(
         permit_id="permit",
         permit_remaining_minutes=30,
-        zone_validity=[
+        zone_validity=(
             TimeRange(
                 start=datetime(2025, 1, 1, 8, 0, tzinfo=UTC),
                 end=datetime(2025, 1, 1, 18, 0, tzinfo=UTC),
-            )
-        ],
-        reservations=[
+            ),
+        ),
+        reservations=(
             Reservation(
                 reservation_id="res1",
                 start_time=datetime(2025, 1, 1, 9, 0, tzinfo=UTC),
                 end_time=datetime(2025, 1, 1, 10, 0, tzinfo=UTC),
-            )
-        ],
-        favorites=[Favorite(favorite_id="fav1")],
+            ),
+        ),
+        favorites=(Favorite(favorite_id="fav1"),),
         zone_availability=availability,
-        active_reservations=[],
+        active_reservations=(),
     )
     coordinator = SimpleNamespace(
         data=data,

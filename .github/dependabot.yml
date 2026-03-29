@@ -1,47 +1,54 @@
 version: 2
+multi-ecosystem-groups:
+  dependencies:
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Europe/Amsterdam"
+    labels:
+      - "dependencies"
 updates:
   - package-ecosystem: "github-actions"
     directory: "/"
-    schedule:
-      interval: "weekly"
-      day: "monday"
-      time: "06:00"
-      timezone: "Europe/Amsterdam"
+    patterns:
+      - "*"
+    cooldown:
+      default-days: 7
     open-pull-requests-limit: 5
     labels:
-      - "dependencies"
       - "github-actions"
-    groups:
-      github-actions:
-        patterns:
-          - "*"
+    multi-ecosystem-group: "dependencies"
   - package-ecosystem: "pip"
     directory: "/"
-    schedule:
-      interval: "weekly"
-      day: "monday"
-      time: "06:00"
-      timezone: "Europe/Amsterdam"
+    patterns:
+      - "*"
+    cooldown:
+      default-days: 7
+      semver-major-days: 30
+      semver-minor-days: 7
+      semver-patch-days: 3
     open-pull-requests-limit: 5
     labels:
-      - "dependencies"
       - "python"
-    groups:
-      python:
-        patterns:
-          - "*"
+    multi-ecosystem-group: "dependencies"
+  - package-ecosystem: "pre-commit"
+    directory: "/"
+    patterns:
+      - "*"
+    cooldown:
+      default-days: 7
+    multi-ecosystem-group: "dependencies"
   - package-ecosystem: "npm"
     directory: "/custom_components/city_visitor_parking/frontend"
-    schedule:
-      interval: "weekly"
-      day: "monday"
-      time: "06:00"
-      timezone: "Europe/Amsterdam"
+    patterns:
+      - "*"
+    cooldown:
+      default-days: 7
+      semver-major-days: 30
+      semver-minor-days: 7
+      semver-patch-days: 3
     open-pull-requests-limit: 5
     labels:
-      - "dependencies"
       - "javascript"
-    groups:
-      javascript:
-        patterns:
-          - "*"
+    multi-ecosystem-group: "dependencies"

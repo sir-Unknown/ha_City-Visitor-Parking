@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime, time, timedelta
 from types import SimpleNamespace
 from typing import TYPE_CHECKING
 from unittest.mock import AsyncMock
@@ -13,6 +13,7 @@ from homeassistant import config_entries
 from homeassistant.const import ATTR_DEVICE_ID
 from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from homeassistant.helpers import device_registry as dr
+from homeassistant.util import dt as dt_util
 from pycityvisitorparking import AuthError, NetworkError, ProviderError, ValidationError
 from pycityvisitorparking.exceptions import PyCityVisitorParkingError
 from pytest_homeassistant_custom_component.common import (  # type: ignore[import-untyped]
@@ -72,6 +73,17 @@ if TYPE_CHECKING:
 
 EXPECTED_COUNT = 2
 EXPECTED_REMAINING_MINUTES = 90
+
+
+def _override_range_for_day(now: datetime, start: time, end: time) -> TimeRange:
+    """Build the UTC range produced by a local-time override on the current day."""
+    local_now = dt_util.as_local(now)
+    start_local = datetime.combine(local_now.date(), start, tzinfo=local_now.tzinfo)
+    end_local = datetime.combine(local_now.date(), end, tzinfo=local_now.tzinfo)
+    return TimeRange(
+        start=dt_util.as_utc(start_local),
+        end=dt_util.as_utc(end_local),
+    )
 
 
 async def test_service_routing_targets_single_entry(hass: HomeAssistant) -> None:
@@ -882,17 +894,15 @@ async def test_service_list_reservations_response(
     data = CoordinatorData(
         permit_id="permit1",
         permit_remaining_minutes=0,
-        zone_validity=[],
-        reservations=[active_reservation, future_reservation, past_reservation],
-        favorites=[
-            Favorite(favorite_id="fav1", license_plate="AB1234", name="Ada"),
-        ],
+        zone_validity=(),
+        reservations=(active_reservation, future_reservation, past_reservation),
+        favorites=(Favorite(favorite_id="fav1", license_plate="AB1234", name="Ada"),),
         zone_availability=ZoneAvailability(
             is_chargeable_now=True,
             next_change_time=None,
-            windows_today=[],
+            windows_today=(),
         ),
-        active_reservations=[active_reservation],
+        active_reservations=(active_reservation,),
     )
     entry.runtime_data.coordinator.data = data
     entry.runtime_data.coordinator.last_update_success = True
@@ -916,6 +926,7 @@ async def test_service_list_reservations_response(
         ATTR_END_TIME,
     }
     reservations = response["reservations"]
+    assert response["active_reservations"] == reservations
     assert len(reservations) == EXPECTED_COUNT
     active_payload = next(
         item for item in reservations if item[ATTR_RESERVATION_ID] == "res1"
@@ -934,21 +945,21 @@ async def test_service_list_reservations_stale(hass: HomeAssistant) -> None:
     data = CoordinatorData(
         permit_id="permit1",
         permit_remaining_minutes=0,
-        zone_validity=[],
-        reservations=[
+        zone_validity=(),
+        reservations=(
             Reservation(
                 reservation_id="res1",
                 start_time=now - timedelta(hours=1),
                 end_time=now + timedelta(hours=1),
-            )
-        ],
-        favorites=[],
+            ),
+        ),
+        favorites=(),
         zone_availability=ZoneAvailability(
             is_chargeable_now=True,
             next_change_time=None,
-            windows_today=[],
+            windows_today=(),
         ),
-        active_reservations=[],
+        active_reservations=(),
     )
     entry.runtime_data.coordinator.data = data
     entry.runtime_data.coordinator.last_update_success = False
@@ -987,22 +998,19 @@ async def test_service_get_status_response(hass: HomeAssistant) -> None:
         start=datetime(2025, 1, 6, 9, 0, tzinfo=UTC),
         end=datetime(2025, 1, 6, 17, 0, tzinfo=UTC),
     )
-    effective_range = TimeRange(
-        start=datetime(2025, 1, 6, 11, 0, tzinfo=UTC),
-        end=datetime(2025, 1, 6, 12, 0, tzinfo=UTC),
-    )
+    effective_range = _override_range_for_day(now, time(11, 0), time(12, 0))
     entry.runtime_data.coordinator.data = CoordinatorData(
         permit_id="permit1",
         permit_remaining_minutes=90,
-        zone_validity=[provider_range],
-        reservations=[],
-        favorites=[],
+        zone_validity=(provider_range,),
+        reservations=(),
+        favorites=(),
         zone_availability=ZoneAvailability(
             is_chargeable_now=False,
             next_change_time=effective_range.start,
-            windows_today=[effective_range],
+            windows_today=(effective_range,),
         ),
-        active_reservations=[],
+        active_reservations=(),
     )
     entry.runtime_data.coordinator.last_update_success = True
     entry.runtime_data.coordinator.config_entry = entry
@@ -1030,8 +1038,8 @@ async def test_service_get_status_response(hass: HomeAssistant) -> None:
     ]
     assert response["effective_windows_today"] == [
         {
-            "start": "2025-01-06T11:00:00+00:00",
-            "end": "2025-01-06T12:00:00+00:00",
+            "start": effective_range.start.isoformat(),
+            "end": effective_range.end.isoformat(),
         }
     ]
 
@@ -1050,15 +1058,15 @@ async def test_service_get_status_stale(hass: HomeAssistant) -> None:
     entry.runtime_data.coordinator.data = CoordinatorData(
         permit_id="permit1",
         permit_remaining_minutes=30,
-        zone_validity=[window],
-        reservations=[],
-        favorites=[],
+        zone_validity=(window,),
+        reservations=(),
+        favorites=(),
         zone_availability=ZoneAvailability(
             is_chargeable_now=True,
             next_change_time=window.end,
-            windows_today=[window],
+            windows_today=(window,),
         ),
-        active_reservations=[],
+        active_reservations=(),
     )
     entry.runtime_data.coordinator.last_update_success = False
     entry.runtime_data.coordinator.last_exception = RuntimeError("boom")
@@ -1092,6 +1100,7 @@ async def test_service_get_status_stale_recomputes_consistent_windows(
         },
     )
     now = datetime(2025, 1, 6, 10, 30, tzinfo=UTC)
+    effective_range = _override_range_for_day(now, time(11, 0), time(12, 0))
 
     provider_range = TimeRange(
         start=datetime(2025, 1, 6, 9, 0, tzinfo=UTC),
@@ -1104,15 +1113,15 @@ async def test_service_get_status_stale_recomputes_consistent_windows(
     entry.runtime_data.coordinator.data = CoordinatorData(
         permit_id="permit1",
         permit_remaining_minutes=45,
-        zone_validity=[provider_range],
-        reservations=[],
-        favorites=[],
+        zone_validity=(provider_range,),
+        reservations=(),
+        favorites=(),
         zone_availability=ZoneAvailability(
             is_chargeable_now=True,
             next_change_time=stale_effective_range.end,
-            windows_today=[stale_effective_range],
+            windows_today=(stale_effective_range,),
         ),
-        active_reservations=[],
+        active_reservations=(),
     )
     entry.runtime_data.coordinator.last_update_success = False
     entry.runtime_data.coordinator.last_exception = RuntimeError("boom")
@@ -1131,11 +1140,11 @@ async def test_service_get_status_stale_recomputes_consistent_windows(
     assert response["state"] == "free"
     assert response["is_chargeable_now"] is False
     assert response["window_kind"] == "next"
-    assert response["next_change_time"] == "2025-01-06T11:00:00+00:00"
+    assert response["next_change_time"] == effective_range.start.isoformat()
     assert response["effective_windows_today"] == [
         {
-            "start": "2025-01-06T11:00:00+00:00",
-            "end": "2025-01-06T12:00:00+00:00",
+            "start": effective_range.start.isoformat(),
+            "end": effective_range.end.isoformat(),
         }
     ]
 

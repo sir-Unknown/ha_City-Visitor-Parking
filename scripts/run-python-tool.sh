@@ -4,7 +4,9 @@
 set -euo pipefail
 
 REPO_ROOT="$(git rev-parse --show-toplevel)"
-HA_CORE_DIR="${HA_CORE_DIR:-$REPO_ROOT/../homeassistant-core}"
+GIT_COMMON_DIR="$(git rev-parse --path-format=absolute --git-common-dir)"
+MAIN_REPO_ROOT="$(dirname "$GIT_COMMON_DIR")"
+HA_CORE_DIR="${HA_CORE_DIR:-$MAIN_REPO_ROOT/../homeassistant-core}"
 HA_VENV_PY="${HA_VENV_PY:-$HA_CORE_DIR/venv/bin/python}"
 
 select_python_bin() {
@@ -34,6 +36,7 @@ PYTHON_BIN="$(select_python_bin)" || {
   echo "No usable Python interpreter found. Install Python or configure HA_VENV_PY." >&2
   exit 127
 }
+export PATH="$(dirname "$PYTHON_BIN")${PATH:+:$PATH}"
 
 TOOL_MODULE="${1:-}"
 if [[ -z "$TOOL_MODULE" ]]; then
@@ -46,6 +49,15 @@ cd "$REPO_ROOT"
 
 if [[ "$TOOL_MODULE" == "script.hassfest" ]]; then
   export PYTHONPATH="$HA_CORE_DIR${PYTHONPATH:+:$PYTHONPATH}"
+  exec "$PYTHON_BIN" -c '
+import multiprocessing as mp
+import runpy
+import sys
+
+mp.set_start_method("fork", force=True)
+sys.argv = sys.argv[1:]
+runpy.run_module(sys.argv[0], run_name="__main__")
+' "$TOOL_MODULE" "$@"
 fi
 
 exec "$PYTHON_BIN" -m "$TOOL_MODULE" "$@"

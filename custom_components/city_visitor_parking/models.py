@@ -52,7 +52,7 @@ class ZoneAvailability:
 
     is_chargeable_now: bool
     next_change_time: datetime | None
-    windows_today: list[TimeRange]
+    windows_today: tuple[TimeRange, ...]
 
 
 @dataclass(frozen=True)
@@ -61,11 +61,11 @@ class CoordinatorData:
 
     permit_id: str
     permit_remaining_minutes: int
-    zone_validity: list[TimeRange]
-    reservations: list[Reservation]
-    favorites: list[Favorite]
+    zone_validity: tuple[TimeRange, ...]
+    reservations: tuple[Reservation, ...]
+    favorites: tuple[Favorite, ...]
     zone_availability: ZoneAvailability
-    active_reservations: list[Reservation]
+    active_reservations: tuple[Reservation, ...]
 
 
 def _default_attempts() -> dict[str, datetime]:

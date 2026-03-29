@@ -1,14 +1,44 @@
+amstelveen:
+  municipality_name: Amstelveen
+  provider_id: 2park
+  base_url: "https://mijn.2park.nl"
+  api_url: "/gsmpark-app-www/json"
+
 apeldoorn:
   municipality_name: Apeldoorn
   provider_id: dvsportal
   base_url: "https://parkeren.apeldoorn.nl"
   api_url: "/DVSWebAPI/api"
 
+assen:
+  municipality_name: Assen
+  provider_id: 2park
+  base_url: "https://mijn.2park.nl"
+  api_url: "/gsmpark-app-www/json"
+
+bergen_op_zoom:
+  municipality_name: Bergen op Zoom
+  provider_id: 2park
+  base_url: "https://mijn.2park.nl"
+  api_url: "/gsmpark-app-www/json"
+
 bloemendaal:
   municipality_name: Bloemendaal
   provider_id: dvsportal
   base_url: "https://parkeren.bloemendaal.nl"
   api_url: "/DVSWebAPI/api"
+
+breda:
+  municipality_name: Breda
+  provider_id: 2park
+  base_url: "https://mijn.2park.nl"
+  api_url: "/gsmpark-app-www/json"
+
+deventer:
+  municipality_name: Deventer
+  provider_id: 2park
+  base_url: "https://mijn.2park.nl"
+  api_url: "/gsmpark-app-www/json"
 
 delft:
   municipality_name: Delft
@@ -34,6 +64,36 @@ doetinchem_buha:
   base_url: "https://parkeren.buha.nl"
   api_url: "/DVSWebAPI/api"
 
+dordrecht:
+  municipality_name: Dordrecht
+  provider_id: 2park
+  base_url: "https://mijn.2park.nl"
+  api_url: "/gsmpark-app-www/json"
+
+eindhoven:
+  municipality_name: Eindhoven
+  provider_id: 2park
+  base_url: "https://mijn.2park.nl"
+  api_url: "/gsmpark-app-www/json"
+
+emmen:
+  municipality_name: Emmen
+  provider_id: 2park
+  base_url: "https://mijn.2park.nl"
+  api_url: "/gsmpark-app-www/json"
+
+etten_leur:
+  municipality_name: Etten-Leur
+  provider_id: 2park
+  base_url: "https://mijn.2park.nl"
+  api_url: "/gsmpark-app-www/json"
+
+gorinchem:
+  municipality_name: Gorinchem
+  provider_id: 2park
+  base_url: "https://mijn.2park.nl"
+  api_url: "/gsmpark-app-www/json"
+
 groningen:
   municipality_name: Groningen
   provider_id: dvsportal
@@ -51,6 +111,18 @@ harlingen:
   provider_id: dvsportal
   base_url: "https://parkeervergunningen.harlingen.nl"
   api_url: "/DVSWebAPI/api"
+
+hardenberg:
+  municipality_name: Hardenberg
+  provider_id: 2park
+  base_url: "https://mijn.2park.nl"
+  api_url: "/gsmpark-app-www/json"
+
+harderwijk:
+  municipality_name: Harderwijk
+  provider_id: 2park
+  base_url: "https://mijn.2park.nl"
+  api_url: "/gsmpark-app-www/json"
 
 heemstede:
   municipality_name: Heemstede
@@ -94,6 +166,12 @@ leidschendam_voorburg:
   base_url: "https://parkeren.lv.nl"
   api_url: "/DVSWebAPI/api"
 
+maastricht:
+  municipality_name: Maastricht
+  provider_id: 2park
+  base_url: "https://mijn.2park.nl"
+  api_url: "/gsmpark-app-www/json"
+
 middelburg:
   municipality_name: Middelburg
   provider_id: dvsportal
@@ -118,6 +196,18 @@ oldenzaal:
   base_url: "https://parkeren.oldenzaal.nl"
   api_url: "/DVSWebAPI/api"
 
+oosterhout:
+  municipality_name: Oosterhout
+  provider_id: 2park
+  base_url: "https://mijn.2park.nl"
+  api_url: "/gsmpark-app-www/json"
+
+oss:
+  municipality_name: Oss
+  provider_id: 2park
+  base_url: "https://mijn.2park.nl"
+  api_url: "/gsmpark-app-www/json"
+
 rijswijk:
   municipality_name: Rijswijk
   provider_id: dvsportal
@@ -129,6 +219,12 @@ roermond:
   provider_id: dvsportal
   base_url: "https://parkeren.roermond.nl"
   api_url: "/DVSWebAPI/api"
+
+roosendaal:
+  municipality_name: Roosendaal
+  provider_id: 2park
+  base_url: "https://mijn.2park.nl"
+  api_url: "/gsmpark-app-www/json"
 
 schouwen_duiveland:
   municipality_name: Schouwen-Duiveland
@@ -154,17 +250,47 @@ sudwest_fryslan:
   base_url: "https://parkeren.sudwestfryslan.nl"
   api_url: "/DVSWebAPI/api"
 
+sluis:
+  municipality_name: Sluis
+  provider_id: 2park
+  base_url: "https://mijn.2park.nl"
+  api_url: "/gsmpark-app-www/json"
+
+terneuzen:
+  municipality_name: Terneuzen
+  provider_id: 2park
+  base_url: "https://mijn.2park.nl"
+  api_url: "/gsmpark-app-www/json"
+
+tiel:
+  municipality_name: Tiel
+  provider_id: 2park
+  base_url: "https://mijn.2park.nl"
+  api_url: "/gsmpark-app-www/json"
+
 veere:
   municipality_name: Veere
   provider_id: dvsportal
   base_url: "https://parkeren.veere.nl"
   api_url: "/DVSWebAPI/api"
 
+veenendaal:
+  municipality_name: Veenendaal
+  provider_id: 2park
+  base_url: "https://mijn.2park.nl"
+  api_url: "/gsmpark-app-www/json"
+
 venlo:
   municipality_name: Venlo
   provider_id: dvsportal
   base_url: "https://parkeren.venlo.nl"
   api_url: "/DVSWebAPI/api"
+
+vlaardingen:
+  municipality_name: Vlaardingen
+  provider_id: 2park
+  base_url: "https://mijn.2park.nl"
+  api_url: "/gsmpark-app-www/json"
 
 vlissingen:
   municipality_name: Vlissingen

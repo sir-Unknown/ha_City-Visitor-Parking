@@ -18,6 +18,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
 
       - name: Fetch HA core Python version
         id: ha_core
@@ -116,4 +118,6 @@ jobs:
 
       - name: Already up to date
         if: steps.ha_core.outputs.version == steps.current.outputs.version
-        run: echo "Python version is already ${{ steps.current.outputs.version }} — nothing to do."
+        env:
+          CURRENT_VERSION: ${{ steps.current.outputs.version }}
+        run: echo "Python version is already $CURRENT_VERSION; nothing to do."

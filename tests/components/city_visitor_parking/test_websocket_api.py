@@ -34,7 +34,6 @@ from custom_components.city_visitor_parking.runtime_data import (
     CityVisitorParkingRuntimeData,
 )
 from custom_components.city_visitor_parking.websocket_api import (
-    _as_utc_iso,
     _ws_get_status,
     _ws_list_favorites,
 )
@@ -59,6 +58,13 @@ class _FakeConnection:
     def send_result(self, msg_id: int, result: dict[str, object]) -> None:
         """Capture a success response."""
         self.results.append({"id": msg_id, "result": result})
+
+
+def _as_utc_iso(value: datetime | None) -> str | None:
+    """Return a UTC ISO8601 timestamp string for websocket assertions."""
+    if value is None:
+        return None
+    return dt_util.as_utc(value).isoformat()
 
 
 async def test_ws_list_favorites_success(hass: HomeAssistant) -> None:
@@ -158,15 +164,15 @@ async def test_ws_get_status_current_window(hass: HomeAssistant) -> None:
     data = CoordinatorData(
         permit_id="permit",
         permit_remaining_minutes=0,
-        zone_validity=[window],
-        reservations=[],
-        favorites=[],
+        zone_validity=(window,),
+        reservations=(),
+        favorites=(),
         zone_availability=ZoneAvailability(
             is_chargeable_now=True,
             next_change_time=window.end,
-            windows_today=[window],
+            windows_today=(window,),
         ),
-        active_reservations=[],
+        active_reservations=(),
     )
     entry.runtime_data = _runtime(AsyncMock(), data)
 
@@ -201,15 +207,15 @@ async def test_ws_get_status_next_window_override(hass: HomeAssistant) -> None:
     data = CoordinatorData(
         permit_id="permit",
         permit_remaining_minutes=0,
-        zone_validity=[],
-        reservations=[],
-        favorites=[],
+        zone_validity=(),
+        reservations=(),
+        favorites=(),
         zone_availability=ZoneAvailability(
             is_chargeable_now=False,
             next_change_time=None,
-            windows_today=[],
+            windows_today=(),
         ),
-        active_reservations=[],
+        active_reservations=(),
     )
     entry.runtime_data = _runtime(AsyncMock(), data)
 
