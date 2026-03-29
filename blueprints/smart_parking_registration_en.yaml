@@ -1,0 +1,1487 @@
+blueprint:
+  name: City Visitor Parking - Automatic Parking Registration
+  description: |
+    &nbsp;
+    Automate visitor parking using zone detection, Bluetooth, and mobile
+    notifications. Runs fully in the background, with a notification only
+    when action is needed.
+    &nbsp;
+    ## Requirements
+
+    - City Visitor Parking integration installed and configured
+
+    ## How it works
+
+    - 🚗 **Arriving in the zone** — notification to register the license plate (Bluetooth required)
+    - 📵 **Bluetooth disconnects on arrival** — notification appears immediately, without delay
+    - ⏰ **Active reservation** — hourly reminder; notification if canceled externally
+    - 🔵 **Bluetooth connects in the zone** — arrival notification also appears if BT connects later
+    - 🔵 **Bluetooth connects outside the zone** — immediate notification to unregister
+    - ⚠️ **Leaving without registration** — persistent warning
+
+    ## More information
+
+    - [Integration documentation](https://github.com/sir-Unknown/ha_City-Visitor-Parking#readme)
+    - [Blueprint documentation](https://github.com/sir-Unknown/ha_City-Visitor-Parking/blueprints#readme)
+  source_url: https://github.com/sir-Unknown/ha_City-Visitor-Parking/blob/main/blueprints/zone_automatic_parking_registration.yaml
+  domain: automation
+  input:
+    parkeerapp:
+      name: Parking integration
+      icon: mdi:car
+      input:
+        parking_device:
+          name: Parking permit
+          description: Choose the **City Visitor Parking** integration device this automation should use. This determines which permit is used to start, stop, and check reservations.
+          selector:
+            device:
+              filter:
+                - integration: city_visitor_parking
+
+
+    locatie:
+      name: Location and vehicle
+      icon: mdi:map-marker
+      input:
+        person_entity:
+          name: Person
+          description: Choose the `person` entity whose location is tracked. This is used to detect arrival and departure in the selected zone.
+          selector:
+            entity:
+              domain: person
+
+        license_plate:
+          name: License plate
+          description: Enter the license plate to register. Spaces are removed automatically and letters are converted to **uppercase**.
+          selector:
+            text:
+
+        target_zone:
+          name: Zone
+          description: "Choose the `zone` in which this automation should be active. Entering and leaving this zone triggers the arrival and departure logic."
+          selector:
+            entity:
+              domain: zone
+
+        device_tracker:
+          name: Device tracker (optional)
+          description: "Optional `device_tracker` as an extra check for arrival and departure. Use this when the person or zone trigger alone is not reliable enough, for example with slow GPS updates."
+          default: ""
+          selector:
+            entity:
+              domain: device_tracker
+
+    telefoon:
+      name: Phone and Bluetooth
+      icon: mdi:cellphone
+      input:
+        notify_device:
+          name: Receive notifications on
+          description: Choose the mobile device that should receive this automation's notifications and action buttons.
+          selector:
+            device:
+              filter:
+                - integration: mobile_app
+
+        bluetooth_device:
+          name: Bluetooth device
+          description: Choose the device whose Bluetooth status is monitored. This may be the same device that receives the notifications.
+          selector:
+            device:
+              filter:
+                - integration: mobile_app
+
+        bluetooth_device_name:
+          name: Bluetooth device name
+          description: "Name of the Bluetooth device (car or car kit) as shown in the HA Companion App under Settings → Sensors → Bluetooth. Fill in at least this field or the MAC address."
+          default: ""
+          selector:
+            text:
+
+        bluetooth_mac_address:
+          name: Bluetooth MAC address (optional)
+          description: "MAC address of the Bluetooth device as an alternative or extra check alongside the device name. Fill in at least this field or the device name."
+          default: ""
+          selector:
+            text:
+
+        dashboard_url:
+          name: Dashboard URL (optional)
+          description: "URL or path to the Home Assistant dashboard opened by the notification button. For example: `/lovelace/parking`"
+          default: ""
+          selector:
+            text:
+
+    geavanceerd:
+      name: Advanced
+      icon: mdi:cog
+      collapsed: true
+      input:
+        notification_timeout:
+          name: Notification timeout
+          description: How long the automation waits for a response to a mobile notification before continuing with the next step.
+          default: "00:01:00"
+          selector:
+            time:
+
+        arrival_delay:
+          name: Arrival delay (seconds)
+          description: Extra wait time after arrival before checking reservation status. Useful to let `GPS` or Bluetooth status settle first.
+          default: 5
+          selector:
+            number:
+              min: 0
+              max: 60
+              unit_of_measurement: s
+
+        departure_delay:
+          name: Departure delay (seconds)
+          description: Extra wait time after departure before checking whether the person has really left the zone and whether a reservation is still active.
+          default: 30
+          selector:
+            number:
+              min: 0
+              max: 120
+              unit_of_measurement: s
+
+    teksten:
+      name: Texts and buttons
+      icon: mdi:message-text
+      collapsed: true
+      input:
+        msg_title:
+          name: Notification title
+          description: Title shown above all mobile notifications and persistent notifications from this blueprint.
+          default: Visitor Parking
+          selector:
+            text:
+
+        msg_arrival:
+          name: Text - arrival prompt
+          description: "Text of the arrival notification. **Available variables:** `{{ license_plate_clean }}`, `{{ start_time_display }}`, `{{ end_time_display }}`. Use `\\n` for a new line."
+          default: "You have arrived. Register license plate {{ license_plate_clean }}?"
+          selector:
+            text:
+              multiline: true
+
+        msg_registered:
+          name: Text - registered
+          description: "Confirmation text after a reservation has started. **Available variables:** `{{ license_plate_clean }}`, `{{ start_time_display }}`, `{{ end_time_display }}`. Use `\\n` for a new line."
+          default: "License plate {{ license_plate_clean }} has been registered until {{ end_time_display }}."
+          selector:
+            text:
+              multiline: true
+
+        msg_unregistered:
+          name: Text - unregistered
+          description: "Confirmation text after a reservation has been stopped. **Available variables:** `{{ license_plate_clean }}`, `{{ start_time_display }}`, `{{ end_time_display }}`. Use `\\n` for a new line."
+          default: "License plate {{ license_plate_clean }} has been unregistered."
+          selector:
+            text:
+              multiline: true
+
+        msg_external_cancel:
+          name: Text - canceled externally
+          description: "Notification when a reservation has been ended outside this automation. **Available variables:** `{{ license_plate_clean }}`, `{{ start_time_display }}`, `{{ end_time_display }}`. Use `\\n` for a new line."
+          default: "The reservation for license plate {{ license_plate_clean }} is no longer active."
+          selector:
+            text:
+              multiline: true
+
+        msg_reregistered:
+          name: Text - registered again
+          description: "Confirmation text after registering again. **Available variables:** `{{ license_plate_clean }}`, `{{ start_time_display }}`, `{{ end_time_display }}`. Use `\\n` for a new line."
+          default: "License plate {{ license_plate_clean }} has been registered again until {{ end_time_display }}."
+          selector:
+            text:
+              multiline: true
+
+        msg_reminder:
+          name: Text - reminder (every hour)
+          description: "Reminder text sent periodically during an active reservation. **Available variables:** `{{ license_plate_clean }}`, `{{ start_time_display }}`, `{{ end_time_display }}`. Use `\\n` for a new line."
+          default: "License plate {{ license_plate_clean }} has been registered for 1 hour already, until {{ end_time_display }}."
+          selector:
+            text:
+              multiline: true
+
+        msg_departure_no_reg:
+          name: Text - left without registration
+          description: "Persistent notification when someone leaves the zone without an active reservation. **Available variables:** `{{ license_plate_clean }}`, `{{ start_time_display }}`, `{{ end_time_display }}`. Use `\\n` for a new line."
+          default: "The person left the zone without registering license plate {{ license_plate_clean }}."
+          selector:
+            text:
+              multiline: true
+
+        msg_future_reservation:
+          name: Text - future reservation
+          description: "Notification when a future reservation already exists and a new registration is therefore skipped. **Available variables:** `{{ license_plate_clean }}`, `{{ start_time_display }}`, `{{ end_time_display }}`. Use `\\n` for a new line."
+          default: "A future parking reservation already exists for {{ license_plate_clean }}."
+          selector:
+            text:
+              multiline: true
+
+        btn_register:
+          name: Button - register
+          description: Label for the button that starts a reservation from a notification.
+          default: Register
+          selector:
+            text:
+
+        btn_unregister:
+          name: Button - unregister
+          description: Label for the button that stops an active reservation.
+          default: Unregister
+          selector:
+            text:
+
+        btn_reregister:
+          name: Button - register again
+          description: Label for the button that restarts a reservation that was ended externally.
+          default: Register again
+          selector:
+            text:
+
+        btn_dashboard:
+          name: Button - dashboard
+          description: Label for the button that opens the specified Home Assistant dashboard.
+          default: Dashboard
+          selector:
+            text:
+
+mode: queued
+max: 2
+
+trigger_variables:
+  _device_tracker: !input device_tracker
+  _target_zone: !input target_zone
+  _bluetooth_device: !input bluetooth_device
+  _bluetooth_device_name: !input bluetooth_device_name
+  _bluetooth_mac: !input bluetooth_mac_address
+
+trigger:
+  - platform: zone
+    entity_id: !input person_entity
+    zone: !input target_zone
+    event: enter
+    id: arrival
+
+  - platform: zone
+    entity_id: !input person_entity
+    zone: !input target_zone
+    event: leave
+    id: departure
+
+  - platform: homeassistant
+    event: start
+    id: ha_restart
+
+  - platform: template
+    value_template: >
+      {{ _device_tracker != '' and _target_zone != ''
+         and is_state(_device_tracker, _target_zone | replace('zone.', '')) }}
+    for: "00:00:30"
+    id: arrival
+
+  - platform: template
+    value_template: >
+      {{ _device_tracker != '' and _target_zone != ''
+         and not is_state(_device_tracker, _target_zone | replace('zone.', '')) }}
+    for: "00:00:30"
+    id: departure
+
+  - platform: template
+    value_template: >
+      {% set bt_sensor = device_entities(_bluetooth_device)
+         | select('search', '_bluetooth_connection') | first | default('') %}
+      {% set devices = state_attr(bt_sensor, 'connected_paired_devices') or [] %}
+      {{ bt_sensor != '' and (
+         (_bluetooth_device_name != '' and (devices | select('search', _bluetooth_device_name) | list | count > 0))
+         or (_bluetooth_mac != '' and (devices | select('search', _bluetooth_mac) | list | count > 0))) }}
+    for: "00:00:10"
+    id: bluetooth_connect
+
+condition: []
+
+action:
+  - variables:
+      bluetooth_device_id: !input bluetooth_device
+      bluetooth_sensor_entity: >
+        {{ device_entities(bluetooth_device_id)
+           | select('search', '_bluetooth_connection')
+           | first | default('') }}
+      bluetooth_device_name_value: !input bluetooth_device_name
+      bluetooth_mac_address_value: !input bluetooth_mac_address
+      license_plate_raw: !input license_plate
+      license_plate_clean: "{{ license_plate_raw | upper | replace(' ', '') }}"
+      bluetooth_connected: >
+        {% set devices = state_attr(bluetooth_sensor_entity, 'connected_paired_devices') or [] %}
+        {{ (bluetooth_device_name_value != '' and (devices | select('search', bluetooth_device_name_value) | list | count > 0))
+           or (bluetooth_mac_address_value != '' and (devices | select('search', bluetooth_mac_address_value) | list | count > 0)) }}
+
+      instance_key: >
+        {{ (this.entity_id | default(this.object_id | default('visitor_parking')))
+           | lower
+           | replace('.', '_')
+           | replace('-', '_')
+           | replace(' ', '_') }}
+
+      run_id: "{{ context.id }}"
+
+      notification_tag: "{{ 'visitor_parking_' ~ instance_key }}"
+      notification_id_not_registered: "{{ 'visitor_parking_not_registered_' ~ instance_key }}"
+
+      action_start_id: "{{ 'VISITOR_PARKING_START_' ~ run_id }}"
+      action_stop_id: "{{ 'VISITOR_PARKING_STOP_' ~ run_id }}"
+      action_reregister_id: "{{ 'VISITOR_PARKING_REREGISTER_' ~ run_id }}"
+
+      dashboard_url_value: !input dashboard_url
+      btn_register_value: !input btn_register
+      btn_unregister_value: !input btn_unregister
+      btn_reregister_value: !input btn_reregister
+      btn_dashboard_value: !input btn_dashboard
+
+      action_register: >
+        {{ [{"action": action_start_id, "title": btn_register_value}]
+           + ([{"action": "URI", "title": btn_dashboard_value, "uri": dashboard_url_value}] if dashboard_url_value != '' else []) }}
+      action_stop: >
+        {{ [{"action": action_stop_id, "title": btn_unregister_value}]
+           + ([{"action": "URI", "title": btn_dashboard_value, "uri": dashboard_url_value}] if dashboard_url_value != '' else []) }}
+      action_reregister: >
+        {{ [{"action": action_reregister_id, "title": btn_reregister_value}]
+           + ([{"action": "URI", "title": btn_dashboard_value, "uri": dashboard_url_value}] if dashboard_url_value != '' else []) }}
+
+
+      notification_icon: mdi:car
+      notification_icon_clock: mdi:car-clock
+      notification_icon_url: "https://raw.githubusercontent.com/home-assistant/brands/master/custom_integrations/city_visitor_parking/icon.png"
+
+  - if:
+      - condition: template
+        value_template: "{{ bluetooth_device_name_value == '' and bluetooth_mac_address_value == '' }}"
+    then:
+      - action: persistent_notification.create
+        data:
+          notification_id: "{{ 'visitor_parking_config_error_' ~ instance_key }}"
+          title: !input msg_title
+          message: "Configuration error: fill in at least a Bluetooth device name or MAC address for this automation."
+      - stop: "Bluetooth not configured"
+
+  - choose:
+      - conditions:
+          - condition: trigger
+            id: arrival
+          - condition: template
+            value_template: "{{ license_plate_clean | length > 0 }}"
+          - condition: template
+            value_template: "{{ bluetooth_connected }}"
+        sequence:
+          - wait_for_trigger:
+              - platform: template
+                value_template: >
+                  {% set devices = state_attr(bluetooth_sensor_entity, 'connected_paired_devices') or [] %}
+                  {{ not ((bluetooth_device_name_value != '' and (devices | select('search', bluetooth_device_name_value) | list | count > 0))
+                     or (bluetooth_mac_address_value != '' and (devices | select('search', bluetooth_mac_address_value) | list | count > 0))) }}
+            timeout:
+              seconds: !input arrival_delay
+            continue_on_timeout: true
+
+          - action: city_visitor_parking.get_status
+            data:
+              device_id: !input parking_device
+            response_variable: parking_status
+
+          - variables:
+              window_start: "{{ parking_status.window_start }}"
+              window_end: "{{ parking_status.window_end }}"
+              start_time_display: >
+                {% if parking_status.window_start %}
+                  {% set start_dt = parking_status.window_start | as_datetime | as_local %}
+                  {% if start_dt.strftime('%H:%M') == '00:00' %}midnight{% else %}{{ start_dt.strftime('%H:%M') }}{% endif %}
+                {% else %}
+                  now
+                {% endif %}
+              end_time_display: >
+                {% if parking_status.window_end %}
+                  {% set end_dt = parking_status.window_end | as_datetime | as_local %}
+                  {% if end_dt.strftime('%H:%M') == '00:00' %}midnight{% else %}{{ end_dt.strftime('%H:%M') }}{% endif %}
+                {% else %}
+                  unknown
+                {% endif %}
+
+          - variables:
+              arrived: false
+
+          - repeat:
+              while:
+                - condition: zone
+                  entity_id: !input person_entity
+                  zone: !input target_zone
+                - condition: template
+                  value_template: "{{ not arrived }}"
+              sequence:
+                - action: city_visitor_parking.list_reservations
+                  data:
+                    device_id: !input parking_device
+                  response_variable: parking_reservations
+
+                - if:
+                    - condition: template
+                      value_template: >
+                        {{ (parking_reservations.active_count | int(0)) > 0
+                           or (parking_reservations.future_count | int(0)) > 0 }}
+                  then:
+                    - device_id: !input notify_device
+                      domain: mobile_app
+                      type: notify
+                      message: clear_notification
+                      data:
+                        tag: "{{ notification_tag }}"
+
+                    - if:
+                        - condition: template
+                          value_template: "{{ (parking_reservations.future_count | int(0)) > 0 }}"
+                      then:
+                        - device_id: !input notify_device
+                          domain: mobile_app
+                          type: notify
+                          title: !input msg_title
+                          message: !input msg_future_reservation
+                          data:
+                            tag: "{{ notification_tag }}"
+                            channel: Parking
+                            notification_icon: "{{ notification_icon }}"
+                            icon_url: "{{ notification_icon_url }}"
+                            clickAction: noAction
+                            ttl: 0
+                            priority: high
+                            importance: max
+                            actions: >
+                              {{ ([{"action": "URI", "title": btn_dashboard_value, "uri": dashboard_url_value}]
+                                 if dashboard_url_value != '' else []) }}
+
+                    - stop: "Reservation already present on arrival"
+
+                - device_id: !input notify_device
+                  domain: mobile_app
+                  type: notify
+                  title: !input msg_title
+                  message: !input msg_arrival
+                  data:
+                    tag: "{{ notification_tag }}"
+                    channel: Parking
+                    notification_icon: "{{ notification_icon }}"
+                    icon_url: "{{ notification_icon_url }}"
+                    clickAction: noAction
+                    ttl: 0
+                    priority: high
+                    importance: max
+                    sticky: true
+                    persistent: true
+                    confirmation: true
+                    actions: "{{ action_register }}"
+
+                - wait_for_trigger:
+                    - platform: event
+                      event_type: mobile_app_notification_action
+                      event_data:
+                        action: "{{ action_start_id }}"
+                  timeout: !input notification_timeout
+                  continue_on_timeout: true
+
+                - variables:
+                    arrived: "{{ wait.completed }}"
+
+          - if:
+              - condition: template
+                value_template: "{{ arrived }}"
+            then:
+              - action: city_visitor_parking.start_reservation
+                data:
+                  device_id: !input parking_device
+                  license_plate: "{{ license_plate_clean }}"
+                  start_time: >
+                    {{ window_start if window_start and window_start | as_datetime > now() else now().isoformat() }}
+                  end_time: "{{ window_end }}"
+
+              - action: persistent_notification.dismiss
+                data:
+                  notification_id: "{{ notification_id_not_registered }}"
+
+              - variables:
+                  reservation_start: "{{ as_timestamp(now()) | int }}"
+
+              - device_id: !input notify_device
+                domain: mobile_app
+                type: notify
+                title: !input msg_title
+                message: !input msg_registered
+                data:
+                  tag: "{{ notification_tag }}"
+                  channel: Parking
+                  notification_icon: "{{ notification_icon }}"
+                  icon_url: "{{ notification_icon_url }}"
+                  clickAction: noAction
+                  ttl: 0
+                  priority: high
+                  importance: max
+                  chronometer: true
+                  when: "{{ reservation_start }}"
+                  sticky: true
+                  persistent: true
+                  actions: "{{ action_stop }}"
+
+              - repeat:
+                  while:
+                    - condition: template
+                      value_template: "true"
+                  sequence:
+                    - wait_for_trigger:
+                        - platform: event
+                          event_type: mobile_app_notification_action
+                          event_data:
+                            action: "{{ action_stop_id }}"
+                      timeout: !input notification_timeout
+                      continue_on_timeout: true
+
+                    - choose:
+                        # User presses Unregister
+                        - conditions:
+                            - condition: template
+                              value_template: >
+                                {{ wait.completed
+                                   and wait.trigger is not none
+                                   and wait.trigger.event is defined
+                                   and wait.trigger.event.data is defined
+                                   and wait.trigger.event.data.action == action_stop_id }}
+                          sequence:
+                            - action: city_visitor_parking.list_reservations
+                              data:
+                                device_id: !input parking_device
+                              response_variable: active_parking_reservations
+
+                            - variables:
+                                reservation_id: >
+                                  {% set ns = namespace(active_id='') %}
+                                  {% set now_dt = now() %}
+                                  {% for item in active_parking_reservations.reservations | default([]) %}
+                                    {% set start_dt = item.start_time | as_datetime if item.start_time is defined and item.start_time else none %}
+                                    {% set end_dt = item.end_time | as_datetime if item.end_time is defined and item.end_time else none %}
+                                    {% if ns.active_id == '' and start_dt and end_dt and start_dt <= now_dt < end_dt %}
+                                      {% set ns.active_id = item.reservation_id %}
+                                    {% endif %}
+                                  {% endfor %}
+                                  {{ ns.active_id }}
+
+                            - choose:
+                                - conditions:
+                                    - condition: template
+                                      value_template: "{{ reservation_id != '' }}"
+                                  sequence:
+                                    - action: city_visitor_parking.end_reservation
+                                      data:
+                                        device_id: !input parking_device
+                                        reservation_id: "{{ reservation_id }}"
+
+                            - device_id: !input notify_device
+                              domain: mobile_app
+                              type: notify
+                              message: clear_notification
+                              data:
+                                tag: "{{ notification_tag }}"
+
+                            - device_id: !input notify_device
+                              domain: mobile_app
+                              type: notify
+                              title: !input msg_title
+                              message: !input msg_unregistered
+                              data:
+                                tag: "{{ notification_tag }}"
+                                notification_icon: "{{ notification_icon }}"
+                                icon_url: "{{ notification_icon_url }}"
+                                clickAction: noAction
+                                ttl: 0
+                                priority: high
+                                importance: max
+
+                            - stop: "Unregistered by user"
+
+                        # Timeout - check reservation status
+                        - conditions:
+                            - condition: template
+                              value_template: "{{ not wait.completed }}"
+                          sequence:
+                            - action: city_visitor_parking.list_reservations
+                              data:
+                                device_id: !input parking_device
+                              response_variable: poll_reservations
+
+                            - choose:
+                                # Reservation canceled externally
+                                - conditions:
+                                    - condition: template
+                                      value_template: >
+                                        {{ (poll_reservations.active_count | int(0)) == 0 }}
+                                  sequence:
+                                    - device_id: !input notify_device
+                                      domain: mobile_app
+                                      type: notify
+                                      title: !input msg_title
+                                      message: !input msg_external_cancel
+                                      data:
+                                        tag: "{{ notification_tag }}"
+                                        channel: Parking
+                                        notification_icon: "{{ notification_icon }}"
+                                        icon_url: "{{ notification_icon_url }}"
+                                        clickAction: noAction
+                                        ttl: 0
+                                        priority: high
+                                        importance: max
+                                        sticky: true
+                                        persistent: true
+                                        actions: "{{ action_reregister }}"
+
+                                    - wait_for_trigger:
+                                        - platform: event
+                                          event_type: mobile_app_notification_action
+                                          event_data:
+                                            action: "{{ action_reregister_id }}"
+                                      timeout: !input notification_timeout
+                                      continue_on_timeout: true
+
+                                    - if:
+                                        - condition: template
+                                          value_template: "{{ wait.completed }}"
+                                      then:
+                                        - action: city_visitor_parking.start_reservation
+                                          data:
+                                            device_id: !input parking_device
+                                            license_plate: "{{ license_plate_clean }}"
+                                            start_time: >
+                                              {{ window_start if window_start and window_start | as_datetime > now() else now().isoformat() }}
+                                            end_time: "{{ window_end }}"
+
+                                        - variables:
+                                            reservation_start: "{{ as_timestamp(now()) | int }}"
+
+                                        - device_id: !input notify_device
+                                          domain: mobile_app
+                                          type: notify
+                                          title: !input msg_title
+                                          message: !input msg_reregistered
+                                          data:
+                                            tag: "{{ notification_tag }}"
+                                            channel: Parking
+                                            notification_icon: "{{ notification_icon }}"
+                                            icon_url: "{{ notification_icon_url }}"
+                                            clickAction: noAction
+                                            ttl: 0
+                                            priority: high
+                                            importance: max
+                                            chronometer: true
+                                            when: "{{ reservation_start }}"
+                                            sticky: true
+                                            persistent: true
+                                            actions: "{{ action_stop }}"
+                                      else:
+                                        - device_id: !input notify_device
+                                          domain: mobile_app
+                                          type: notify
+                                          message: clear_notification
+                                          data:
+                                            tag: "{{ notification_tag }}"
+                                        - stop: "Reservation canceled externally, no re-registration"
+
+                                # Reservation is active, send a reminder when it is time
+                                - conditions:
+                                    - condition: template
+                                      value_template: >
+                                        {% set elapsed_min = ((as_timestamp(now()) - reservation_start) / 60) | int %}
+                                        {{ (poll_reservations.active_count | int(0)) > 0
+                                           and elapsed_min >= 60
+                                           and elapsed_min % 60 < 5 }}
+                                  sequence:
+                                    - variables:
+                                        reminder_start: "{{ reservation_start }}"
+
+                                    - device_id: !input notify_device
+                                      domain: mobile_app
+                                      type: notify
+                                      title: !input msg_title
+                                      message: !input msg_reminder
+                                      data:
+                                        tag: "{{ notification_tag }}"
+                                        channel: Parking
+                                        notification_icon: "{{ notification_icon_clock }}"
+                                        icon_url: "{{ notification_icon_url }}"
+                                        clickAction: noAction
+                                        ttl: 0
+                                        priority: high
+                                        importance: max
+                                        chronometer: true
+                                        when: "{{ reminder_start }}"
+                                        sticky: true
+                                        persistent: true
+                                        actions: "{{ action_stop }}"
+
+            else:
+              - device_id: !input notify_device
+                domain: mobile_app
+                type: notify
+                message: clear_notification
+                data:
+                  tag: "{{ notification_tag }}"
+
+      - conditions:
+          - condition: trigger
+            id: bluetooth_connect
+          - condition: template
+            value_template: "{{ license_plate_clean | length > 0 }}"
+        sequence:
+          - choose:
+              # Person IN zone: BT connected late, show arrival notification
+              - conditions:
+                  - condition: zone
+                    entity_id: !input person_entity
+                    zone: !input target_zone
+                sequence:
+                  - action: city_visitor_parking.get_status
+                    data:
+                      device_id: !input parking_device
+                    response_variable: parking_status
+
+                  - variables:
+                      window_start: "{{ parking_status.window_start }}"
+                      window_end: "{{ parking_status.window_end }}"
+                      start_time_display: >
+                        {% if parking_status.window_start %}
+                          {% set start_dt = parking_status.window_start | as_datetime | as_local %}
+                          {% if start_dt.strftime('%H:%M') == '00:00' %}midnight{% else %}{{ start_dt.strftime('%H:%M') }}{% endif %}
+                        {% else %}
+                          now
+                        {% endif %}
+                      end_time_display: >
+                        {% if parking_status.window_end %}
+                          {% set end_dt = parking_status.window_end | as_datetime | as_local %}
+                          {% if end_dt.strftime('%H:%M') == '00:00' %}midnight{% else %}{{ end_dt.strftime('%H:%M') }}{% endif %}
+                        {% else %}
+                          unknown
+                        {% endif %}
+
+                  - action: city_visitor_parking.list_reservations
+                    data:
+                      device_id: !input parking_device
+                    response_variable: parking_reservations
+
+                  - if:
+                      - condition: template
+                        value_template: >
+                          {{ (parking_reservations.active_count | int(0)) == 0
+                             and (parking_reservations.future_count | int(0)) == 0 }}
+                    then:
+                      - device_id: !input notify_device
+                        domain: mobile_app
+                        type: notify
+                        title: !input msg_title
+                        message: !input msg_arrival
+                        data:
+                          tag: "{{ notification_tag }}"
+                          channel: Parking
+                          notification_icon: "{{ notification_icon }}"
+                          icon_url: "{{ notification_icon_url }}"
+                          clickAction: noAction
+                          ttl: 0
+                          priority: high
+                          importance: max
+                          sticky: true
+                          persistent: true
+                          confirmation: true
+                          actions: "{{ action_register }}"
+
+                      - wait_for_trigger:
+                          - platform: event
+                            event_type: mobile_app_notification_action
+                            event_data:
+                              action: "{{ action_start_id }}"
+                        timeout: !input notification_timeout
+                        continue_on_timeout: true
+
+                      - if:
+                          - condition: template
+                            value_template: "{{ wait.completed }}"
+                        then:
+                          - action: city_visitor_parking.start_reservation
+                            data:
+                              device_id: !input parking_device
+                              license_plate: "{{ license_plate_clean }}"
+                              start_time: >
+                                {{ window_start if window_start and window_start | as_datetime > now() else now().isoformat() }}
+                              end_time: "{{ window_end }}"
+
+                          - action: persistent_notification.dismiss
+                            data:
+                              notification_id: "{{ notification_id_not_registered }}"
+
+                          - variables:
+                              reservation_start: "{{ as_timestamp(now()) | int }}"
+
+                          - device_id: !input notify_device
+                            domain: mobile_app
+                            type: notify
+                            title: !input msg_title
+                            message: !input msg_registered
+                            data:
+                              tag: "{{ notification_tag }}"
+                              channel: Parking
+                              notification_icon: "{{ notification_icon }}"
+                              icon_url: "{{ notification_icon_url }}"
+                              clickAction: noAction
+                              ttl: 0
+                              priority: high
+                              importance: max
+                              chronometer: true
+                              when: "{{ reservation_start }}"
+                              sticky: true
+                              persistent: true
+                              actions: "{{ action_stop }}"
+
+                          - repeat:
+                              while:
+                                - condition: template
+                                  value_template: "true"
+                              sequence:
+                                - wait_for_trigger:
+                                    - platform: event
+                                      event_type: mobile_app_notification_action
+                                      event_data:
+                                        action: "{{ action_stop_id }}"
+                                  timeout: !input notification_timeout
+                                  continue_on_timeout: true
+
+                                - choose:
+                                    - conditions:
+                                        - condition: template
+                                          value_template: >
+                                            {{ wait.completed
+                                               and wait.trigger is not none
+                                               and wait.trigger.event is defined
+                                               and wait.trigger.event.data is defined
+                                               and wait.trigger.event.data.action == action_stop_id }}
+                                      sequence:
+                                        - action: city_visitor_parking.list_reservations
+                                          data:
+                                            device_id: !input parking_device
+                                          response_variable: active_parking_reservations
+
+                                        - variables:
+                                            reservation_id: >
+                                              {% set ns = namespace(active_id='') %}
+                                              {% set now_dt = now() %}
+                                              {% for item in active_parking_reservations.reservations | default([]) %}
+                                                {% set start_dt = item.start_time | as_datetime if item.start_time is defined and item.start_time else none %}
+                                                {% set end_dt = item.end_time | as_datetime if item.end_time is defined and item.end_time else none %}
+                                                {% if ns.active_id == '' and start_dt and end_dt and start_dt <= now_dt < end_dt %}
+                                                  {% set ns.active_id = item.reservation_id %}
+                                                {% endif %}
+                                              {% endfor %}
+                                              {{ ns.active_id }}
+
+                                        - if:
+                                            - condition: template
+                                              value_template: "{{ reservation_id != '' }}"
+                                          then:
+                                            - action: city_visitor_parking.end_reservation
+                                              data:
+                                                device_id: !input parking_device
+                                                reservation_id: "{{ reservation_id }}"
+
+                                        - device_id: !input notify_device
+                                          domain: mobile_app
+                                          type: notify
+                                          message: clear_notification
+                                          data:
+                                            tag: "{{ notification_tag }}"
+
+                                        - device_id: !input notify_device
+                                          domain: mobile_app
+                                          type: notify
+                                          title: !input msg_title
+                                          message: !input msg_unregistered
+                                          data:
+                                            tag: "{{ notification_tag }}"
+                                            notification_icon: "{{ notification_icon }}"
+                                            icon_url: "{{ notification_icon_url }}"
+                                            clickAction: noAction
+                                            ttl: 0
+                                            priority: high
+                                            importance: max
+
+                                        - stop: "Unregistered by user"
+
+                                    - conditions:
+                                        - condition: template
+                                          value_template: "{{ not wait.completed }}"
+                                      sequence:
+                                        - action: city_visitor_parking.list_reservations
+                                          data:
+                                            device_id: !input parking_device
+                                          response_variable: poll_reservations
+
+                                        - choose:
+                                            - conditions:
+                                                - condition: template
+                                                  value_template: >
+                                                    {{ (poll_reservations.active_count | int(0)) == 0 }}
+                                              sequence:
+                                                - device_id: !input notify_device
+                                                  domain: mobile_app
+                                                  type: notify
+                                                  title: !input msg_title
+                                                  message: !input msg_external_cancel
+                                                  data:
+                                                    tag: "{{ notification_tag }}"
+                                                    channel: Parking
+                                                    notification_icon: "{{ notification_icon }}"
+                                                    icon_url: "{{ notification_icon_url }}"
+                                                    clickAction: noAction
+                                                    ttl: 0
+                                                    priority: high
+                                                    importance: max
+                                                    sticky: true
+                                                    persistent: true
+                                                    actions: "{{ action_reregister }}"
+
+                                                - wait_for_trigger:
+                                                    - platform: event
+                                                      event_type: mobile_app_notification_action
+                                                      event_data:
+                                                        action: "{{ action_reregister_id }}"
+                                                  timeout: !input notification_timeout
+                                                  continue_on_timeout: true
+
+                                                - if:
+                                                    - condition: template
+                                                      value_template: "{{ wait.completed }}"
+                                                  then:
+                                                    - action: city_visitor_parking.start_reservation
+                                                      data:
+                                                        device_id: !input parking_device
+                                                        license_plate: "{{ license_plate_clean }}"
+                                                        start_time: >
+                                                          {{ window_start if window_start and window_start | as_datetime > now() else now().isoformat() }}
+                                                        end_time: "{{ window_end }}"
+
+                                                    - variables:
+                                                        reservation_start: "{{ as_timestamp(now()) | int }}"
+
+                                                    - device_id: !input notify_device
+                                                      domain: mobile_app
+                                                      type: notify
+                                                      title: !input msg_title
+                                                      message: !input msg_reregistered
+                                                      data:
+                                                        tag: "{{ notification_tag }}"
+                                                        channel: Parking
+                                                        notification_icon: "{{ notification_icon }}"
+                                                        icon_url: "{{ notification_icon_url }}"
+                                                        clickAction: noAction
+                                                        ttl: 0
+                                                        priority: high
+                                                        importance: max
+                                                        chronometer: true
+                                                        when: "{{ reservation_start }}"
+                                                        sticky: true
+                                                        persistent: true
+                                                        actions: "{{ action_stop }}"
+                                                  else:
+                                                    - stop: "Reservation canceled externally, no re-registration"
+
+                                            - conditions:
+                                                - condition: template
+                                                  value_template: >
+                                                    {% set elapsed_min = ((as_timestamp(now()) - reservation_start) / 60) | int %}
+                                                    {{ (poll_reservations.active_count | int(0)) > 0
+                                                       and elapsed_min >= 60
+                                                       and elapsed_min % 60 < 5 }}
+                                              sequence:
+                                                - variables:
+                                                    reminder_start: "{{ reservation_start }}"
+
+                                                - device_id: !input notify_device
+                                                  domain: mobile_app
+                                                  type: notify
+                                                  title: !input msg_title
+                                                  message: !input msg_reminder
+                                                  data:
+                                                    tag: "{{ notification_tag }}"
+                                                    channel: Parking
+                                                    notification_icon: "{{ notification_icon_clock }}"
+                                                    icon_url: "{{ notification_icon_url }}"
+                                                    clickAction: noAction
+                                                    ttl: 0
+                                                    priority: high
+                                                    importance: max
+                                                    chronometer: true
+                                                    when: "{{ reminder_start }}"
+                                                    sticky: true
+                                                    persistent: true
+                                                    actions: "{{ action_stop }}"
+
+                        else:
+                          - device_id: !input notify_device
+                            domain: mobile_app
+                            type: notify
+                            message: clear_notification
+                            data:
+                              tag: "{{ notification_tag }}"
+
+                    else:
+                      - if:
+                          - condition: template
+                            value_template: "{{ (parking_reservations.future_count | int(0)) > 0 }}"
+                        then:
+                          - device_id: !input notify_device
+                            domain: mobile_app
+                            type: notify
+                            title: !input msg_title
+                            message: !input msg_future_reservation
+                            data:
+                              tag: "{{ notification_tag }}"
+                              channel: Parking
+                              notification_icon: "{{ notification_icon }}"
+                              icon_url: "{{ notification_icon_url }}"
+                              clickAction: noAction
+                              ttl: 0
+                              priority: high
+                              importance: max
+                              actions: >
+                                {{ ([{"action": "URI", "title": btn_dashboard_value, "uri": dashboard_url_value}]
+                                   if dashboard_url_value != '' else []) }}
+
+              # Person OUTSIDE zone: show active registration with unregister button
+              - conditions: []
+                sequence:
+                  - device_id: !input notify_device
+                    domain: mobile_app
+                    type: notify
+                    message: clear_notification
+                    data:
+                      tag: "{{ notification_tag }}"
+
+                  - action: city_visitor_parking.list_reservations
+                    data:
+                      device_id: !input parking_device
+                    response_variable: parking_reservations
+
+                  - condition: template
+                    value_template: "{{ (parking_reservations.active_count | int(0)) > 0 and (parking_reservations.reservations | count) > 0 }}"
+
+                  - variables:
+                      reservation_start: >
+                        {{
+                          as_timestamp(
+                            as_datetime((parking_reservations.reservations | first).start_time)
+                          ) | int
+                        }}
+
+                  - device_id: !input notify_device
+                    domain: mobile_app
+                    type: notify
+                    title: !input msg_title
+                    message: !input msg_registered
+                    data:
+                      tag: "{{ notification_tag }}"
+                      channel: Parking
+                      notification_icon: "{{ notification_icon }}"
+                      icon_url: "{{ notification_icon_url }}"
+                      clickAction: noAction
+                      ttl: 0
+                      priority: high
+                      importance: max
+                      chronometer: true
+                      when: "{{ reservation_start }}"
+                      sticky: true
+                      persistent: true
+                      actions: "{{ action_stop }}"
+
+                  - wait_for_trigger:
+                      - platform: event
+                        event_type: mobile_app_notification_action
+                        event_data:
+                          action: "{{ action_stop_id }}"
+                    timeout: !input notification_timeout
+                    continue_on_timeout: true
+
+                  - if:
+                      - condition: template
+                        value_template: "{{ wait.completed }}"
+                    then:
+                      - action: city_visitor_parking.list_reservations
+                        data:
+                          device_id: !input parking_device
+                        response_variable: active_parking_reservations
+
+                      - variables:
+                          reservation_id: >
+                            {% set ns = namespace(active_id='') %}
+                            {% set now_dt = now() %}
+                            {% for item in active_parking_reservations.reservations | default([]) %}
+                              {% set start_dt = item.start_time | as_datetime if item.start_time is defined and item.start_time else none %}
+                              {% set end_dt = item.end_time | as_datetime if item.end_time is defined and item.end_time else none %}
+                              {% if ns.active_id == '' and start_dt and end_dt and start_dt <= now_dt < end_dt %}
+                                {% set ns.active_id = item.reservation_id %}
+                              {% endif %}
+                            {% endfor %}
+                            {{ ns.active_id }}
+
+                      - if:
+                          - condition: template
+                            value_template: "{{ reservation_id != '' }}"
+                        then:
+                          - action: city_visitor_parking.end_reservation
+                            data:
+                              device_id: !input parking_device
+                              reservation_id: "{{ reservation_id }}"
+
+                      - device_id: !input notify_device
+                        domain: mobile_app
+                        type: notify
+                        message: clear_notification
+                        data:
+                          tag: "{{ notification_tag }}"
+
+                      - device_id: !input notify_device
+                        domain: mobile_app
+                        type: notify
+                        title: !input msg_title
+                        message: !input msg_unregistered
+                        data:
+                          tag: "{{ notification_tag }}"
+                          notification_icon: "{{ notification_icon }}"
+                          icon_url: "{{ notification_icon_url }}"
+                          clickAction: noAction
+                          ttl: 0
+                          priority: high
+                          importance: max
+                    else:
+                      - device_id: !input notify_device
+                        domain: mobile_app
+                        type: notify
+                        message: clear_notification
+                        data:
+                          tag: "{{ notification_tag }}"
+
+      - conditions:
+          - condition: trigger
+            id: departure
+          - condition: template
+            value_template: "{{ license_plate_clean | length > 0 }}"
+          - condition: template
+            value_template: >
+              {% set devices = state_attr(bluetooth_sensor_entity, 'connected_paired_devices') or [] %}
+              {{ (bluetooth_device_name_value != '' and (devices | select('search', bluetooth_device_name_value) | list | count > 0))
+                 or (bluetooth_mac_address_value != '' and (devices | select('search', bluetooth_mac_address_value) | list | count > 0)) }}
+        sequence:
+          - delay:
+              seconds: !input departure_delay
+
+          - condition: not
+            conditions:
+              - condition: zone
+                entity_id: !input person_entity
+                zone: !input target_zone
+
+          - condition: template
+            value_template: >
+              {% set devices = state_attr(bluetooth_sensor_entity, 'connected_paired_devices') or [] %}
+              {{ (bluetooth_device_name_value != '' and (devices | select('search', bluetooth_device_name_value) | list | count > 0))
+                 or (bluetooth_mac_address_value != '' and (devices | select('search', bluetooth_mac_address_value) | list | count > 0)) }}
+
+          - action: city_visitor_parking.list_reservations
+            data:
+              device_id: !input parking_device
+            response_variable: parking_reservations
+
+          - condition: template
+            value_template: >
+              {{ (parking_reservations.active_count | int(0)) == 0
+                 and (parking_reservations.future_count | int(0)) == 0 }}
+
+          - device_id: !input notify_device
+            domain: mobile_app
+            type: notify
+            message: clear_notification
+            data:
+              tag: "{{ notification_tag }}"
+
+          - action: persistent_notification.create
+            data:
+              notification_id: "{{ notification_id_not_registered }}"
+              title: !input msg_title
+              message: !input msg_departure_no_reg
+
+      - conditions:
+          - condition: trigger
+            id: ha_restart
+          - condition: template
+            value_template: "{{ license_plate_clean | length > 0 }}"
+        sequence:
+          - action: city_visitor_parking.list_reservations
+            data:
+              device_id: !input parking_device
+            response_variable: parking_reservations
+
+          - choose:
+              - conditions:
+                  - condition: template
+                    value_template: "{{ (parking_reservations.active_count | int(0)) > 0 }}"
+                sequence:
+                  - variables:
+                      reservation_start: >
+                        {{
+                          as_timestamp(
+                            as_datetime((parking_reservations.reservations | first).start_time)
+                          ) | int
+                        }}
+                      start_time_display: >
+                        {% set start_dt = as_datetime((parking_reservations.reservations | first).start_time) | as_local %}
+                        {% if start_dt.strftime('%H:%M') == '00:00' %}midnight{% else %}{{ start_dt.strftime('%H:%M') }}{% endif %}
+                      end_time_display: >
+                        {% set end_dt = as_datetime((parking_reservations.reservations | first).end_time) | as_local %}
+                        {% if end_dt.strftime('%H:%M') == '00:00' %}
+                          midnight
+                        {% else %}
+                          {{ end_dt.strftime('%H:%M') }}
+                        {% endif %}
+
+                  - device_id: !input notify_device
+                    domain: mobile_app
+                    type: notify
+                    title: !input msg_title
+                    message: !input msg_registered
+                    data:
+                      tag: "{{ notification_tag }}"
+                      channel: Parking
+                      notification_icon: "{{ notification_icon }}"
+                      icon_url: "{{ notification_icon_url }}"
+                      clickAction: noAction
+                      ttl: 0
+                      priority: high
+                      importance: max
+                      chronometer: true
+                      when: "{{ reservation_start }}"
+                      sticky: true
+                      persistent: true
+                      actions: "{{ action_stop }}"
+
+                  - repeat:
+                      while:
+                        - condition: template
+                          value_template: "true"
+                      sequence:
+                        - wait_for_trigger:
+                            - platform: event
+                              event_type: mobile_app_notification_action
+                              event_data:
+                                action: "{{ action_stop_id }}"
+                          timeout: !input notification_timeout
+                          continue_on_timeout: true
+
+                        - choose:
+                            - conditions:
+                                - condition: template
+                                  value_template: >
+                                    {{ wait.completed
+                                       and wait.trigger is not none
+                                       and wait.trigger.event is defined
+                                       and wait.trigger.event.data is defined
+                                       and wait.trigger.event.data.action == action_stop_id }}
+                              sequence:
+                                - action: city_visitor_parking.list_reservations
+                                  data:
+                                    device_id: !input parking_device
+                                  response_variable: active_parking_reservations
+
+                                - variables:
+                                    reservation_id: >
+                                      {% set ns = namespace(active_id='') %}
+                                      {% set now_dt = now() %}
+                                      {% for item in active_parking_reservations.reservations | default([]) %}
+                                        {% set start_dt = item.start_time | as_datetime if item.start_time is defined and item.start_time else none %}
+                                        {% set end_dt = item.end_time | as_datetime if item.end_time is defined and item.end_time else none %}
+                                        {% if ns.active_id == '' and start_dt and end_dt and start_dt <= now_dt < end_dt %}
+                                          {% set ns.active_id = item.reservation_id %}
+                                        {% endif %}
+                                      {% endfor %}
+                                      {{ ns.active_id }}
+
+                                - if:
+                                    - condition: template
+                                      value_template: "{{ reservation_id != '' }}"
+                                  then:
+                                    - action: city_visitor_parking.end_reservation
+                                      data:
+                                        device_id: !input parking_device
+                                        reservation_id: "{{ reservation_id }}"
+
+                                - device_id: !input notify_device
+                                  domain: mobile_app
+                                  type: notify
+                                  message: clear_notification
+                                  data:
+                                    tag: "{{ notification_tag }}"
+
+                                - device_id: !input notify_device
+                                  domain: mobile_app
+                                  type: notify
+                                  title: !input msg_title
+                                  message: !input msg_unregistered
+                                  data:
+                                    tag: "{{ notification_tag }}"
+                                    notification_icon: "{{ notification_icon }}"
+                                    icon_url: "{{ notification_icon_url }}"
+                                    clickAction: noAction
+                                    ttl: 0
+                                    priority: high
+                                    importance: max
+
+                                - stop: "Unregistered by user"
+
+                            - conditions:
+                                - condition: template
+                                  value_template: "{{ not wait.completed }}"
+                              sequence:
+                                - action: city_visitor_parking.list_reservations
+                                  data:
+                                    device_id: !input parking_device
+                                  response_variable: poll_reservations
+
+                                - choose:
+                                    - conditions:
+                                        - condition: template
+                                          value_template: >
+                                            {{ (poll_reservations.active_count | int(0)) == 0 }}
+                                      sequence:
+                                        - device_id: !input notify_device
+                                          domain: mobile_app
+                                          type: notify
+                                          title: !input msg_title
+                                          message: !input msg_external_cancel
+                                          data:
+                                            tag: "{{ notification_tag }}"
+                                            channel: Parking
+                                            notification_icon: "{{ notification_icon }}"
+                                            icon_url: "{{ notification_icon_url }}"
+                                            clickAction: noAction
+                                            ttl: 0
+                                            priority: high
+                                            importance: max
+                                            sticky: true
+                                            persistent: true
+                                            actions: "{{ action_reregister }}"
+
+                                        - wait_for_trigger:
+                                            - platform: event
+                                              event_type: mobile_app_notification_action
+                                              event_data:
+                                                action: "{{ action_reregister_id }}"
+                                          timeout: !input notification_timeout
+                                          continue_on_timeout: true
+
+                                        - if:
+                                            - condition: template
+                                              value_template: "{{ wait.completed }}"
+                                          then:
+                                            - action: city_visitor_parking.get_status
+                                              data:
+                                                device_id: !input parking_device
+                                              response_variable: parking_status
+
+                                            - variables:
+                                                window_start: "{{ parking_status.window_start }}"
+                                                window_end: "{{ parking_status.window_end }}"
+
+                                            - action: city_visitor_parking.start_reservation
+                                              data:
+                                                device_id: !input parking_device
+                                                license_plate: "{{ license_plate_clean }}"
+                                                start_time: >
+                                                  {{ window_start if window_start and window_start | as_datetime > now() else now().isoformat() }}
+                                                end_time: "{{ window_end }}"
+
+                                            - variables:
+                                                reservation_start: "{{ as_timestamp(now()) | int }}"
+
+                                            - device_id: !input notify_device
+                                              domain: mobile_app
+                                              type: notify
+                                              title: !input msg_title
+                                              message: !input msg_reregistered
+                                              data:
+                                                tag: "{{ notification_tag }}"
+                                                channel: Parking
+                                                notification_icon: "{{ notification_icon }}"
+                                                icon_url: "{{ notification_icon_url }}"
+                                                clickAction: noAction
+                                                ttl: 0
+                                                priority: high
+                                                importance: max
+                                                chronometer: true
+                                                when: "{{ reservation_start }}"
+                                                sticky: true
+                                                persistent: true
+                                                actions: "{{ action_stop }}"
+                                          else:
+                                            - stop: "Reservation canceled externally, no re-registration"
+
+                                    - conditions:
+                                        - condition: template
+                                          value_template: >
+                                            {% set elapsed_min = ((as_timestamp(now()) - reservation_start) / 60) | int %}
+                                            {{ (poll_reservations.active_count | int(0)) > 0
+                                               and elapsed_min >= 60
+                                               and elapsed_min % 60 < 5 }}
+                                      sequence:
+                                        - variables:
+                                            reminder_start: "{{ reservation_start }}"
+
+                                        - device_id: !input notify_device
+                                          domain: mobile_app
+                                          type: notify
+                                          title: !input msg_title
+                                          message: !input msg_reminder
+                                          data:
+                                            tag: "{{ notification_tag }}"
+                                            channel: Parking
+                                            notification_icon: "{{ notification_icon_clock }}"
+                                            icon_url: "{{ notification_icon_url }}"
+                                            clickAction: noAction
+                                            ttl: 0
+                                            priority: high
+                                            importance: max
+                                            chronometer: true
+                                            when: "{{ reminder_start }}"
+                                            sticky: true
+                                            persistent: true
+                                            actions: "{{ action_stop }}"
+
+              - conditions:
+                  - condition: template
+                    value_template: "{{ (parking_reservations.future_count | int(0)) > 0 }}"
+                sequence:
+                  - device_id: !input notify_device
+                    domain: mobile_app
+                    type: notify
+                    title: !input msg_title
+                    message: !input msg_future_reservation
+                    data:
+                      tag: "{{ notification_tag }}"
+                      channel: Parking
+                      notification_icon: "{{ notification_icon }}"
+                      icon_url: "{{ notification_icon_url }}"
+                      clickAction: noAction
+                      ttl: 0
+                      priority: high
+                      importance: max
+                      actions: >
+                        {{ ([{"action": "URI", "title": btn_dashboard_value, "uri": dashboard_url_value}]
+                           if dashboard_url_value != '' else []) }}

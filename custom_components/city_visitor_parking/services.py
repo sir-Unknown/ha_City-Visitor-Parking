@@ -56,7 +56,6 @@ SERVICE_END_RESERVATION: Final[str] = "end_reservation"
 SERVICE_ADD_FAVORITE: Final[str] = "add_favorite"
 SERVICE_UPDATE_FAVORITE: Final[str] = "update_favorite"
 SERVICE_REMOVE_FAVORITE: Final[str] = "remove_favorite"
-SERVICE_LIST_ACTIVE_RESERVATIONS: Final[str] = "list_active_reservations"
 SERVICE_LIST_RESERVATIONS: Final[str] = "list_reservations"
 SERVICE_LIST_FAVORITES: Final[str] = "list_favorites"
 SERVICE_GET_STATUS: Final[str] = "get_status"
@@ -276,13 +275,6 @@ async def async_setup_services(hass: HomeAssistant) -> None:
     hass.services.async_register(
         DOMAIN,
         SERVICE_LIST_RESERVATIONS,
-        _async_handle_list_reservations,
-        schema=SERVICE_LIST_RESERVATIONS_SCHEMA,
-        supports_response=SupportsResponse.ONLY,
-    )
-    hass.services.async_register(
-        DOMAIN,
-        SERVICE_LIST_ACTIVE_RESERVATIONS,
         _async_handle_list_reservations,
         schema=SERVICE_LIST_RESERVATIONS_SCHEMA,
         supports_response=SupportsResponse.ONLY,

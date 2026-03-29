@@ -125,9 +125,11 @@ async def _ws_get_status(
 
     runtime: CityVisitorParkingRuntimeData = entry.runtime_data
     try:
-        data: CoordinatorData = runtime.coordinator.data
+        data = cast("CoordinatorData | None", runtime.coordinator.data)
         stale = not runtime.coordinator.last_update_success
         now = dt_util.utcnow()
+        if data is None:
+            raise ValueError("missing coordinator data")
         payload = build_status_payload(data, entry.options, now, stale=stale)
     except Exception:  # Websocket boundary needs a consistent error response.
         _LOGGER.debug(
