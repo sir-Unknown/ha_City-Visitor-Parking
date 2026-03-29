@@ -101,11 +101,11 @@ async def test_zone_availability_uses_overrides() -> None:
         data = CoordinatorData(
             permit_id="permit",
             permit_remaining_minutes=0,
-            zone_validity=zone_validity,
-            reservations=[],
-            favorites=[],
+            zone_validity=tuple(zone_validity),
+            reservations=(),
+            favorites=(),
             zone_availability=availability,
-            active_reservations=[],
+            active_reservations=(),
         )
         coordinator = _make_coordinator(data)
         entry = _create_entry("provider:permit1:city", options=options)
@@ -156,11 +156,11 @@ async def test_next_chargeable_window_uses_overrides() -> None:
         data = CoordinatorData(
             permit_id="permit",
             permit_remaining_minutes=0,
-            zone_validity=zone_validity,
-            reservations=[],
-            favorites=[],
+            zone_validity=tuple(zone_validity),
+            reservations=(),
+            favorites=(),
             zone_availability=availability,
-            active_reservations=[],
+            active_reservations=(),
         )
         coordinator = _make_coordinator(data)
         entry = MockConfigEntry(
@@ -220,27 +220,27 @@ async def test_sensors_handle_coordinator_update(
     data = CoordinatorData(
         permit_id="permit",
         permit_remaining_minutes=120,
-        zone_validity=[zone_window],
-        reservations=[
+        zone_validity=(zone_window,),
+        reservations=(
             Reservation(
                 reservation_id="future",
                 start_time=now + timedelta(hours=2),
                 end_time=now + timedelta(hours=3),
-            )
-        ],
-        favorites=[Favorite(favorite_id="fav1")],
+            ),
+        ),
+        favorites=(Favorite(favorite_id="fav1"),),
         zone_availability=ZoneAvailability(
             is_chargeable_now=True,
             next_change_time=zone_window.end,
-            windows_today=[zone_window],
+            windows_today=(zone_window,),
         ),
-        active_reservations=[
+        active_reservations=(
             Reservation(
                 reservation_id="active",
                 start_time=now - timedelta(minutes=30),
                 end_time=now + timedelta(minutes=30),
-            )
-        ],
+            ),
+        ),
     )
     coordinator = _make_coordinator(data)
     coordinator.last_update_success = True
@@ -287,22 +287,22 @@ def _sample_data(zone_availability: ZoneAvailability | None = None) -> Coordinat
     availability = zone_availability or ZoneAvailability(
         is_chargeable_now=True,
         next_change_time=None,
-        windows_today=[],
+        windows_today=(),
     )
     return CoordinatorData(
         permit_id="permit",
         permit_remaining_minutes=90,
-        zone_validity=[],
-        reservations=[
+        zone_validity=(),
+        reservations=(
             Reservation(
                 reservation_id="res1",
                 start_time=datetime.now(UTC) - timedelta(hours=1),
                 end_time=datetime.now(UTC) + timedelta(hours=1),
-            )
-        ],
-        favorites=[Favorite(favorite_id="fav1")],
+            ),
+        ),
+        favorites=(Favorite(favorite_id="fav1"),),
         zone_availability=availability,
-        active_reservations=[],
+        active_reservations=(),
     )
 
 
@@ -337,7 +337,7 @@ def test_sensor_helpers() -> None:
         reservations=data.reservations,
         favorites=data.favorites,
         zone_availability=data.zone_availability,
-        active_reservations=[],
+        active_reservations=(),
     )
     data_with_active = CoordinatorData(
         permit_id=data.permit_id,
@@ -346,7 +346,7 @@ def test_sensor_helpers() -> None:
         reservations=data.reservations,
         favorites=data.favorites,
         zone_availability=data.zone_availability,
-        active_reservations=[
+        active_reservations=(
             Reservation(
                 reservation_id="res2",
                 start_time=datetime(2025, 1, 1, 7, 0, tzinfo=UTC),
@@ -357,7 +357,7 @@ def test_sensor_helpers() -> None:
                 start_time=datetime(2025, 1, 1, 6, 0, tzinfo=UTC),
                 end_time=datetime(2025, 1, 1, 7, 30, tzinfo=UTC),
             ),
-        ],
+        ),
     )
     assert _remaining_balance_minutes(data) == EXPECTED_REMAINING_MINUTES
     assert _next_end_time(data_no_active) is None

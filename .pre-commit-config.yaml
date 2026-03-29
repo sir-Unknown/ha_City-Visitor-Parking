@@ -1,12 +1,16 @@
 repos:
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.15.1
+    rev: v0.15.8
     hooks:
       - id: ruff-check
         args:
           - --fix
       - id: ruff-format
         files: ^(custom_components|tests)/.+\.(py|pyi)$
+  - repo: https://github.com/zizmorcore/zizmor-pre-commit
+    rev: v1.23.1
+    hooks:
+      - id: zizmor
   - repo: https://github.com/codespell-project/codespell
     rev: v2.4.1
     hooks:

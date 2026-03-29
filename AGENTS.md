@@ -24,6 +24,29 @@ Treat this repository as “official-ready”:
 
 Document any migration steps in project docs when needed.
 
+## 2.1) HA Core and HA Frontend compatibility
+
+Treat Home Assistant Core and Home Assistant Frontend as the compatibility baseline for implementation style, testing, copy, and review workflow.
+
+### HA Core alignment
+
+- Prefer patterns used by mature Gold/Platinum-quality Home Assistant integrations when choosing structure, naming, or error handling.
+- Keep tests fully typed where practical; test function parameters SHOULD use concrete type annotations.
+- Do not rewrite commit history after review has started; avoid amend/squash/rebase once feedback is in progress unless explicitly requested.
+
+### HA Frontend alignment
+
+- User-facing text MUST be localization-friendly, concise, and consistent with Home Assistant terminology.
+- Prefer Home Assistant wording conventions:
+  - use “add” / “remove” for attaching or detaching existing items,
+  - use “create” / “delete” for creating or permanently removing items.
+- Frontend assets, cards, dialogs, and configuration UX MUST follow Home Assistant frontend expectations for accessibility, responsive behavior, error states, and internationalization.
+- Avoid hardcoded UI copy when translation keys or shared wording patterns are appropriate.
+
+### Compatibility rule
+
+- If a local repository convention conflicts with HA Core or HA Frontend conventions, resolve it in favor of the option that is most likely to remain acceptable in an eventual Home Assistant Core migration.
+
 ## 3) Quality scale target
 
 - Maintain:

@@ -1,0 +1,46 @@
+name: Zizmor
+
+on:
+  push:
+    branches: ["main"]
+    paths:
+      - ".github/workflows/**"
+  pull_request:
+    branches: ["main"]
+    paths:
+      - ".github/workflows/**"
+  schedule:
+    - cron: "0 6 * * 1" # every Monday at 06:00 UTC
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions: {}
+
+jobs:
+  zizmor:
+    name: Check GitHub Actions workflows
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Install zizmor
+        run: pip install -r requirements-dev.txt
+
+      - name: Run zizmor
+        run: zizmor --format sarif . > zizmor.sarif
+        continue-on-error: true
+
+      - name: Upload SARIF results
+        uses: github/codeql-action/upload-sarif@38697555549f1db7851b81482ff19f1fa5c4fedc # v4.34.1
+        with:
+          sarif_file: zizmor.sarif
+          category: zizmor

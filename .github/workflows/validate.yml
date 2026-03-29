@@ -2,8 +2,6 @@ name: Validate
 
 on:
   workflow_dispatch:
-  schedule:
-    - cron: "0 0 * * *"
   push:
     branches: [main]
     tags:
@@ -39,24 +37,19 @@ jobs:
     steps:
       - name: Checkout the repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-
-      - name: Set up Python
-        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
         with:
-          python-version-file: ".python-version"
-          cache: "pip"
+          persist-credentials: false
 
-      - name: Upgrade pip
-        run: python -m pip install --upgrade pip
-
-      - name: Install ruff
-        run: pip install "ruff==0.15.1"
+      - name: Set up uv
+        uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7.6.0
+        with:
+          enable-cache: false
 
       - name: Ruff check
-        run: ruff check .
+        run: uv run --python "$(cat .python-version)" --with-requirements requirements-dev.txt ruff check .
 
       - name: Ruff format check
-        run: ruff format --check .
+        run: uv run --python "$(cat .python-version)" --with-requirements requirements-dev.txt ruff format --check .
 
   hassfest:
     name: Hassfest validation
@@ -68,6 +61,8 @@ jobs:
     steps:
       - name: Checkout the repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
       - name: Run hassfest validation
         uses: home-assistant/actions/hassfest@d56d093b9ab8d2105bc0cb6ee9bcc0ef4ec8b96d # master
 
@@ -81,6 +76,8 @@ jobs:
     steps:
       - name: Checkout the repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
       - name: Run HACS validation
         uses: hacs/action@d556e736723344f83838d08488c983a15381059a # 22.5.0
         with:
@@ -98,28 +95,24 @@ jobs:
     steps:
       - name: Checkout the repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-
-      - name: Set up Python
-        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
         with:
-          python-version-file: ".python-version"
-          cache: "pip"
-          cache-dependency-path: |
-            requirements.txt
-            requirements_test.txt
+          persist-credentials: false
 
-      - name: Upgrade pip
-        run: python -m pip install --upgrade pip
+      - name: Set up uv
+        uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7.6.0
+        with:
+          enable-cache: false
+
+      - name: Create uv-managed virtual environment
+        run: uv venv --python "$(cat .python-version)"
 
       - name: Install dependencies
-        run: |
-          pip install -r requirements.txt -r requirements_test.txt
-          pip install pytest-cov
+        run: uv pip install --python .venv/bin/python -r requirements.txt -r requirements_test.txt pytest-cov
 
       - name: Run pytest (with coverage)
         env:
           PYTHONPATH: ${{ github.workspace }}
-        run: pytest tests/components/city_visitor_parking --cov=custom_components.city_visitor_parking --cov-report=term-missing
+        run: .venv/bin/pytest tests/components/city_visitor_parking --cov=custom_components.city_visitor_parking --cov-report=term-missing
 
   frontend:
     name: Frontend build
@@ -133,22 +126,20 @@ jobs:
     steps:
       - name: Checkout the repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
 
       - name: Set up Node.js
         uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
         with:
           node-version: "24"
+          package-manager-cache: false
 
       - name: Enable Corepack
         run: corepack enable
 
-      - name: Install frontend dependencies (locked)
-        if: ${{ hashFiles('custom_components/city_visitor_parking/frontend/yarn.lock') != '' }}
-        run: yarn install --immutable
-
       - name: Install frontend dependencies
-        if: ${{ hashFiles('custom_components/city_visitor_parking/frontend/yarn.lock') == '' }}
-        run: yarn install
+        run: yarn install --immutable
 
       - name: Clean frontend dist
         run: rm -rf dist

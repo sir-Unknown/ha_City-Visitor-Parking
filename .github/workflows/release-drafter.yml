@@ -10,10 +10,7 @@ on:
       - reopened
       - synchronize
 
-permissions:
-  contents: write
-  pull-requests: write
-  issues: write
+permissions: {}
 
 jobs:
   update_release_draft:
