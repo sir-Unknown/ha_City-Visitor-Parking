@@ -17,8 +17,6 @@ from .const import DOMAIN
 from .payloads import build_status_payload, normalize_favorites
 
 if TYPE_CHECKING:
-    from datetime import datetime
-
     from homeassistant.core import HomeAssistant
     from pycityvisitorparking import Favorite as ProviderFavorite
     from pycityvisitorparking.provider.base import BaseProvider
@@ -41,13 +39,6 @@ async def async_setup_websocket(hass: HomeAssistant) -> None:
     """Set up WebSocket commands."""
     websocket_api.async_register_command(hass, _ws_list_favorites)
     websocket_api.async_register_command(hass, _ws_get_status)
-
-
-def _as_utc_iso(value: datetime | None) -> str | None:
-    """Return a UTC ISO8601 timestamp string."""
-    if value is None:
-        return None
-    return dt_util.as_utc(value).isoformat()
 
 
 def _get_loaded_entry(
@@ -137,8 +128,6 @@ async def _ws_get_status(
         data: CoordinatorData = runtime.coordinator.data
         stale = not runtime.coordinator.last_update_success
         now = dt_util.utcnow()
-        if data is None:
-            raise ValueError("missing coordinator data")
         payload = build_status_payload(data, entry.options, now, stale=stale)
     except Exception:  # Websocket boundary needs a consistent error response.
         _LOGGER.debug(

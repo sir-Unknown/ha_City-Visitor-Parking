@@ -336,21 +336,21 @@ async def test_auto_end_skips_when_chargeable(hass: HomeAssistant) -> None:
     data = CoordinatorData(
         permit_id="permit",
         permit_remaining_minutes=0,
-        zone_validity=[],
-        reservations=[],
-        favorites=[],
+        zone_validity=(),
+        reservations=(),
+        favorites=(),
         zone_availability=ZoneAvailability(
             is_chargeable_now=True,
             next_change_time=None,
-            windows_today=[],
+            windows_today=(),
         ),
-        active_reservations=[
+        active_reservations=(
             Reservation(
                 reservation_id="res1",
                 start_time=datetime(2025, 1, 6, 9, 0, tzinfo=UTC),
                 end_time=datetime(2025, 1, 6, 10, 0, tzinfo=UTC),
-            )
-        ],
+            ),
+        ),
     )
 
     await coordinator._async_maybe_auto_end(data)
@@ -374,15 +374,15 @@ async def test_auto_end_skips_without_reservations(hass: HomeAssistant) -> None:
     data = CoordinatorData(
         permit_id="permit",
         permit_remaining_minutes=0,
-        zone_validity=[],
-        reservations=[],
-        favorites=[],
+        zone_validity=(),
+        reservations=(),
+        favorites=(),
         zone_availability=ZoneAvailability(
             is_chargeable_now=False,
             next_change_time=None,
-            windows_today=[],
+            windows_today=(),
         ),
-        active_reservations=[],
+        active_reservations=(),
     )
 
     await coordinator._async_maybe_auto_end(data)

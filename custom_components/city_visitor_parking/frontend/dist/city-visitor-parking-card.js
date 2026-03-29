@@ -2005,11 +2005,17 @@ var getActiveCardConfigForm = createConfigFormGetter(
         setPendingPermitDefaults(this, entryId);
         void this._loadZoneStatusForEntry(entryId);
       };
-      this._statusRefreshHandle = window.setInterval(refresh, STATUS_REFRESH_MS);
+      this._statusRefreshHandle = window.setInterval(
+        refresh,
+        STATUS_REFRESH_MS
+      );
       this._statusVisibilityHandler = () => {
         if (document.visibilityState === "visible") refresh();
       };
-      document.addEventListener("visibilitychange", this._statusVisibilityHandler);
+      document.addEventListener(
+        "visibilitychange",
+        this._statusVisibilityHandler
+      );
     }
     _clearStatusRefresh() {
       if (this._statusRefreshHandle !== null) {
@@ -2842,7 +2848,10 @@ var getActiveCardConfigForm = createConfigFormGetter(
       this._endButtonSuccessByReservationId.add(reservationId);
       this._requestRender();
       return new Promise((resolve) => {
-        this._endButtonSuccessResolverByReservationId.set(reservationId, resolve);
+        this._endButtonSuccessResolverByReservationId.set(
+          reservationId,
+          resolve
+        );
         const timeoutHandle = window.setTimeout(() => {
           this._endButtonSuccessTimeoutByReservationId.delete(reservationId);
           this._endButtonSuccessResolverByReservationId.delete(reservationId);

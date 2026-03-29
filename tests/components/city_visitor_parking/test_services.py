@@ -894,17 +894,15 @@ async def test_service_list_reservations_response(
     data = CoordinatorData(
         permit_id="permit1",
         permit_remaining_minutes=0,
-        zone_validity=[],
-        reservations=[active_reservation, future_reservation, past_reservation],
-        favorites=[
-            Favorite(favorite_id="fav1", license_plate="AB1234", name="Ada"),
-        ],
+        zone_validity=(),
+        reservations=(active_reservation, future_reservation, past_reservation),
+        favorites=(Favorite(favorite_id="fav1", license_plate="AB1234", name="Ada"),),
         zone_availability=ZoneAvailability(
             is_chargeable_now=True,
             next_change_time=None,
-            windows_today=[],
+            windows_today=(),
         ),
-        active_reservations=[active_reservation],
+        active_reservations=(active_reservation,),
     )
     entry.runtime_data.coordinator.data = data
     entry.runtime_data.coordinator.last_update_success = True
@@ -947,21 +945,21 @@ async def test_service_list_reservations_stale(hass: HomeAssistant) -> None:
     data = CoordinatorData(
         permit_id="permit1",
         permit_remaining_minutes=0,
-        zone_validity=[],
-        reservations=[
+        zone_validity=(),
+        reservations=(
             Reservation(
                 reservation_id="res1",
                 start_time=now - timedelta(hours=1),
                 end_time=now + timedelta(hours=1),
-            )
-        ],
-        favorites=[],
+            ),
+        ),
+        favorites=(),
         zone_availability=ZoneAvailability(
             is_chargeable_now=True,
             next_change_time=None,
-            windows_today=[],
+            windows_today=(),
         ),
-        active_reservations=[],
+        active_reservations=(),
     )
     entry.runtime_data.coordinator.data = data
     entry.runtime_data.coordinator.last_update_success = False
@@ -1004,15 +1002,15 @@ async def test_service_get_status_response(hass: HomeAssistant) -> None:
     entry.runtime_data.coordinator.data = CoordinatorData(
         permit_id="permit1",
         permit_remaining_minutes=90,
-        zone_validity=[provider_range],
-        reservations=[],
-        favorites=[],
+        zone_validity=(provider_range,),
+        reservations=(),
+        favorites=(),
         zone_availability=ZoneAvailability(
             is_chargeable_now=False,
             next_change_time=effective_range.start,
-            windows_today=[effective_range],
+            windows_today=(effective_range,),
         ),
-        active_reservations=[],
+        active_reservations=(),
     )
     entry.runtime_data.coordinator.last_update_success = True
     entry.runtime_data.coordinator.config_entry = entry
@@ -1060,15 +1058,15 @@ async def test_service_get_status_stale(hass: HomeAssistant) -> None:
     entry.runtime_data.coordinator.data = CoordinatorData(
         permit_id="permit1",
         permit_remaining_minutes=30,
-        zone_validity=[window],
-        reservations=[],
-        favorites=[],
+        zone_validity=(window,),
+        reservations=(),
+        favorites=(),
         zone_availability=ZoneAvailability(
             is_chargeable_now=True,
             next_change_time=window.end,
-            windows_today=[window],
+            windows_today=(window,),
         ),
-        active_reservations=[],
+        active_reservations=(),
     )
     entry.runtime_data.coordinator.last_update_success = False
     entry.runtime_data.coordinator.last_exception = RuntimeError("boom")
@@ -1115,15 +1113,15 @@ async def test_service_get_status_stale_recomputes_consistent_windows(
     entry.runtime_data.coordinator.data = CoordinatorData(
         permit_id="permit1",
         permit_remaining_minutes=45,
-        zone_validity=[provider_range],
-        reservations=[],
-        favorites=[],
+        zone_validity=(provider_range,),
+        reservations=(),
+        favorites=(),
         zone_availability=ZoneAvailability(
             is_chargeable_now=True,
             next_change_time=stale_effective_range.end,
-            windows_today=[stale_effective_range],
+            windows_today=(stale_effective_range,),
         ),
-        active_reservations=[],
+        active_reservations=(),
     )
     entry.runtime_data.coordinator.last_update_success = False
     entry.runtime_data.coordinator.last_exception = RuntimeError("boom")

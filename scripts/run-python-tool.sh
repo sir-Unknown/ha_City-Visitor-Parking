@@ -49,6 +49,15 @@ cd "$REPO_ROOT"
 
 if [[ "$TOOL_MODULE" == "script.hassfest" ]]; then
   export PYTHONPATH="$HA_CORE_DIR${PYTHONPATH:+:$PYTHONPATH}"
+  exec "$PYTHON_BIN" -c '
+import multiprocessing as mp
+import runpy
+import sys
+
+mp.set_start_method("fork", force=True)
+sys.argv = sys.argv[1:]
+runpy.run_module(sys.argv[0], run_name="__main__")
+' "$TOOL_MODULE" "$@"
 fi
 
 exec "$PYTHON_BIN" -m "$TOOL_MODULE" "$@"
