@@ -1,6 +1,7 @@
 version: 2
 multi-ecosystem-groups:
   dependencies:
+    open-pull-requests-limit: 5
     schedule:
       interval: "weekly"
       day: "monday"
@@ -15,7 +16,6 @@ updates:
       - "*"
     cooldown:
       default-days: 7
-    open-pull-requests-limit: 5
     labels:
       - "github-actions"
     multi-ecosystem-group: "dependencies"
@@ -28,7 +28,6 @@ updates:
       semver-major-days: 30
       semver-minor-days: 7
       semver-patch-days: 3
-    open-pull-requests-limit: 5
     labels:
       - "python"
     multi-ecosystem-group: "dependencies"
@@ -48,7 +47,6 @@ updates:
       semver-major-days: 30
       semver-minor-days: 7
       semver-patch-days: 3
-    open-pull-requests-limit: 5
     labels:
       - "javascript"
     multi-ecosystem-group: "dependencies"
