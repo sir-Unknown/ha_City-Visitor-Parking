@@ -1,1 +1,1 @@
-pycityvisitorparking==0.5.14
+pycityvisitorparking==0.5.15

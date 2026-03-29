@@ -28,6 +28,7 @@ Quick links:
 
 - Lovelace cards: [docs/cards.md](docs/cards.md)
 - Services: [docs/services.md](docs/services.md)
+- Blueprints: [blueprints/README.md](blueprints/README.md)
 - Troubleshooting: [docs/troubleshooting.md](docs/troubleshooting.md)
 - Privacy: [docs/privacy.md](docs/privacy.md)
 - Examples: [docs/examples/automations.md](docs/examples/automations.md)
@@ -158,6 +159,19 @@ Typical sensors:
 - Paid or free (including next change time)
 - Paid window start and paid window end
 - Favorites (count)
+
+## Blueprints
+
+Ready-made automation blueprints are available to automate visitor parking registration without writing automations from scratch.
+
+The **Automatic Parking Registration** blueprint handles the full flow using zone detection, Bluetooth, and mobile notifications:
+
+- Detects arrival in a configured zone and prompts to register a license plate
+- Uses Bluetooth (car or car kit) to trigger notifications immediately on connect or disconnect
+- Sends hourly reminders during an active reservation
+- Notifies when a reservation is canceled externally or when leaving without registering
+
+Available in English and Dutch. See [blueprints/README.md](blueprints/README.md) for installation instructions and full configuration reference.
 
 ## Lovelace cards
 
