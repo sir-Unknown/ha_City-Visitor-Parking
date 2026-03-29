@@ -561,8 +561,16 @@ action:
 
                             - variables:
                                 reservation_id: >
-                                  {% set items = active_parking_reservations.reservations | default([]) %}
-                                  {{ items[0].reservation_id if items | count > 0 else '' }}
+                                  {% set ns = namespace(active_id='') %}
+                                  {% set now_dt = now() %}
+                                  {% for item in active_parking_reservations.reservations | default([]) %}
+                                    {% set start_dt = item.start_time | as_datetime if item.start_time is defined and item.start_time else none %}
+                                    {% set end_dt = item.end_time | as_datetime if item.end_time is defined and item.end_time else none %}
+                                    {% if ns.active_id == '' and start_dt and end_dt and start_dt <= now_dt < end_dt %}
+                                      {% set ns.active_id = item.reservation_id %}
+                                    {% endif %}
+                                  {% endfor %}
+                                  {{ ns.active_id }}
 
                             - choose:
                                 - conditions:
@@ -866,8 +874,16 @@ action:
 
                                         - variables:
                                             reservation_id: >
-                                              {% set items = active_parking_reservations.reservations | default([]) %}
-                                              {{ items[0].reservation_id if items | count > 0 else '' }}
+                                              {% set ns = namespace(active_id='') %}
+                                              {% set now_dt = now() %}
+                                              {% for item in active_parking_reservations.reservations | default([]) %}
+                                                {% set start_dt = item.start_time | as_datetime if item.start_time is defined and item.start_time else none %}
+                                                {% set end_dt = item.end_time | as_datetime if item.end_time is defined and item.end_time else none %}
+                                                {% if ns.active_id == '' and start_dt and end_dt and start_dt <= now_dt < end_dt %}
+                                                  {% set ns.active_id = item.reservation_id %}
+                                                {% endif %}
+                                              {% endfor %}
+                                              {{ ns.active_id }}
 
                                         - if:
                                             - condition: template
@@ -1106,8 +1122,16 @@ action:
 
                       - variables:
                           reservation_id: >
-                            {% set items = active_parking_reservations.reservations | default([]) %}
-                            {{ items[0].reservation_id if items | count > 0 else '' }}
+                            {% set ns = namespace(active_id='') %}
+                            {% set now_dt = now() %}
+                            {% for item in active_parking_reservations.reservations | default([]) %}
+                              {% set start_dt = item.start_time | as_datetime if item.start_time is defined and item.start_time else none %}
+                              {% set end_dt = item.end_time | as_datetime if item.end_time is defined and item.end_time else none %}
+                              {% if ns.active_id == '' and start_dt and end_dt and start_dt <= now_dt < end_dt %}
+                                {% set ns.active_id = item.reservation_id %}
+                              {% endif %}
+                            {% endfor %}
+                            {{ ns.active_id }}
 
                       - if:
                           - condition: template
@@ -1279,8 +1303,16 @@ action:
 
                                 - variables:
                                     reservation_id: >
-                                      {% set items = active_parking_reservations.reservations | default([]) %}
-                                      {{ items[0].reservation_id if items | count > 0 else '' }}
+                                      {% set ns = namespace(active_id='') %}
+                                      {% set now_dt = now() %}
+                                      {% for item in active_parking_reservations.reservations | default([]) %}
+                                        {% set start_dt = item.start_time | as_datetime if item.start_time is defined and item.start_time else none %}
+                                        {% set end_dt = item.end_time | as_datetime if item.end_time is defined and item.end_time else none %}
+                                        {% if ns.active_id == '' and start_dt and end_dt and start_dt <= now_dt < end_dt %}
+                                          {% set ns.active_id = item.reservation_id %}
+                                        {% endif %}
+                                      {% endfor %}
+                                      {{ ns.active_id }}
 
                                 - if:
                                     - condition: template
