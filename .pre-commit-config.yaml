@@ -43,7 +43,7 @@ repos:
         exclude: ^custom_components/city_visitor_parking/frontend/(dist|src)/
         additional_dependencies:
           - prettier@3.6.2
-          - prettier-plugin-sort-json@4.1.1
+          - prettier-plugin-sort-json@4.2.0
   - repo: https://github.com/cdce8p/python-typing-update
     rev: v0.8.1
     hooks:
