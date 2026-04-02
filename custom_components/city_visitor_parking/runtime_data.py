@@ -35,3 +35,4 @@ class CityVisitorParkingRuntimeData:
     permit_id: str
     auto_end_state: AutoEndState
     operating_time_overrides: OperatingTimeOverrides
+    free_dates: str
