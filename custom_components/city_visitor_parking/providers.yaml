@@ -182,7 +182,7 @@ nijmegen:
   municipality_name: Nijmegen
   provider_id: dvsportal
   base_url: "https://parkeerproducten.nijmegen.nl"
-  api_url: "/DVSWebAPI/api"
+  api_url: "/DVSPortal/api"
 
 nissewaard:
   municipality_name: Nissewaard
