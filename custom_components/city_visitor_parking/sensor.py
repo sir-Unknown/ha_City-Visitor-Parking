@@ -78,7 +78,7 @@ class FutureReservationsSensor(CityVisitorParkingEntity):
 
 
 class RemainingTimeSensor(CityVisitorParkingEntity):
-    """Sensor for remaining balance time."""
+    """Sensor for remaining balance (time or monetary)."""
 
     _entity_key = "remaining_time"
     _attr_translation_key: str | None = "remaining_time"
@@ -88,19 +88,31 @@ class RemainingTimeSensor(CityVisitorParkingEntity):
 
     def _update_from_coordinator(self) -> None:
         """Update the sensor from coordinator data."""
+        balance_unit = self.coordinator.data.permit_balance_unit
         remaining_minutes = _remaining_balance_minutes(self.coordinator.data)
         next_end_time = _next_end_time(self.coordinator.data)
         active_count = len(self.coordinator.data.active_reservations)
         attributes = dict(self._attr_extra_state_attributes or {})
         attributes.update(
             {
-                "remaining_minutes": remaining_minutes,
                 "active_reservations": active_count,
                 "next_end_time": _as_utc_iso(next_end_time) if next_end_time else None,
                 "has_active_reservation": active_count > 0,
             }
         )
-        self._attr_native_value = round(remaining_minutes / 60, 2)
+
+        if balance_unit is not None and balance_unit != "TIMES":
+            self._attr_device_class = SensorDeviceClass.MONETARY
+            self._attr_native_unit_of_measurement = balance_unit
+            self._attr_suggested_display_precision = 2
+            self._attr_native_value = remaining_minutes
+        else:
+            self._attr_device_class = SensorDeviceClass.DURATION
+            self._attr_native_unit_of_measurement = UnitOfTime.HOURS
+            self._attr_suggested_display_precision = 2
+            attributes["remaining_minutes"] = remaining_minutes
+            self._attr_native_value = round(remaining_minutes / 60, 2)
+
         self._attr_extra_state_attributes = attributes
 
 
