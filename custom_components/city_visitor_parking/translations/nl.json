@@ -76,7 +76,8 @@
               "thursday_chargeable_windows": "Donderdag",
               "friday_chargeable_windows": "Vrijdag",
               "saturday_chargeable_windows": "Zaterdag",
-              "sunday_chargeable_windows": "Zondag"
+              "sunday_chargeable_windows": "Zondag",
+              "free_dates": "Vrije dagen"
             },
             "data_description": {
               "monday_chargeable_windows": "Voer betaalvensters in, bijvoorbeeld 09:00-13:00, 14:00-17:30.",
@@ -85,7 +86,8 @@
               "thursday_chargeable_windows": "Voer betaalvensters in, bijvoorbeeld 09:00-13:00, 14:00-17:30.",
               "friday_chargeable_windows": "Voer betaalvensters in, bijvoorbeeld 09:00-13:00, 14:00-17:30.",
               "saturday_chargeable_windows": "Voer betaalvensters in, bijvoorbeeld 09:00-13:00, 14:00-17:30.",
-              "sunday_chargeable_windows": "Voer betaalvensters in, bijvoorbeeld 09:00-13:00, 14:00-17:30."
+              "sunday_chargeable_windows": "Voer betaalvensters in, bijvoorbeeld 09:00-13:00, 14:00-17:30.",
+              "free_dates": "Kommagescheiden datums waarop parkeren gratis is. Gebruik DD-MM voor jaarlijkse datums (bijv. 25-12, 01-01) of DD-MM-YYYY voor eenmalige datums (bijv. 18-04-2025)."
             }
           }
         }
