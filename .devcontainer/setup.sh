@@ -22,6 +22,7 @@ sudo apt-get install -y -qq \
   libssl-dev \
   libtiff6 \
   libturbojpeg0-dev \
+  node-corepack \
   zlib1g-dev
 
 # Some images do not ship every optional package. Install them separately so a
