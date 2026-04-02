@@ -1218,7 +1218,8 @@ var buildCardEditorSchema = (cardTypeOptions, displayOptionsExpanded) => [
       },
       { name: "show_favorites", selector: { boolean: {} }, default: true },
       { name: "show_start_time", selector: { boolean: {} }, default: true },
-      { name: "show_end_time", selector: { boolean: {} }, default: true }
+      { name: "show_end_time", selector: { boolean: {} }, default: true },
+      { name: "default_license_plate", selector: { text: {} }, required: false }
     ]
   }
 ];
@@ -1233,7 +1234,7 @@ var CityVisitorParkingCardEditor = class extends BaseCardEditor {
     );
     const cardTypeOptions = buildCardTypeOptions(localizeTarget, "editor");
     const displayOptionsExpanded = Boolean(
-      this._config?.config_entry_id || this._config?.show_favorites === false || this._config?.show_start_time === false || this._config?.show_end_time === false
+      this._config?.config_entry_id || this._config?.show_favorites === false || this._config?.show_start_time === false || this._config?.show_end_time === false || this._config?.default_license_plate
     );
     return b2`
       <ha-form
@@ -1443,6 +1444,9 @@ var getActiveCardConfigForm = createConfigFormGetter(
         show_end_time: config.show_end_time !== false,
         ...config
       };
+      if (this._config.default_license_plate && !this._formValues["licensePlate"]) {
+        this._setInputValue("licensePlate", this._config.default_license_plate);
+      }
       if (priorShowFavorites && !this._config.show_favorites) {
         this._resetFavoritesState();
         this._setInputValue("favorite", "");
@@ -1977,6 +1981,9 @@ var getActiveCardConfigForm = createConfigFormGetter(
       const hadValues = Object.keys(this._formValues).length > 0;
       const hadAddFavoriteChecked = this._addFavoriteChecked;
       this._formValues = {};
+      if (this._config?.default_license_plate) {
+        this._formValues["licensePlate"] = this._config.default_license_plate;
+      }
       clearFavoriteTransientState(this);
       if (hadValues || hadAddFavoriteChecked) this._requestRender();
     }

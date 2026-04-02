@@ -966,6 +966,7 @@ type ParkingCardEditorConfig = {
   show_start_time?: boolean;
   show_end_time?: boolean;
   config_entry_id?: string;
+  default_license_plate?: string;
 };
 
 type CardEditorFormSchema = ReadonlyArray<Record<string, unknown>>;
@@ -996,6 +997,7 @@ const buildCardEditorSchema = (
       { name: "show_favorites", selector: { boolean: {} }, default: true },
       { name: "show_start_time", selector: { boolean: {} }, default: true },
       { name: "show_end_time", selector: { boolean: {} }, default: true },
+      { name: "default_license_plate", selector: { text: {} }, required: false },
     ],
   },
 ];
@@ -1014,7 +1016,8 @@ class CityVisitorParkingCardEditor extends BaseCardEditor<ParkingCardEditorConfi
       this._config?.config_entry_id ||
       this._config?.show_favorites === false ||
       this._config?.show_start_time === false ||
-      this._config?.show_end_time === false,
+      this._config?.show_end_time === false ||
+      this._config?.default_license_plate,
     );
     return html`
       <ha-form
@@ -1177,6 +1180,7 @@ const getActiveCardConfigForm = createConfigFormGetter(
     show_end_time?: boolean;
     config_entry_id?: string;
     device_id?: string;
+    default_license_plate?: string;
   };
   type CheckedElement = HTMLElement & { checked: boolean; disabled?: boolean };
   type FavoriteActionState = {
@@ -1325,6 +1329,9 @@ const getActiveCardConfigForm = createConfigFormGetter(
         show_end_time: config.show_end_time !== false,
         ...config,
       };
+      if (this._config.default_license_plate && !this._formValues["licensePlate"]) {
+        this._setInputValue("licensePlate", this._config.default_license_plate);
+      }
       if (priorShowFavorites && !this._config.show_favorites) {
         this._resetFavoritesState();
         this._setInputValue("favorite", "");
@@ -1951,6 +1958,9 @@ const getActiveCardConfigForm = createConfigFormGetter(
       const hadValues = Object.keys(this._formValues).length > 0;
       const hadAddFavoriteChecked = this._addFavoriteChecked;
       this._formValues = {};
+      if (this._config?.default_license_plate) {
+        this._formValues["licensePlate"] = this._config.default_license_plate;
+      }
       clearFavoriteTransientState(this);
       if (hadValues || hadAddFavoriteChecked) this._requestRender();
     }
