@@ -17,7 +17,8 @@ uv tool install ruff
 # ── HA config with custom component symlink ───────────────────────
 echo "Setting up HA config directory..."
 mkdir -p /workspaces/config/custom_components
-ln -sf "$REPO_DIR/custom_components/city_visitor_parking" \
+# Do not dereference an existing symlinked directory target on reruns.
+ln -sfn "$REPO_DIR/custom_components/city_visitor_parking" \
   /workspaces/config/custom_components/city_visitor_parking
 
 # ── Frontend dependencies ─────────────────────────────────────────
