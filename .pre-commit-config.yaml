@@ -5,6 +5,7 @@ repos:
       - id: ruff-check
         args:
           - --fix
+        files: ^(custom_components|tests)/.+\.(py|pyi)$
       - id: ruff-format
         files: ^(custom_components|tests)/.+\.(py|pyi)$
   - repo: https://github.com/zizmorcore/zizmor-pre-commit
@@ -73,18 +74,6 @@ repos:
         pass_filenames: false
   - repo: local
     hooks:
-      - id: hassfest
-        name: hassfest (city_visitor_parking)
-        entry: bash scripts/run-hassfest.sh
-        args:
-          - --action
-          - validate
-          - --core-path
-          - ../homeassistant-core
-          - --integration-path
-          - custom_components/city_visitor_parking
-        language: system
-        pass_filenames: false
       - id: pytest
         name: pytest
         entry: bash scripts/run-python-tool.sh pytest
