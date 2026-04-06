@@ -12,11 +12,6 @@ on:
   workflow_dispatch:
   pull_request:
     branches: ["main"]
-    paths:
-      - "requirements*.txt"
-      - "pyproject.toml"
-      - "custom_components/city_visitor_parking/frontend/package.json"
-      - "custom_components/city_visitor_parking/frontend/yarn.lock"
 
 concurrency:
   group: dependency-review-${{ github.event.pull_request.number || github.ref }}
