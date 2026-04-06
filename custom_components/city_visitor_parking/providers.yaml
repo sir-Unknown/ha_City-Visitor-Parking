@@ -8,7 +8,7 @@ apeldoorn:
   municipality_name: Apeldoorn
   provider_id: dvsportal
   base_url: "https://parkeren.apeldoorn.nl"
-  api_url: "/DVSWebAPI/api"
+  api_url: "/DVSPortal/api"
 
 assen:
   municipality_name: Assen
@@ -56,7 +56,7 @@ s_hertogenbosch:
   municipality_name: "'s-Hertogenbosch"
   provider_id: dvsportal
   base_url: "https://parkeren.s-hertogenbosch.nl"
-  api_url: "/DVSWebAPI/api"
+  api_url: "/DVSPortal/api"
 
 doetinchem_buha:
   municipality_name: "Doetinchem (via Buha)"
@@ -140,7 +140,7 @@ heerlen:
   municipality_name: Heerlen
   provider_id: dvsportal
   base_url: "https://parkeren.heerlen.nl"
-  api_url: "/DVSWebAPI/api"
+  api_url: "/DVSPortal/api"
 
 hengelo:
   municipality_name: Hengelo
@@ -236,13 +236,13 @@ sittard_geleen:
   municipality_name: Sittard-Geleen
   provider_id: dvsportal
   base_url: "https://parkeren.sittard-geleen.nl"
-  api_url: "/DVSWebAPI/api"
+  api_url: "/DVSPortal/api"
 
 smallingerland:
   municipality_name: Smallingerland
   provider_id: dvsportal
   base_url: "https://parkeren.smallingerland.nl"
-  api_url: "/DVSWebAPI/api"
+  api_url: "/DVSPortal/api"
 
 sudwest_fryslan:
   municipality_name: Súdwest-Fryslân
@@ -296,7 +296,7 @@ vlissingen:
   municipality_name: Vlissingen
   provider_id: dvsportal
   base_url: "https://parkeren.vlissingen.nl"
-  api_url: "/DVSWebAPI/api"
+  api_url: "/DVSPortal/api"
 
 waadhoeke:
   municipality_name: Waadhoeke
@@ -314,7 +314,7 @@ weert:
   municipality_name: Weert
   provider_id: dvsportal
   base_url: "https://parkeerloket.weert.nl"
-  api_url: "/DVSWebAPI/api"
+  api_url: "/DVSPortal/api"
 
 zaanstad:
   municipality_name: Zaanstad
