@@ -1217,7 +1217,11 @@ var buildCardEditorSchema = (cardTypeOptions, displayOptionsExpanded) => [
       { name: "show_favorites", selector: { boolean: {} }, default: true },
       { name: "show_start_time", selector: { boolean: {} }, default: true },
       { name: "show_end_time", selector: { boolean: {} }, default: true },
-      { name: "default_license_plate", selector: { text: {} }, required: false }
+      {
+        name: "default_license_plate",
+        selector: { text: {} },
+        required: false
+      }
     ]
   }
 ];
@@ -1738,6 +1742,7 @@ var getActiveCardConfigForm = createConfigFormGetter(
                 .label=${localizeFn("field.license_plate")}
                 placeholder=${localizeFn("placeholder.license_plate")}
                 .value=${priorLicense}
+                ?disabled=${controlsDisabled}
               ></ha-textfield>
             </div>
             ${showStart ? b2`
@@ -2635,6 +2640,7 @@ var getActiveCardConfigForm = createConfigFormGetter(
             <div class="datetime-row">
               <ha-textfield
                 type="datetime-local"
+                name="reservation-start"
                 data-reservation-id=${reservation.reservation_id}
                 data-field="start"
                 .value=${startValue}
@@ -2659,6 +2665,7 @@ var getActiveCardConfigForm = createConfigFormGetter(
             <div class="datetime-row">
               <ha-textfield
                 type="datetime-local"
+                name="reservation-end"
                 data-reservation-id=${reservation.reservation_id}
                 data-field="end"
                 .value=${endValue}

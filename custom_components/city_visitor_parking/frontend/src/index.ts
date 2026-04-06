@@ -994,7 +994,11 @@ const buildCardEditorSchema = (
       { name: "show_favorites", selector: { boolean: {} }, default: true },
       { name: "show_start_time", selector: { boolean: {} }, default: true },
       { name: "show_end_time", selector: { boolean: {} }, default: true },
-      { name: "default_license_plate", selector: { text: {} }, required: false },
+      {
+        name: "default_license_plate",
+        selector: { text: {} },
+        required: false,
+      },
     ],
   },
 ];
@@ -1318,7 +1322,10 @@ const getActiveCardConfigForm = createConfigFormGetter(
         show_end_time: config.show_end_time !== false,
         ...config,
       };
-      if (this._config.default_license_plate && !this._formValues["licensePlate"]) {
+      if (
+        this._config.default_license_plate &&
+        !this._formValues["licensePlate"]
+      ) {
         this._setInputValue("licensePlate", this._config.default_license_plate);
       }
       if (priorShowFavorites && !this._config.show_favorites) {
@@ -1674,6 +1681,7 @@ const getActiveCardConfigForm = createConfigFormGetter(
                 .label=${localizeFn("field.license_plate")}
                 placeholder=${localizeFn("placeholder.license_plate")}
                 .value=${priorLicense}
+                ?disabled=${controlsDisabled}
               ></ha-textfield>
             </div>
             ${showStart
@@ -2773,6 +2781,7 @@ const getActiveCardConfigForm = createConfigFormGetter(
             <div class="datetime-row">
               <ha-textfield
                 type="datetime-local"
+                name="reservation-start"
                 data-reservation-id=${reservation.reservation_id}
                 data-field="start"
                 .value=${startValue}
@@ -2797,6 +2806,7 @@ const getActiveCardConfigForm = createConfigFormGetter(
             <div class="datetime-row">
               <ha-textfield
                 type="datetime-local"
+                name="reservation-end"
                 data-reservation-id=${reservation.reservation_id}
                 data-field="end"
                 .value=${endValue}

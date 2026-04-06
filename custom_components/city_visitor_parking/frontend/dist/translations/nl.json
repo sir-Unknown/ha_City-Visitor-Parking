@@ -74,5 +74,5 @@
   "message.reservation_end_failed": "We kunnen je reservering niet beëindigen.",
   "placeholder.license_plate": "AA-123-B",
   "editor.field.default_license_plate": "Standaard kenteken",
-  "editor.description.default_license_plate": "Optioneel. Vul het kentekenveld voorin met deze waarde als het formulier leeg of gereset is."
+  "editor.description.default_license_plate": "Optioneel. Vul het kentekenveld voor in met deze waarde als het formulier leeg of gereset is."
 }
