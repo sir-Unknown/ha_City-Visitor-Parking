@@ -1,6 +1,6 @@
 {
   "name": "City Visitor Parking",
-  "image": "mcr.microsoft.com/devcontainers/base:debian",
+  "image": "mcr.microsoft.com/devcontainers/python:3.14",
 
   "workspaceFolder": "/workspaces/ha_City-Visitor-Parking",
 
@@ -9,21 +9,21 @@
   "features": {
     "ghcr.io/devcontainers/features/github-cli:1": {},
     "ghcr.io/devcontainers/features/node:1": {
-      "nodeGypDependencies": true,
       "version": "lts"
-    }
+    },
+    "ghcr.io/devcontainer-community/devcontainer-features/astral.sh-uv:1": {}
+  },
+
+  "remoteEnv": {
+    "COREPACK_ENABLE_DOWNLOAD_PROMPT": "0",
+    "VIRTUAL_ENV": "/home/vscode/.venv",
+    "PATH": "/home/vscode/.venv/bin:/home/vscode/.local/bin:${containerEnv:PATH}"
   },
 
   "customizations": {
     "vscode": {
       "settings": {
-        "ruff.path": ["/home/vscode/.local/bin/ruff"],
-        "python.defaultInterpreterPath": "/workspaces/homeassistant-core/venv/bin/python",
-        "python.analysis.extraPaths": ["/workspaces/homeassistant-core"],
-        "terminal.integrated.env.linux": {
-          "VIRTUAL_ENV": "/workspaces/homeassistant-core/venv",
-          "PATH": "/workspaces/homeassistant-core/venv/bin:${env:PATH}"
-        },
+        "python.defaultInterpreterPath": "/home/vscode/.venv/bin/python",
         "editor.formatOnSave": true,
         "[python]": {
           "editor.defaultFormatter": "charliermarsh.ruff"
@@ -31,7 +31,6 @@
       },
       "extensions": [
         "ms-python.python",
-        "ms-python.vscode-pylance",
         "charliermarsh.ruff",
         "ms-python.debugpy",
         "github.vscode-github-actions",

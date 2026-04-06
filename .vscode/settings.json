@@ -12,5 +12,6 @@
   },
 
   "files.insertFinalNewline": true,
-  "files.trimTrailingWhitespace": true
+  "files.trimTrailingWhitespace": true,
+  "workbench.remoteIndicator.showExtensionRecommendations": false
 }
