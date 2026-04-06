@@ -20,7 +20,7 @@ def _resolve_api_path(found_url: str, base_url: str) -> str:
     """Resolve a raw apiURL value to an absolute path."""
     if found_url.startswith(("http://", "https://")):
         if found_url.startswith(base_url):
-            return found_url[len(base_url):]
+            return found_url[len(base_url) :]
         return found_url
     if found_url.startswith("/"):
         return found_url
@@ -53,7 +53,8 @@ def main() -> int:
         providers = yaml.safe_load(f)
 
     dvsportal = {
-        key: val for key, val in providers.items()
+        key: val
+        for key, val in providers.items()
         if val.get("provider_id") == "dvsportal"
     }
 
