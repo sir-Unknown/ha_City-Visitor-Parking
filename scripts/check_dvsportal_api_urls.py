@@ -27,38 +27,24 @@ def _resolve_api_path(found_url: str, base_url: str) -> str:
     return "/DVSPortal/" + found_url
 
 
-def _get_response(
-    url: str,
-) -> tuple[requests.Response | None, str | None, str | None]:
-    """HTTP GET with unverified SSL fallback. Returns (resp, warning, error)."""
+def fetch_api_url(base_url: str) -> tuple[str | None, str | None]:
+    """Fetch app.env.js and extract apiURL. Returns (api_url, error)."""
+    url = base_url.rstrip("/") + APP_ENV_PATH
     try:
-        return requests.get(url, timeout=TIMEOUT), None, None
-    except requests.exceptions.SSLError:
-        pass
-    except requests.exceptions.Timeout:
-        return None, None, "timeout"
-    except Exception as e:
-        return None, None, str(e)
-    try:
-        resp = requests.get(url, timeout=TIMEOUT, verify=False)
-        return resp, "SSL cert invalid", None
-    except Exception as e:
-        return None, None, f"SSL error: {e}"
-
-
-def fetch_api_url(base_url: str) -> tuple[str | None, str | None, str | None]:
-    """Fetch app.env.js and extract apiURL. Returns (api_url, warning, error)."""
-    resp, warning, error = _get_response(base_url.rstrip("/") + APP_ENV_PATH)
-    if error or resp is None:
-        return None, None, error or "no response"
-    try:
+        resp = requests.get(url, timeout=TIMEOUT)
         resp.raise_for_status()
+    except requests.exceptions.SSLError:
+        return None, "SSL certificate error"
+    except requests.exceptions.Timeout:
+        return None, "timeout"
     except requests.exceptions.HTTPError as e:
-        return None, None, f"HTTP {e.response.status_code}"
+        return None, f"HTTP {e.response.status_code}"
+    except Exception as e:
+        return None, str(e)
     match = re.search(r"window\.__env\.apiURL\s*=\s*['\"]([^'\"]+)['\"]", resp.text)
     if match:
-        return match.group(1), warning, None
-    return None, None, "apiURL not found in app.env.js"
+        return match.group(1), None
+    return None, "apiURL not found in app.env.js"
 
 
 def main() -> int:
@@ -83,7 +69,7 @@ def main() -> int:
         base_url = val["base_url"]
         configured_api = val["api_url"]
 
-        found_url, warning, error = fetch_api_url(base_url)
+        found_url, error = fetch_api_url(base_url)
 
         if error or found_url is None:
             status = "ERROR"
@@ -93,11 +79,10 @@ def main() -> int:
             found_path = _resolve_api_path(found_url, base_url)
             found_norm = found_path.rstrip("/")
             config_norm = configured_api.rstrip("/")
-            suffix = f" [{warning}]" if warning else ""
             if found_norm == config_norm:
-                status = "OK" + suffix
+                status = "OK"
             else:
-                status = "MISMATCH" + suffix
+                status = "MISMATCH"
                 mismatches.append((name, base_url, configured_api, found_path))
             found = found_path
 
