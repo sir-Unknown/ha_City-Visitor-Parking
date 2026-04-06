@@ -34,4 +34,12 @@ echo ""
 echo "Setup complete."
 echo ""
 echo "Start HA:  hass -c /workspaces/config"
+echo "           or via Ctrl+Shift+P → Tasks: Run Task → Start Home Assistant"
 echo "HA UI:     http://localhost:8123"
+
+# ── GitHub CLI auth hint ──────────────────────────────────────────
+if ! gh auth status &>/dev/null; then
+  echo ""
+  echo "⚠  Not logged in to GitHub. Run the 'GitHub: Login' task in VSCode"
+  echo "   (Ctrl+Shift+P → Tasks: Run Task → GitHub: Login)"
+fi
