@@ -2,6 +2,7 @@
 .claude/
 .codex/
 .abstra/
+.codex
 
 # Python cache and build artifacts
 __pycache__/
