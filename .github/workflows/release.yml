@@ -100,11 +100,21 @@ jobs:
         run: yarn build
         working-directory: custom_components/city_visitor_parking/frontend
       - name: Build release asset
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
         run: |
-          git -C custom_components/city_visitor_parking archive --format=zip \
-            --output ../../city_visitor_parking.zip \
-            --worktree-attributes \
-            HEAD
+          VERSION="${RELEASE_TAG#v}"
+          mkdir /tmp/release-build
+          git -C custom_components/city_visitor_parking archive --format=tar \
+            --worktree-attributes HEAD | tar -x -C /tmp/release-build
+          python3 - <<PYEOF
+          import json, pathlib
+          p = pathlib.Path("/tmp/release-build/manifest.json")
+          data = json.loads(p.read_text())
+          data["version"] = "$VERSION"
+          p.write_text(json.dumps(data, indent=2) + "\n")
+          PYEOF
+          cd /tmp/release-build && zip -r "$GITHUB_WORKSPACE/city_visitor_parking.zip" .
       - name: Upload release asset
         env:
           GH_TOKEN: ${{ github.token }}
@@ -119,4 +129,40 @@ jobs:
               repo: context.repo.repo,
               release_id: context.payload.release.id,
               draft: false,
+            });
+
+  bump-manifest-version:
+    needs: [validate, build-release]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Bump version in manifest.json
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
+        with:
+          script: |
+            const tag = context.payload.release.tag_name;
+            const version = tag.startsWith("v") ? tag.slice(1) : tag;
+            const path = "custom_components/city_visitor_parking/manifest.json";
+
+            const { data: file } = await github.rest.repos.getContent({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              path,
+              ref: "main",
+            });
+
+            const manifest = JSON.parse(Buffer.from(file.content, "base64").toString());
+            if (manifest.version === version) return;
+            manifest.version = version;
+            const newContent = JSON.stringify(manifest, null, 2) + "\n";
+
+            await github.rest.repos.createOrUpdateFileContents({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              path,
+              message: `chore: bump manifest version to ${version}`,
+              content: Buffer.from(newContent).toString("base64"),
+              sha: file.sha,
+              branch: "main",
             });
