@@ -135,8 +135,22 @@ jobs:
           PR_NUMBER: ${{ github.event.pull_request.number }}
           REPO: ${{ github.repository }}
         run: |
-          LATEST=$(curl -sf https://pypi.org/pypi/pycityvisitorparking/json \
-            | python3 -c "import sys, json; print(json.load(sys.stdin)['info']['version'])")
+          LATEST=$(python3 - <<'PYEOF'
+          import urllib.request, json, time, sys
+          for attempt in range(3):
+              try:
+                  with urllib.request.urlopen(
+                      "https://pypi.org/pypi/pycityvisitorparking/json", timeout=15
+                  ) as r:
+                      print(json.load(r)["info"]["version"])
+                      sys.exit(0)
+              except Exception as e:
+                  if attempt == 2:
+                      print(f"::warning::Could not reach PyPI after 3 attempts: {e} — skipping version check.", file=sys.stderr)
+                      sys.exit(2)
+                  time.sleep(10)
+          PYEOF
+          ) || exit 0
           MANIFEST=$(python3 -c "
           import json
           data = json.load(open('custom_components/city_visitor_parking/manifest.json'))
