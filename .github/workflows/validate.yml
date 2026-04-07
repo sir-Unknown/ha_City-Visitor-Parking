@@ -116,6 +116,59 @@ jobs:
           PYTHONPATH: ${{ github.workspace }}
         run: .venv/bin/pytest tests/components/city_visitor_parking --cov=custom_components.city_visitor_parking --cov-report=term-missing
 
+  manifest-version:
+    name: Manifest Python package version
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Checkout the repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Check pycityvisitorparking version in manifest.json
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          LATEST=$(curl -sf https://pypi.org/pypi/pycityvisitorparking/json \
+            | python3 -c "import sys, json; print(json.load(sys.stdin)['info']['version'])")
+          MANIFEST=$(python3 -c "
+          import json
+          data = json.load(open('custom_components/city_visitor_parking/manifest.json'))
+          pkg = next(r for r in data['requirements'] if r.startswith('pycityvisitorparking=='))
+          print(pkg.split('==')[1])
+          ")
+          echo "Latest on PyPI : $LATEST"
+          echo "In manifest.json: $MANIFEST"
+          if [ "$LATEST" != "$MANIFEST" ]; then
+            echo "::warning::manifest.json uses pycityvisitorparking==$MANIFEST but latest release is $LATEST."
+            if [ -n "$PR_NUMBER" ]; then
+              EXISTING=$(gh api "repos/$REPO/pulls/$PR_NUMBER/reviews" \
+                --jq '[.[] | select(.state == "CHANGES_REQUESTED" and .user.login == "github-actions[bot]")] | length')
+              if [ "$EXISTING" -eq 0 ]; then
+                gh pr review "$PR_NUMBER" \
+                  --request-changes \
+                  --body "**\`manifest.json\` is out of date.**
+          \`pycityvisitorparking\` is pinned at \`$MANIFEST\` but the latest release on PyPI is \`$LATEST\`.
+          Please update \`requirements\` in \`manifest.json\` before merging."
+              fi
+            fi
+          else
+            if [ -n "$PR_NUMBER" ]; then
+              gh api "repos/$REPO/pulls/$PR_NUMBER/reviews" \
+                --jq '.[] | select(.state == "CHANGES_REQUESTED" and .user.login == "github-actions[bot]") | .id' \
+              | while read -r ID; do
+                  gh api "repos/$REPO/pulls/$PR_NUMBER/reviews/$ID/dismissals" \
+                    -X PUT -f message="pycityvisitorparking is now up to date in manifest.json."
+                done
+            fi
+          fi
+
   frontend:
     name: Frontend build
     runs-on: ubuntu-latest
