@@ -23,8 +23,10 @@ if ! command -v yarn >/dev/null 2>&1; then
   exit 127
 fi
 
-# Bootstrap dependencies once when node_modules is missing.
-if [[ ! -d "$FRONTEND_DIR/node_modules" ]]; then
+# Bootstrap or reinstall when node_modules is missing or lockfile/manifest changed.
+if [[ ! -d "$FRONTEND_DIR/node_modules" ]] \
+   || [[ "$FRONTEND_DIR/yarn.lock" -nt "$FRONTEND_DIR/node_modules" ]] \
+   || [[ "$FRONTEND_DIR/package.json" -nt "$FRONTEND_DIR/node_modules" ]]; then
   yarn --cwd "$FRONTEND_DIR" install --immutable
 fi
 
