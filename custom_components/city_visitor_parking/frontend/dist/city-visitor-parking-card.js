@@ -818,6 +818,19 @@ var BASE_CARD_STYLES = i`
     transform: translateY(-50%);
     z-index: 1;
   }
+  .license-plate-row {
+    position: relative;
+  }
+  .license-plate-row ha-textfield {
+    width: 100%;
+  }
+  .license-plate-clear-button {
+    position: absolute;
+    inset-inline-end: var(--ha-space-1);
+    top: 50%;
+    transform: translateY(-50%);
+    z-index: 1;
+  }
 `;
 var buildPermitOptions = (entries) => entries.map((entry) => ({
   id: entry.entry_id,
@@ -1216,7 +1229,12 @@ var buildCardEditorSchema = (cardTypeOptions, displayOptionsExpanded) => [
       },
       { name: "show_favorites", selector: { boolean: {} }, default: true },
       { name: "show_start_time", selector: { boolean: {} }, default: true },
-      { name: "show_end_time", selector: { boolean: {} }, default: true }
+      { name: "show_end_time", selector: { boolean: {} }, default: true },
+      {
+        name: "default_license_plate",
+        selector: { text: {} },
+        required: false
+      }
     ]
   }
 ];
@@ -1231,7 +1249,7 @@ var CityVisitorParkingCardEditor = class extends BaseCardEditor {
     );
     const cardTypeOptions = buildCardTypeOptions(localizeTarget, "editor");
     const displayOptionsExpanded = Boolean(
-      this._config?.config_entry_id || this._config?.show_favorites === false || this._config?.show_start_time === false || this._config?.show_end_time === false
+      this._config?.config_entry_id || this._config?.show_favorites === false || this._config?.show_start_time === false || this._config?.show_end_time === false || this._config?.default_license_plate
     );
     return b2`
       <ha-form
@@ -1399,6 +1417,7 @@ var getActiveCardConfigForm = createConfigFormGetter(
       this._onPermitSelectChange = (event) => this._handlePermitSelectChange(event);
       this._onFavoriteSelectChange = (event) => this._handleFavoriteSelectChange(event);
       this._onDateTimePickerClick = (event) => this._handleDateTimePickerClick(event);
+      this._onClearLicensePlate = (event) => this._handleClearLicensePlate(event);
     }
     static async getConfigForm(hass) {
       return getCardConfigForm(hass);
@@ -1431,6 +1450,9 @@ var getActiveCardConfigForm = createConfigFormGetter(
         show_end_time: config.show_end_time !== false,
         ...config
       };
+      if (this._config.default_license_plate && !this._formValues["licensePlate"]) {
+        this._setInputValue("licensePlate", this._config.default_license_plate);
+      }
       if (priorShowFavorites && !this._config.show_favorites) {
         this._resetFavoritesState();
         this._setInputValue("favorite", "");
@@ -1728,13 +1750,23 @@ var getActiveCardConfigForm = createConfigFormGetter(
         onSelected: this._onFavoriteSelectChange,
         wrapSelect: (content) => i6(activeEntryId ?? "", content)
       })}
-            <div class="row">
+            <div class="row license-plate-row">
               <ha-textfield
                 id="licensePlate"
                 .label=${localizeFn("field.license_plate")}
                 placeholder=${localizeFn("placeholder.license_plate")}
                 .value=${priorLicense}
+                ?disabled=${controlsDisabled}
               ></ha-textfield>
+              ${priorLicense ? b2`<ha-icon-button
+                    class="license-plate-clear-button"
+                    aria-label=${localizeFn("action.clear")}
+                    title=${localizeFn("action.clear")}
+                    ?disabled=${controlsDisabled}
+                    @click=${this._onClearLicensePlate}
+                  >
+                    <ha-icon icon="mdi:close"></ha-icon>
+                  </ha-icon-button>` : A}
             </div>
             ${showStart ? b2`
                   <div class="row datetime-row">
@@ -1878,6 +1910,11 @@ var getActiveCardConfigForm = createConfigFormGetter(
       if (!fieldId) return;
       openDateTimePickerForField(this.renderRoot.querySelector(`#${fieldId}`));
     }
+    _handleClearLicensePlate(event) {
+      event.stopPropagation();
+      this._setInputValue("licensePlate", "");
+      this._scheduleFavoriteActionsUpdate();
+    }
     _handlePermitSelectChange(event) {
       if (this._isInEditor()) return;
       const detail = event.detail;
@@ -1973,6 +2010,9 @@ var getActiveCardConfigForm = createConfigFormGetter(
       const hadValues = Object.keys(this._formValues).length > 0;
       const hadAddFavoriteChecked = this._addFavoriteChecked;
       this._formValues = {};
+      if (this._config?.default_license_plate) {
+        this._formValues["licensePlate"] = this._config.default_license_plate;
+      }
       clearFavoriteTransientState(this);
       if (hadValues || hadAddFavoriteChecked) this._requestRender();
     }
@@ -2628,6 +2668,7 @@ var getActiveCardConfigForm = createConfigFormGetter(
             <div class="datetime-row">
               <ha-textfield
                 type="datetime-local"
+                name="reservation-start"
                 data-reservation-id=${reservation.reservation_id}
                 data-field="start"
                 .value=${startValue}
@@ -2652,6 +2693,7 @@ var getActiveCardConfigForm = createConfigFormGetter(
             <div class="datetime-row">
               <ha-textfield
                 type="datetime-local"
+                name="reservation-end"
                 data-reservation-id=${reservation.reservation_id}
                 data-field="end"
                 .value=${endValue}

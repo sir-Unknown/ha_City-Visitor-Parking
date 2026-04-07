@@ -393,6 +393,19 @@ const BASE_CARD_STYLES = css`
     transform: translateY(-50%);
     z-index: 1;
   }
+  .license-plate-row {
+    position: relative;
+  }
+  .license-plate-row ha-textfield {
+    width: 100%;
+  }
+  .license-plate-clear-button {
+    position: absolute;
+    inset-inline-end: var(--ha-space-1);
+    top: 50%;
+    transform: translateY(-50%);
+    z-index: 1;
+  }
 `;
 
 const buildPermitOptions = (entries: PermitEntry[]): PermitOption[] =>
@@ -963,6 +976,7 @@ type ParkingCardEditorConfig = {
   show_start_time?: boolean;
   show_end_time?: boolean;
   config_entry_id?: string;
+  default_license_plate?: string;
 };
 
 type CardEditorFormSchema = ReadonlyArray<Record<string, unknown>>;
@@ -993,6 +1007,11 @@ const buildCardEditorSchema = (
       { name: "show_favorites", selector: { boolean: {} }, default: true },
       { name: "show_start_time", selector: { boolean: {} }, default: true },
       { name: "show_end_time", selector: { boolean: {} }, default: true },
+      {
+        name: "default_license_plate",
+        selector: { text: {} },
+        required: false,
+      },
     ],
   },
 ];
@@ -1011,7 +1030,8 @@ class CityVisitorParkingCardEditor extends BaseCardEditor<ParkingCardEditorConfi
       this._config?.config_entry_id ||
       this._config?.show_favorites === false ||
       this._config?.show_start_time === false ||
-      this._config?.show_end_time === false,
+      this._config?.show_end_time === false ||
+      this._config?.default_license_plate,
     );
     return html`
       <ha-form
@@ -1174,6 +1194,7 @@ const getActiveCardConfigForm = createConfigFormGetter(
     show_end_time?: boolean;
     config_entry_id?: string;
     device_id?: string;
+    default_license_plate?: string;
   };
   type CheckedElement = HTMLElement & { checked: boolean; disabled?: boolean };
   type FavoriteActionState = {
@@ -1277,6 +1298,8 @@ const getActiveCardConfigForm = createConfigFormGetter(
       this._handleFavoriteSelectChange(event);
     _onDateTimePickerClick = (event: Event) =>
       this._handleDateTimePickerClick(event);
+    _onClearLicensePlate = (event: Event) =>
+      this._handleClearLicensePlate(event);
 
     static async getConfigForm(hass?: HomeAssistant): Promise<{
       readonly schema: ReadonlyArray<Record<string, unknown>>;
@@ -1314,6 +1337,12 @@ const getActiveCardConfigForm = createConfigFormGetter(
         show_end_time: config.show_end_time !== false,
         ...config,
       };
+      if (
+        this._config.default_license_plate &&
+        !this._formValues["licensePlate"]
+      ) {
+        this._setInputValue("licensePlate", this._config.default_license_plate);
+      }
       if (priorShowFavorites && !this._config.show_favorites) {
         this._resetFavoritesState();
         this._setInputValue("favorite", "");
@@ -1661,13 +1690,25 @@ const getActiveCardConfigForm = createConfigFormGetter(
               onSelected: this._onFavoriteSelectChange,
               wrapSelect: (content) => keyed(activeEntryId ?? "", content),
             })}
-            <div class="row">
+            <div class="row license-plate-row">
               <ha-textfield
                 id="licensePlate"
                 .label=${localizeFn("field.license_plate")}
                 placeholder=${localizeFn("placeholder.license_plate")}
                 .value=${priorLicense}
+                ?disabled=${controlsDisabled}
               ></ha-textfield>
+              ${priorLicense
+                ? html`<ha-icon-button
+                    class="license-plate-clear-button"
+                    aria-label=${localizeFn("action.clear")}
+                    title=${localizeFn("action.clear")}
+                    ?disabled=${controlsDisabled}
+                    @click=${this._onClearLicensePlate}
+                  >
+                    <ha-icon icon="mdi:close"></ha-icon>
+                  </ha-icon-button>`
+                : nothing}
             </div>
             ${showStart
               ? html`
@@ -1831,6 +1872,12 @@ const getActiveCardConfigForm = createConfigFormGetter(
       openDateTimePickerForField(this.renderRoot.querySelector(`#${fieldId}`));
     }
 
+    _handleClearLicensePlate(event: Event): void {
+      event.stopPropagation();
+      this._setInputValue("licensePlate", "");
+      this._scheduleFavoriteActionsUpdate();
+    }
+
     _handlePermitSelectChange(event: Event): void {
       if (this._isInEditor()) return;
       const detail = (event as CustomEvent<{ value?: string | null }>).detail;
@@ -1944,6 +1991,9 @@ const getActiveCardConfigForm = createConfigFormGetter(
       const hadValues = Object.keys(this._formValues).length > 0;
       const hadAddFavoriteChecked = this._addFavoriteChecked;
       this._formValues = {};
+      if (this._config?.default_license_plate) {
+        this._formValues["licensePlate"] = this._config.default_license_plate;
+      }
       clearFavoriteTransientState(this);
       if (hadValues || hadAddFavoriteChecked) this._requestRender();
     }
@@ -2763,6 +2813,7 @@ const getActiveCardConfigForm = createConfigFormGetter(
             <div class="datetime-row">
               <ha-textfield
                 type="datetime-local"
+                name="reservation-start"
                 data-reservation-id=${reservation.reservation_id}
                 data-field="start"
                 .value=${startValue}
@@ -2787,6 +2838,7 @@ const getActiveCardConfigForm = createConfigFormGetter(
             <div class="datetime-row">
               <ha-textfield
                 type="datetime-local"
+                name="reservation-end"
                 data-reservation-id=${reservation.reservation_id}
                 data-field="end"
                 .value=${endValue}
