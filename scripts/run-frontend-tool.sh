@@ -23,8 +23,8 @@ if ! command -v yarn >/dev/null 2>&1; then
   exit 127
 fi
 
-# Yarn Berry installs are represented by .pnp.cjs. Bootstrap once when missing.
-if [[ ! -f "$FRONTEND_DIR/.pnp.cjs" ]]; then
+# Bootstrap dependencies once when node_modules is missing.
+if [[ ! -d "$FRONTEND_DIR/node_modules" ]]; then
   yarn --cwd "$FRONTEND_DIR" install --immutable
 fi
 
