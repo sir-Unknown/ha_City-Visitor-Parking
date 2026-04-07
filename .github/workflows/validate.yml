@@ -122,6 +122,7 @@ jobs:
     timeout-minutes: 5
     permissions:
       contents: read
+      pull-requests: write
     steps:
       - name: Checkout the repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -129,6 +130,10 @@ jobs:
           persist-credentials: false
 
       - name: Check pycityvisitorparking version in manifest.json
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
         run: |
           LATEST=$(curl -sf https://pypi.org/pypi/pycityvisitorparking/json \
             | python3 -c "import sys, json; print(json.load(sys.stdin)['info']['version'])")
@@ -141,8 +146,27 @@ jobs:
           echo "Latest on PyPI : $LATEST"
           echo "In manifest.json: $MANIFEST"
           if [ "$LATEST" != "$MANIFEST" ]; then
-            echo "::error::manifest.json uses pycityvisitorparking==$MANIFEST but latest release is $LATEST. Update requirements in manifest.json."
-            exit 1
+            echo "::warning::manifest.json uses pycityvisitorparking==$MANIFEST but latest release is $LATEST."
+            if [ -n "$PR_NUMBER" ]; then
+              EXISTING=$(gh api "repos/$REPO/pulls/$PR_NUMBER/reviews" \
+                --jq '[.[] | select(.state == "CHANGES_REQUESTED" and .user.login == "github-actions[bot]")] | length')
+              if [ "$EXISTING" -eq 0 ]; then
+                gh pr review "$PR_NUMBER" \
+                  --request-changes \
+                  --body "**\`manifest.json\` is out of date.**
+          \`pycityvisitorparking\` is pinned at \`$MANIFEST\` but the latest release on PyPI is \`$LATEST\`.
+          Please update \`requirements\` in \`manifest.json\` before merging."
+              fi
+            fi
+          else
+            if [ -n "$PR_NUMBER" ]; then
+              gh api "repos/$REPO/pulls/$PR_NUMBER/reviews" \
+                --jq '.[] | select(.state == "CHANGES_REQUESTED" and .user.login == "github-actions[bot]") | .id' \
+              | while read -r ID; do
+                  gh api "repos/$REPO/pulls/$PR_NUMBER/reviews/$ID/dismissals" \
+                    -X PUT -f message="pycityvisitorparking is now up to date in manifest.json."
+                done
+            fi
           fi
 
   frontend:
