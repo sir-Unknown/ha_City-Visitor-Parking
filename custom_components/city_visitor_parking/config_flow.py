@@ -77,7 +77,9 @@ _LOGGER = logging.getLogger(__name__)
 
 
 @config_entries.HANDLERS.register(DOMAIN)
-class CityVisitorParkingConfigFlow(config_entries.ConfigFlow):
+class CityVisitorParkingConfigFlow(  # pylint: disable=abstract-method
+    config_entries.ConfigFlow
+):
     """Handle a config flow for City visitor parking."""
 
     VERSION = 1
@@ -132,8 +134,7 @@ class CityVisitorParkingConfigFlow(config_entries.ConfigFlow):
             except NetworkError:
                 errors["base"] = "cannot_connect"
                 providers = []
-            # Allowed in config flow
-            except Exception as err:
+            except Exception as err:  # pylint: disable=broad-exception-caught
                 _LOGGER.debug(
                     "Unexpected error while listing providers: %s: %s",
                     type(err).__name__,
@@ -184,7 +185,7 @@ class CityVisitorParkingConfigFlow(config_entries.ConfigFlow):
         return self.hass.config_entries.async_get_entry(entry_id)
 
     async def async_step_reauth(
-        self, user_input: dict[str, object] | None = None
+        self, _user_input: dict[str, object] | None = None
     ) -> config_entries.ConfigFlowResult:
         """Handle reauthentication."""
         entry = self._entry_from_context()
@@ -368,8 +369,7 @@ class CityVisitorParkingConfigFlow(config_entries.ConfigFlow):
                 err,
             )
             error_key = "unknown"
-        # Allowed in config flow
-        except Exception as err:
+        except Exception as err:  # pylint: disable=broad-exception-caught
             _LOGGER.debug(
                 "Unexpected error during login for %s: %s: %s",
                 self._provider_config.provider_id,
@@ -495,7 +495,7 @@ async def _async_load_providers(hass: HomeAssistant) -> dict[str, ProviderConfig
 def _load_providers_sync() -> dict[str, ProviderConfig]:
     """Load provider definitions from disk in a worker thread."""
     with (
-        resources.files(__package__)
+        resources.files(anchor=__package__)
         .joinpath("providers.yaml")
         .open("r", encoding="utf-8") as file
     ):
