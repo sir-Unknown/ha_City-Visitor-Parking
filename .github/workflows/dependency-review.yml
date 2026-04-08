@@ -44,5 +44,8 @@ jobs:
           head-ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
           comment-summary-in-pr: on-failure
           fail-on-severity: moderate
+          # Temporary exception: Home Assistant 2026.4.1 currently pins PyJWT==2.10.1 exactly,
+          # so the uv-managed dev/test lockfile cannot move off this advisory until upstream updates.
+          allow-ghsas: GHSA-752w-5fwx-jx9f
           retry-on-snapshot-warnings: true
         #   deny-licenses: GPL-1.0-or-later, LGPL-2.0-or-later
