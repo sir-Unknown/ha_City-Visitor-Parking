@@ -25,7 +25,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Verify PR has a valid label
-        uses: jesusvasquez333/verify-pr-label-action@1f0f12371083ecb1f38f0eeddb244f484918f84c # v1.4.0
+        uses: jesusvasquez333/verify-pr-label-action@v1.4.0
         with:
           pull-request-number: "${{ github.event.pull_request.number }}"
           github-token: "${{ secrets.GITHUB_TOKEN }}"

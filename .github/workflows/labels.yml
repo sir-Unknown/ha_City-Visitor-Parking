@@ -25,6 +25,6 @@ jobs:
           persist-credentials: false
 
       - name: Run label syncer
-        uses: micnncim/action-label-syncer@c2299103e932f28b8e237ac1cad61643815b54e9 # v1.3.0
+        uses: micnncim/action-label-syncer@v1.3.0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
