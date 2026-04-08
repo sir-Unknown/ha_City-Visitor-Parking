@@ -14,7 +14,7 @@ permissions: {}
 
 jobs:
   update_release_draft:
-    name: Draft release
+    name: update_release_draft
     runs-on: ubuntu-latest
     permissions:
       contents: write
