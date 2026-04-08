@@ -218,10 +218,12 @@ jobs:
     steps:
       - name: Bump version in manifest.json
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
+        env:
+          VERSION: ${{ needs.build-release.outputs.version }}
         with:
           script: |
             const tag = context.payload.release.tag_name;
-            const version = "${{ needs.build-release.outputs.version }}";
+            const version = process.env.VERSION;
             const path = "custom_components/city_visitor_parking/manifest.json";
             const branch = `chore/bump-manifest-version-${version}`;
 
