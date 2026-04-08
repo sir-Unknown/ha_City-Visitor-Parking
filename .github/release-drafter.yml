@@ -1,8 +1,9 @@
-name-template: "$NEXT_PATCH_VERSION"
-tag-template: "$NEXT_PATCH_VERSION"
+name-template: "v$RESOLVED_VERSION"
+tag-template: "v$RESOLVED_VERSION"
 commitish: "main"
 change-template: "- $TITLE (#$NUMBER)"
 no-changes-template: "- No changes"
+sort-direction: ascending
 categories:
   - title: "⚠️ Breaking Changes"
     labels:
@@ -27,6 +28,27 @@ categories:
   - title: "Docs"
     labels:
       - "documentation"
+version-resolver:
+  major:
+    labels:
+      - "major"
+      - "breaking-change"
+  minor:
+    labels:
+      - "minor"
+      - "new-feature"
+  patch:
+    labels:
+      - "bugfix"
+      - "ci"
+      - "dependencies"
+      - "documentation"
+      - "enhancement"
+      - "maintenance"
+      - "performance"
+      - "refactor"
+      - "tests"
+  default: patch
 autolabeler:
   - label: "documentation"
     files:
