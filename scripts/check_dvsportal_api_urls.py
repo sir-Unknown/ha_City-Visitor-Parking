@@ -14,7 +14,7 @@ from urllib.request import Request, urlopen
 try:
     import yaml
 except ModuleNotFoundError:
-    yaml = None
+    yaml = None  # pylint: disable=invalid-name
 
 PROVIDERS_YAML = (
     Path(__file__).parent.parent
@@ -103,7 +103,7 @@ def fetch_api_url(base_url: str) -> tuple[str | None, str | None]:
         if isinstance(reason, SSLError):
             return None, "SSL certificate error"
         return None, str(reason)
-    except Exception as err:
+    except Exception as err:  # pylint: disable=broad-exception-caught
         return None, str(err)
     match = re.search(r"window\.__env\.apiURL\s*=\s*['\"]([^'\"]+)['\"]", body)
     if match:
@@ -282,7 +282,7 @@ def try_fake_login(api_url: str) -> tuple[str, str, str]:
         if isinstance(reason, SSLError):
             return "ERROR", login_url, "SSL certificate error"
         return "ERROR", login_url, str(reason)
-    except Exception as err:
+    except Exception as err:  # pylint: disable=broad-exception-caught
         return "ERROR", login_url, str(err)
 
     response_text = _sanitize_response_text(response_text)
