@@ -1,31 +1,35 @@
 name-template: "v$RESOLVED_VERSION"
 tag-template: "v$RESOLVED_VERSION"
 commitish: "main"
-change-template: "- $TITLE (#$NUMBER)"
+change-template: "- $TITLE @$AUTHOR (#$NUMBER)"
 no-changes-template: "- No changes"
 sort-direction: ascending
 categories:
-  - title: "⚠️ Breaking Changes"
+  - title: "🚨 Breaking changes"
     labels:
       - "breaking-change"
-  - title: "Added"
+  - title: "✨ New features"
     labels:
       - "new-feature"
-  - title: "Fixed"
+  - title: "🐛 Bug fixes"
     labels:
       - "bugfix"
-  - title: "Changed"
+  - title: "🚀 Enhancements"
     labels:
-      - "maintenance"
       - "enhancement"
       - "refactor"
       - "performance"
+  - title: "🧰 Maintenance"
+    labels:
+      - "maintenance"
       - "ci"
+  - title: "⬆️ Dependency updates"
+    labels:
       - "dependencies"
-  - title: "Tests"
+  - title: "🧪 Tests"
     labels:
       - "tests"
-  - title: "Docs"
+  - title: "📚 Documentation"
     labels:
       - "documentation"
 version-resolver:
@@ -61,4 +65,8 @@ autolabeler:
     files:
       - ".github/**"
 template: |
+  # 🚗 City Visitor Parking
+
   $CHANGES
+
+  # 🚗 City Visitor Parking
