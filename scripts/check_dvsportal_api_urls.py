@@ -369,10 +369,7 @@ def _print_login_rows(rows: list[dict[str, str]]) -> None:
     print(f"{'Municipality':<30} {'Login Status':<12} {'Login URL'}")
     print("-" * 120)
     for row in sorted(rows, key=_sort_by_login_status):
-        print(
-            f"{row['municipality']:<30} {row['login_status']:<12} "
-            f"{row['login_url']}"
-        )
+        print(f"{row['municipality']:<30} {row['login_status']:<12} {row['login_url']}")
         print(f"  response: {row['login_response']}")
 
 
@@ -421,9 +418,7 @@ def main() -> int:
         dvsportal.values(),
         key=lambda value: value["municipality_name"],
     )
-    rows = [
-        _collect_row(provider, mismatches, errors) for provider in providers_sorted
-    ]
+    rows = [_collect_row(provider, mismatches, errors) for provider in providers_sorted]
 
     _print_api_rows(rows)
     _print_login_rows(rows)
