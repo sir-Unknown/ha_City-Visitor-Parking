@@ -59,6 +59,8 @@
       "cannot_connect": "Unable to connect. Check your network connection and try again.",
       "invalid_auth": "Invalid credentials.",
       "no_permits": "No permits were found for this account.",
+      "rate_limit": "Too many requests to the provider. Please wait a moment and try again.",
+      "service_unavailable": "The provider is temporarily unavailable. Please try again later.",
       "unknown": "Unexpected error. Try again later."
     }
   },

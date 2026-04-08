@@ -19,7 +19,11 @@ from homeassistant.helpers import selector
 from homeassistant.util import dt as dt_util
 from homeassistant.util import slugify
 from pycityvisitorparking import AuthError, Client, NetworkError
-from pycityvisitorparking.exceptions import PyCityVisitorParkingError
+from pycityvisitorparking.exceptions import (
+    PyCityVisitorParkingError,
+    RateLimitError,
+    ServiceUnavailableError,
+)
 
 from .client import async_create_client
 from .const import (
@@ -131,8 +135,9 @@ class CityVisitorParkingConfigFlow(config_entries.ConfigFlow):
             # Allowed in config flow
             except Exception as err:
                 _LOGGER.debug(
-                    "Unexpected error while listing providers: %s",
+                    "Unexpected error while listing providers: %s: %s",
                     type(err).__name__,
+                    err,
                 )
                 errors["base"] = "unknown"
                 providers = []
@@ -331,6 +336,7 @@ class CityVisitorParkingConfigFlow(config_entries.ConfigFlow):
                 self._provider_config.provider_id,
                 base_url=self._provider_config.base_url,
                 api_uri=self._provider_config.api_url,
+                request_context=self._provider_config.municipality_name,
             )
             await provider.login(username=username, password=password)
             permit = await provider.get_permit()
@@ -338,19 +344,37 @@ class CityVisitorParkingConfigFlow(config_entries.ConfigFlow):
             error_key = "invalid_auth"
         except NetworkError:
             error_key = "cannot_connect"
-        except PyCityVisitorParkingError as err:
+        except RateLimitError as err:
             _LOGGER.debug(
-                "Provider error during login for %s: %s",
+                "Rate limit during login for %s: %s: %s",
                 self._provider_config.provider_id,
                 type(err).__name__,
+                err,
+            )
+            error_key = "rate_limit"
+        except ServiceUnavailableError as err:
+            _LOGGER.debug(
+                "Service unavailable during login for %s: %s: %s",
+                self._provider_config.provider_id,
+                type(err).__name__,
+                err,
+            )
+            error_key = "service_unavailable"
+        except PyCityVisitorParkingError as err:
+            _LOGGER.debug(
+                "Provider error during login for %s: %s: %s",
+                self._provider_config.provider_id,
+                type(err).__name__,
+                err,
             )
             error_key = "unknown"
         # Allowed in config flow
         except Exception as err:
             _LOGGER.debug(
-                "Unexpected error during login for %s: %s",
+                "Unexpected error during login for %s: %s: %s",
                 self._provider_config.provider_id,
                 type(err).__name__,
+                err,
             )
             error_key = "unknown"
 

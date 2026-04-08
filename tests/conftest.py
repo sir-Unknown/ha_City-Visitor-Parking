@@ -32,6 +32,14 @@ class ValidationError(PyCityVisitorParkingError):
     """Stub validation error."""
 
 
+class RateLimitError(ProviderError):
+    """Stub rate limit error."""
+
+
+class ServiceUnavailableError(ProviderError):
+    """Stub service unavailable error."""
+
+
 class Client:
     """Stub client for testing."""
 
@@ -113,6 +121,8 @@ exceptions_module.AuthError = AuthError
 exceptions_module.NetworkError = NetworkError
 exceptions_module.ProviderError = ProviderError
 exceptions_module.ValidationError = ValidationError
+exceptions_module.RateLimitError = RateLimitError
+exceptions_module.ServiceUnavailableError = ServiceUnavailableError
 
 sys.modules.setdefault("pycityvisitorparking", module)
 sys.modules.setdefault("pycityvisitorparking.exceptions", exceptions_module)

@@ -59,6 +59,8 @@
       "cannot_connect": "Kan geen verbinding maken. Controleer je netwerk en probeer het opnieuw.",
       "invalid_auth": "Ongeldige inloggegevens.",
       "no_permits": "Geen vergunningen gevonden voor dit account.",
+      "rate_limit": "Te veel verzoeken naar de provider. Wacht even en probeer het later opnieuw.",
+      "service_unavailable": "De provider is tijdelijk niet beschikbaar. Probeer het later opnieuw.",
       "unknown": "Onverwachte fout. Probeer het later opnieuw."
     }
   },
