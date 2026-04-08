@@ -4,6 +4,7 @@
   "pythonVersion": "3.14",
   "typeCheckingMode": "strict",
   "reportMissingImports": "none",
+  "reportPrivateImportUsage": "none",
   "reportUnknownVariableType": "none",
   "reportUnknownMemberType": "none",
   "reportUnknownArgumentType": "none",

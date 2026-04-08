@@ -1,0 +1,40 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "enabledManagers": [
+    "github-actions",
+    "npm",
+    "pep621",
+    "pip_requirements",
+    "pre-commit",
+    "uv"
+  ],
+  "rebaseWhen": "behind-base-branch",
+  "dependencyDashboard": true,
+  "labels": ["dependencies", "no-stale"],
+  "prHourlyLimit": 2,
+  "prConcurrentLimit": 5,
+  "lockFileMaintenance": {
+    "enabled": true,
+    "automerge": false
+  },
+  "packageRules": [
+    {
+      "matchManagers": ["github-actions"],
+      "addLabels": ["github-actions"],
+      "pinDigests": true
+    },
+    {
+      "matchManagers": ["npm"],
+      "matchFileNames": ["custom_components/city_visitor_parking/frontend/**"],
+      "addLabels": ["javascript"]
+    },
+    {
+      "matchManagers": ["pep621", "pip_requirements", "pre-commit", "uv"],
+      "addLabels": ["python"]
+    },
+    {
+      "matchDepNames": ["pycityvisitorparking"],
+      "addLabels": ["python", "maintenance"]
+    }
+  ]
+}

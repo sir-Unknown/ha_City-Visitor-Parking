@@ -98,7 +98,7 @@ groningen:
   municipality_name: Groningen
   provider_id: dvsportal
   base_url: "https://aanvraagparkeren.groningen.nl"
-  api_url: "/DVSWebAPI/api"
+  api_url: "/DVSPortal/api"
 
 haarlem:
   municipality_name: Haarlem
@@ -160,11 +160,13 @@ leiden:
   base_url: "https://parkeren.leiden.nl"
   api_url: "/DVSWebAPI/api"
 
-leidschendam_voorburg:
-  municipality_name: Leidschendam-Voorburg
-  provider_id: dvsportal
-  base_url: "https://parkeren.lv.nl"
-  api_url: "/DVSWebAPI/api"
+# The Leidschendam-Voorburg parking provider is currently not working, so it's commented out for now.
+# It is not working because the API endpoint requeres a specific certificate, which is not available. If this ever gets resolved, the provider can be re-enabled by uncommenting the lines below.
+# leidschendam_voorburg:
+#   municipality_name: Leidschendam-Voorburg
+#   provider_id: dvsportal
+#   base_url: "https://parkeren.lv.nl"
+#   api_url: "/DVSPortal/api"
 
 maastricht:
   municipality_name: Maastricht
@@ -302,7 +304,7 @@ waadhoeke:
   municipality_name: Waadhoeke
   provider_id: dvsportal
   base_url: "https://parkeren.waadhoeke.nl"
-  api_url: "/DVSWebAPI/api"
+  api_url: "/DVSPortal/api"
 
 waalwijk:
   municipality_name: Waalwijk
@@ -320,7 +322,7 @@ zaanstad:
   municipality_name: Zaanstad
   provider_id: dvsportal
   base_url: "https://parkeren.zaanstad.nl"
-  api_url: "/DVSWebAPI/api"
+  api_url: "/DVSPortal/api"
 
 zevenaar:
   municipality_name: Zevenaar

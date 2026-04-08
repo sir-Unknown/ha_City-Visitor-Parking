@@ -19,7 +19,11 @@ from homeassistant.helpers import selector
 from homeassistant.util import dt as dt_util
 from homeassistant.util import slugify
 from pycityvisitorparking import AuthError, Client, NetworkError
-from pycityvisitorparking.exceptions import PyCityVisitorParkingError
+from pycityvisitorparking.exceptions import (
+    PyCityVisitorParkingError,
+    RateLimitError,
+    ServiceUnavailableError,
+)
 
 from .client import async_create_client
 from .const import (
@@ -73,7 +77,9 @@ _LOGGER = logging.getLogger(__name__)
 
 
 @config_entries.HANDLERS.register(DOMAIN)
-class CityVisitorParkingConfigFlow(config_entries.ConfigFlow):
+class CityVisitorParkingConfigFlow(  # pylint: disable=abstract-method
+    config_entries.ConfigFlow
+):
     """Handle a config flow for City visitor parking."""
 
     VERSION = 1
@@ -128,11 +134,11 @@ class CityVisitorParkingConfigFlow(config_entries.ConfigFlow):
             except NetworkError:
                 errors["base"] = "cannot_connect"
                 providers = []
-            # Allowed in config flow
-            except Exception as err:
+            except Exception as err:  # pylint: disable=broad-exception-caught
                 _LOGGER.debug(
-                    "Unexpected error while listing providers: %s",
+                    "Unexpected error while listing providers: %s: %s",
                     type(err).__name__,
+                    err,
                 )
                 errors["base"] = "unknown"
                 providers = []
@@ -179,7 +185,7 @@ class CityVisitorParkingConfigFlow(config_entries.ConfigFlow):
         return self.hass.config_entries.async_get_entry(entry_id)
 
     async def async_step_reauth(
-        self, user_input: dict[str, object] | None = None
+        self, _user_input: dict[str, object] | None = None
     ) -> config_entries.ConfigFlowResult:
         """Handle reauthentication."""
         entry = self._entry_from_context()
@@ -331,6 +337,7 @@ class CityVisitorParkingConfigFlow(config_entries.ConfigFlow):
                 self._provider_config.provider_id,
                 base_url=self._provider_config.base_url,
                 api_uri=self._provider_config.api_url,
+                request_context=self._provider_config.municipality_name,
             )
             await provider.login(username=username, password=password)
             permit = await provider.get_permit()
@@ -338,19 +345,36 @@ class CityVisitorParkingConfigFlow(config_entries.ConfigFlow):
             error_key = "invalid_auth"
         except NetworkError:
             error_key = "cannot_connect"
+        except RateLimitError as err:
+            _LOGGER.debug(
+                "Rate limit during login for %s: %s: %s",
+                self._provider_config.provider_id,
+                type(err).__name__,
+                err,
+            )
+            error_key = "rate_limit"
+        except ServiceUnavailableError as err:
+            _LOGGER.debug(
+                "Service unavailable during login for %s: %s: %s",
+                self._provider_config.provider_id,
+                type(err).__name__,
+                err,
+            )
+            error_key = "service_unavailable"
         except PyCityVisitorParkingError as err:
             _LOGGER.debug(
-                "Provider error during login for %s: %s",
+                "Provider error during login for %s: %s: %s",
                 self._provider_config.provider_id,
                 type(err).__name__,
+                err,
             )
             error_key = "unknown"
-        # Allowed in config flow
-        except Exception as err:
+        except Exception as err:  # pylint: disable=broad-exception-caught
             _LOGGER.debug(
-                "Unexpected error during login for %s: %s",
+                "Unexpected error during login for %s: %s: %s",
                 self._provider_config.provider_id,
                 type(err).__name__,
+                err,
             )
             error_key = "unknown"
 
@@ -471,7 +495,7 @@ async def _async_load_providers(hass: HomeAssistant) -> dict[str, ProviderConfig
 def _load_providers_sync() -> dict[str, ProviderConfig]:
     """Load provider definitions from disk in a worker thread."""
     with (
-        resources.files(__package__)
+        resources.files(anchor=__package__)
         .joinpath("providers.yaml")
         .open("r", encoding="utf-8") as file
     ):

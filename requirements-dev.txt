@@ -1,3 +1,6 @@
+mypy==1.15.0
 pre-commit==4.5.1
+pyright==1.1.408
 ruff==0.15.9
+types-PyYAML==6.0.12.20260408
 zizmor==1.23.1

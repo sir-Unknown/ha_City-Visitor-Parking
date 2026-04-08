@@ -99,7 +99,7 @@ CONFIG_SCHEMA: Final[Callable[[ConfigType], ConfigType]] = _config_entry_only_sc
 )
 
 
-async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
+async def async_setup(hass: HomeAssistant, _config: ConfigType) -> bool:
     """Set up the City visitor parking integration."""
     await _async_register_frontend(hass, "http")
     async_when_setup(hass, "lovelace", _async_register_lovelace_resources)
@@ -131,6 +131,7 @@ async def async_setup_entry(
         provider_config.provider_id,
         base_url=provider_config.base_url,
         api_uri=provider_config.api_url,
+        request_context=provider_config.municipality_name,
     )
     _install_zone_validity_logging(provider)
     login_started = time.perf_counter()
@@ -228,7 +229,7 @@ def _install_zone_validity_logging(provider: object) -> None:
             return map_zone_validity(raw, fallback_zone=fallback_zone)
         return map_zone_validity(raw)
 
-    cast("object", provider)._map_zone_validity = _wrap  # type: ignore[attr-defined]
+    cast("object", provider)._map_zone_validity = _wrap  # type: ignore[attr-defined]  # pylint: disable=protected-access
 
 
 def _normalize_operating_time_overrides(
