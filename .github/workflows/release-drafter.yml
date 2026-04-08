@@ -7,6 +7,7 @@ on:
       - main
     paths:
       - custom_components/**
+  pull_request:
   workflow_dispatch:
 
 permissions: {}
@@ -18,7 +19,12 @@ jobs:
     permissions:
       contents: write
     steps:
+      - name: Acknowledge PR check
+        if: github.event_name == 'pull_request'
+        run: echo "PR check only; release drafts are updated on pushes to main."
+
       - name: Run Release Drafter
+        if: github.event_name != 'pull_request'
         uses: release-drafter/release-drafter@139054aeaa9adc52ab36ddf67437541f039b88e2 # v7.1.1
         env:
           GITHUB_TOKEN: ${{ github.token }}
