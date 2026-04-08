@@ -4,6 +4,8 @@ commitish: "main"
 change-template: "- $TITLE @$AUTHOR (#$NUMBER)"
 no-changes-template: "- No changes"
 sort-direction: ascending
+include-paths:
+  - "custom_components/**"
 categories:
   - title: "🚨 Breaking changes"
     labels:
