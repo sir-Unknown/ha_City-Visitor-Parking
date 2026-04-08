@@ -1,0 +1,35 @@
+---
+name: PR labels
+
+# yamllint disable-line rule:truthy
+on:
+  pull_request_target: # zizmor: ignore[dangerous-triggers] This workflow only inspects PR labels.
+    types:
+      - opened
+      - labeled
+      - unlabeled
+      - synchronize
+  workflow_call:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  pr_labels:
+    name: Verify
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify PR has a valid label
+        uses: jesusvasquez333/verify-pr-label-action@1f0f12371083ecb1f38f0eeddb244f484918f84c # v1.4.0
+        with:
+          pull-request-number: "${{ github.event.pull_request.number }}"
+          github-token: "${{ secrets.GITHUB_TOKEN }}"
+          valid-labels: >-
+            breaking-change, bugfix, documentation, enhancement, refactor,
+            performance, new-feature, maintenance, ci, dependencies, tests
+          disable-reviews: true

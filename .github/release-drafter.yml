@@ -9,16 +9,18 @@ categories:
       - "breaking-change"
   - title: "Added"
     labels:
-      - "feature"
-      - "enhancement"
+      - "new-feature"
   - title: "Fixed"
     labels:
-      - "bug"
-      - "fix"
+      - "bugfix"
   - title: "Changed"
     labels:
-      - "chore"
       - "maintenance"
+      - "enhancement"
+      - "refactor"
+      - "performance"
+      - "ci"
+      - "dependencies"
   - title: "Tests"
     labels:
       - "tests"
