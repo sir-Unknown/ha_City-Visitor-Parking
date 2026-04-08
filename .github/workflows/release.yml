@@ -208,69 +208,6 @@ jobs:
               draft: false,
             });
 
-  bump-manifest-version:
-    needs: [validate, build-release]
-    if: needs.validate.outputs.should_release == 'true'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      pull-requests: write
-    steps:
-      - name: Bump version in manifest.json
-        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
-        env:
-          VERSION: ${{ needs.build-release.outputs.version }}
-        with:
-          script: |
-            const tag = context.payload.release.tag_name;
-            const version = process.env.VERSION;
-            const path = "custom_components/city_visitor_parking/manifest.json";
-            const branch = `chore/bump-manifest-version-${version}`;
-
-            const { data: mainRef } = await github.rest.git.getRef({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              ref: "heads/main",
-            });
-
-            await github.rest.git.createRef({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              ref: `refs/heads/${branch}`,
-              sha: mainRef.object.sha,
-            });
-
-            const { data: file } = await github.rest.repos.getContent({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              path,
-              ref: "main",
-            });
-
-            const manifest = JSON.parse(Buffer.from(file.content, "base64").toString());
-            if (manifest.version === version) return;
-            manifest.version = version;
-            const newContent = JSON.stringify(manifest, null, 2) + "\n";
-
-            await github.rest.repos.createOrUpdateFileContents({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              path,
-              message: `chore: bump manifest version to ${version}`,
-              content: Buffer.from(newContent).toString("base64"),
-              sha: file.sha,
-              branch,
-            });
-
-            await github.rest.pulls.create({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              title: `chore: bump manifest version to ${version}`,
-              head: branch,
-              base: "main",
-              body: `Automated version bump following release ${tag}.`,
-            });
-
   skip-release:
     needs: [validate]
     if: needs.validate.outputs.should_release != 'true'
@@ -279,4 +216,4 @@ jobs:
       - name: Skip release packaging
         run: |
           echo "No changes under custom_components/** since the previous published release."
-          echo "Skipping release asset build and manifest bump."
+          echo "Skipping release asset build."

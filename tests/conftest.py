@@ -9,7 +9,7 @@ from typing import Any, cast
 
 import pytest
 
-pytest_plugins = "pytest_homeassistant_custom_component"
+pytest_plugins = "pytest_homeassistant_custom_component"  # pylint: disable=invalid-name
 
 
 class PyCityVisitorParkingError(Exception):

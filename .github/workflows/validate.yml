@@ -48,10 +48,10 @@ jobs:
           enable-cache: false
 
       - name: Ruff check
-        run: uv run --python "$(cat .python-version)" --with-requirements requirements-dev.txt ruff check .
+        run: uv run --python "$(sed -n 's/^requires-python = \">=\\([0-9][0-9.]*\\)\"$/\\1/p' pyproject.toml)" --only-group dev ruff check .
 
       - name: Ruff format check
-        run: uv run --python "$(cat .python-version)" --with-requirements requirements-dev.txt ruff format --check .
+        run: uv run --python "$(sed -n 's/^requires-python = \">=\\([0-9][0-9.]*\\)\"$/\\1/p' pyproject.toml)" --only-group dev ruff format --check .
 
   hassfest:
     name: Hassfest validation
@@ -105,16 +105,13 @@ jobs:
         with:
           enable-cache: false
 
-      - name: Create uv-managed virtual environment
-        run: uv venv --python "$(cat .python-version)"
-
       - name: Install dependencies
-        run: uv pip install --python .venv/bin/python -r requirements.txt -r requirements_test.txt pytest-cov
+        run: uv sync --python "$(sed -n 's/^requires-python = \">=\\([0-9][0-9.]*\\)\"$/\\1/p' pyproject.toml)" --group test --no-install-project
 
       - name: Run pytest (with coverage)
         env:
           PYTHONPATH: ${{ github.workspace }}
-        run: .venv/bin/pytest tests/components/city_visitor_parking --cov=custom_components.city_visitor_parking --cov-report=term-missing
+        run: uv run pytest tests/components/city_visitor_parking --cov=custom_components.city_visitor_parking --cov-report=term-missing
 
   manifest-version:
     name: Manifest Python package version
