@@ -153,6 +153,7 @@ async def async_setup_entry(
         await provider.login(
             username=entry.data[CONF_USERNAME],
             password=entry.data[CONF_PASSWORD],
+            product_id=entry.data.get(CONF_PERMIT_ID),
         )
     except AuthError as err:
         raise ConfigEntryAuthFailed from err
