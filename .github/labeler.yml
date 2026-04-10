@@ -9,6 +9,11 @@ tests:
       - any-glob-to-any-file:
           - "tests/**"
 
+ci:
+  - changed-files:
+      - any-glob-to-any-file:
+          - ".github/workflows/**"
+
 maintenance:
   - changed-files:
       - any-glob-to-any-file:
