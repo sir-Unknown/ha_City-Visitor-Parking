@@ -44,12 +44,17 @@ class CityVisitorParkingEntity(
             else entry.title
         )
         self._attr_unique_id = f"{entry.unique_id}:{self._entity_key}"
+        configuration_url = None
+        runtime_data = getattr(entry, "runtime_data", None)
+        if runtime_data is not None:
+            configuration_url = runtime_data.provider_config.gui_url
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, entry.entry_id)},
             name=device_name,
             manufacturer="City visitor parking",
             model="Visitor parking permit",
             entry_type=DeviceEntryType.SERVICE,
+            configuration_url=configuration_url,
         )
         self._attr_extra_state_attributes: dict[str, object] = {
             ATTR_ATTRIBUTION: "Data provided by your municipality",

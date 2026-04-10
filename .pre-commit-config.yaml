@@ -1,6 +1,6 @@
 repos:
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.15.8
+    rev: v0.15.9
     hooks:
       - id: ruff-check
         args:
@@ -51,7 +51,7 @@ repos:
       - id: python-typing-update
         stages: [manual]
         args:
-          - --py311-plus
+          - --py314-plus
           - --force
           - --keep-updates
         files: ^(custom_components|tests)/.+\.py$
@@ -62,9 +62,6 @@ repos:
         entry: bash scripts/run-python-tool.sh mypy
         language: system
         require_serial: true
-        args:
-          - --config-file
-          - mypy.ini
         types_or: [python, pyi]
         files: ^(custom_components|tests)/.+\.(py|pyi)$
       - id: pyright

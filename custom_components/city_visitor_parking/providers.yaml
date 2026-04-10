@@ -2,340 +2,401 @@ amstelveen:
   municipality_name: Amstelveen
   provider_id: 2park
   base_url: "https://mijn.2park.nl"
+  gui_url: "https://mijn.2park.nl/"
   api_url: "/gsmpark-app-www/json"
 
 apeldoorn:
   municipality_name: Apeldoorn
   provider_id: dvsportal
-  base_url: "https://parkeren.apeldoorn.nl"
+  base_url: "https://parkeren.apeldoorn.nl/"
+  gui_url: "https://parkeren.apeldoorn.nl/DVSPortal/"
   api_url: "/DVSPortal/api"
 
 assen:
   municipality_name: Assen
   provider_id: 2park
   base_url: "https://mijn.2park.nl"
+  gui_url: "https://mijn.2park.nl/"
   api_url: "/gsmpark-app-www/json"
 
 bergen_op_zoom:
   municipality_name: Bergen op Zoom
   provider_id: 2park
   base_url: "https://mijn.2park.nl"
+  gui_url: "https://mijn.2park.nl/"
   api_url: "/gsmpark-app-www/json"
 
 bloemendaal:
   municipality_name: Bloemendaal
   provider_id: dvsportal
   base_url: "https://parkeren.bloemendaal.nl"
+  gui_url: "https://parkeren.bloemendaal.nl/DVSPortal/"
   api_url: "/DVSWebAPI/api"
 
 breda:
   municipality_name: Breda
   provider_id: 2park
   base_url: "https://mijn.2park.nl"
+  gui_url: "https://mijn.2park.nl/"
   api_url: "/gsmpark-app-www/json"
 
 deventer:
   municipality_name: Deventer
   provider_id: 2park
   base_url: "https://mijn.2park.nl"
+  gui_url: "https://mijn.2park.nl/"
   api_url: "/gsmpark-app-www/json"
 
 delft:
   municipality_name: Delft
   provider_id: dvsportal
   base_url: "https://vergunningen.parkerendelft.com"
+  gui_url: "https://vergunningen.parkerendelft.com/DVSPortal/"
   api_url: "/DVSWebAPI/api"
 
 den_haag:
   municipality_name: Den Haag
   provider_id: the_hague
   base_url: "https://parkerendenhaag.denhaag.nl"
+  gui_url: "https://parkerendenhaag.denhaag.nl/"
   api_url: "api"
 
 s_hertogenbosch:
   municipality_name: "'s-Hertogenbosch"
   provider_id: dvsportal
   base_url: "https://parkeren.s-hertogenbosch.nl"
+  gui_url: "https://parkeren.s-hertogenbosch.nl/DVSPortal/"
   api_url: "/DVSPortal/api"
 
 doetinchem_buha:
   municipality_name: "Doetinchem (via Buha)"
   provider_id: dvsportal
   base_url: "https://parkeren.buha.nl"
+  gui_url: "https://parkeren.buha.nl/DVSPortal/"
   api_url: "/DVSWebAPI/api"
 
 dordrecht:
   municipality_name: Dordrecht
   provider_id: 2park
   base_url: "https://mijn.2park.nl"
+  gui_url: "https://mijn.2park.nl/"
   api_url: "/gsmpark-app-www/json"
 
 eindhoven:
   municipality_name: Eindhoven
   provider_id: 2park
   base_url: "https://mijn.2park.nl"
+  gui_url: "https://mijn.2park.nl/"
   api_url: "/gsmpark-app-www/json"
 
 emmen:
   municipality_name: Emmen
   provider_id: 2park
   base_url: "https://mijn.2park.nl"
+  gui_url: "https://mijn.2park.nl/"
   api_url: "/gsmpark-app-www/json"
 
 etten_leur:
   municipality_name: Etten-Leur
   provider_id: 2park
   base_url: "https://mijn.2park.nl"
+  gui_url: "https://mijn.2park.nl/"
   api_url: "/gsmpark-app-www/json"
 
 gorinchem:
   municipality_name: Gorinchem
   provider_id: 2park
   base_url: "https://mijn.2park.nl"
+  gui_url: "https://mijn.2park.nl/"
   api_url: "/gsmpark-app-www/json"
 
 groningen:
   municipality_name: Groningen
   provider_id: dvsportal
   base_url: "https://aanvraagparkeren.groningen.nl"
-  api_url: "/DVSWebAPI/api"
+  gui_url: "https://aanvraagparkeren.groningen.nl/DVSPortal/"
+  api_url: "/DVSPortal/api"
 
 haarlem:
   municipality_name: Haarlem
   provider_id: dvsportal
   base_url: "https://parkeren.haarlem.nl"
+  gui_url: "https://parkeren.haarlem.nl/DVSPortal/"
   api_url: "/DVSWebAPI/api"
 
 harlingen:
   municipality_name: Harlingen
   provider_id: dvsportal
   base_url: "https://parkeervergunningen.harlingen.nl"
+  gui_url: "https://parkeervergunningen.harlingen.nl/DVSPortal/"
   api_url: "/DVSWebAPI/api"
 
 hardenberg:
   municipality_name: Hardenberg
   provider_id: 2park
   base_url: "https://mijn.2park.nl"
+  gui_url: "https://mijn.2park.nl/"
   api_url: "/gsmpark-app-www/json"
 
 harderwijk:
   municipality_name: Harderwijk
   provider_id: 2park
   base_url: "https://mijn.2park.nl"
+  gui_url: "https://mijn.2park.nl/"
   api_url: "/gsmpark-app-www/json"
 
 heemstede:
   municipality_name: Heemstede
   provider_id: dvsportal
   base_url: "https://parkeren.heemstede.nl"
+  gui_url: "https://parkeren.heemstede.nl/DVSPortal/"
   api_url: "/DVSWebAPI/api"
 
 heerenveen:
   municipality_name: Heerenveen
   provider_id: dvsportal
   base_url: "https://parkeren.heerenveen.nl"
+  gui_url: "https://parkeren.heerenveen.nl/DVSPortal/"
   api_url: "/DVSWebAPI/api"
 
 heerlen:
   municipality_name: Heerlen
   provider_id: dvsportal
   base_url: "https://parkeren.heerlen.nl"
+  gui_url: "https://parkeren.heerlen.nl/DVSPortal/"
   api_url: "/DVSPortal/api"
 
 hengelo:
   municipality_name: Hengelo
   provider_id: dvsportal
   base_url: "https://parkeren.hengelo.nl"
+  gui_url: "https://parkeren.hengelo.nl/DVSPortal/"
   api_url: "/DVSWebAPI/api"
 
 katwijk:
   municipality_name: Katwijk
   provider_id: dvsportal
   base_url: "https://parkeren.katwijk.nl"
+  gui_url: "https://parkeren.katwijk.nl/DVSPortal/"
   api_url: "/DVSWebAPI/api"
 
 leiden:
   municipality_name: Leiden
   provider_id: dvsportal
   base_url: "https://parkeren.leiden.nl"
+  gui_url: "https://parkeren.leiden.nl/DVSPortal/"
   api_url: "/DVSWebAPI/api"
 
-leidschendam_voorburg:
-  municipality_name: Leidschendam-Voorburg
-  provider_id: dvsportal
-  base_url: "https://parkeren.lv.nl"
-  api_url: "/DVSWebAPI/api"
+# The Leidschendam-Voorburg parking provider is currently not working, so it's commented out for now.
+# It is not working because the API endpoint requeres a specific certificate, which is not available. If this ever gets resolved, the provider can be re-enabled by uncommenting the lines below.
+# leidschendam_voorburg:
+#   municipality_name: Leidschendam-Voorburg
+#   provider_id: dvsportal
+#   base_url: "https://parkeren.lv.nl"
+#   gui_url: "https://parkeren.lv.nl/DVSPortal/"
+#   api_url: "/DVSPortal/api"
 
 maastricht:
   municipality_name: Maastricht
   provider_id: 2park
   base_url: "https://mijn.2park.nl"
+  gui_url: "https://mijn.2park.nl/"
   api_url: "/gsmpark-app-www/json"
 
 middelburg:
   municipality_name: Middelburg
   provider_id: dvsportal
   base_url: "https://parkeren.middelburg.nl"
+  gui_url: "https://parkeren.middelburg.nl/DVSPortal/"
   api_url: "/DVSWebAPI/api"
 
 nijmegen:
   municipality_name: Nijmegen
   provider_id: dvsportal
   base_url: "https://parkeerproducten.nijmegen.nl"
+  gui_url: "https://parkeerproducten.nijmegen.nl/DVSPortal/"
   api_url: "/DVSPortal/api"
 
 nissewaard:
   municipality_name: Nissewaard
   provider_id: dvsportal
   base_url: "https://parkeren.nissewaard.nl"
+  gui_url: "https://parkeren.nissewaard.nl/DVSPortal/"
   api_url: "/DVSWebAPI/api"
 
 oldenzaal:
   municipality_name: Oldenzaal
   provider_id: dvsportal
   base_url: "https://parkeren.oldenzaal.nl"
+  gui_url: "https://parkeren.oldenzaal.nl/DVSPortal/"
   api_url: "/DVSWebAPI/api"
 
 oosterhout:
   municipality_name: Oosterhout
   provider_id: 2park
   base_url: "https://mijn.2park.nl"
+  gui_url: "https://mijn.2park.nl/"
   api_url: "/gsmpark-app-www/json"
 
 oss:
   municipality_name: Oss
   provider_id: 2park
   base_url: "https://mijn.2park.nl"
+  gui_url: "https://mijn.2park.nl/"
   api_url: "/gsmpark-app-www/json"
 
 rijswijk:
   municipality_name: Rijswijk
   provider_id: dvsportal
   base_url: "https://parkeren.rijswijk.nl"
+  gui_url: "https://parkeren.rijswijk.nl/DVSPortal/"
   api_url: "/DVSWebAPI/api"
 
 roermond:
   municipality_name: Roermond
   provider_id: dvsportal
   base_url: "https://parkeren.roermond.nl"
+  gui_url: "https://parkeren.roermond.nl/DVSPortal/"
   api_url: "/DVSWebAPI/api"
 
 roosendaal:
   municipality_name: Roosendaal
   provider_id: 2park
   base_url: "https://mijn.2park.nl"
+  gui_url: "https://mijn.2park.nl/"
   api_url: "/gsmpark-app-www/json"
 
-schouwen_duiveland:
-  municipality_name: Schouwen-Duiveland
-  provider_id: dvsportal
-  base_url: "https://parkeren.schouwen-duiveland.nl"
-  api_url: "/DVSWebAPI/api"
+# The Schouwen-Duiveland parking provider is currently not working, so it's commented out for now.
+# It is not working because only LoginMethod=Gebruiker is allowed. Please open an issue if you want this provider enabled.
+# schouwen_duiveland:
+#   municipality_name: Schouwen-Duiveland
+#   provider_id: dvsportal
+#   base_url: "https://parkeren.schouwen-duiveland.nl"
+#   gui_url: "https://parkeren.schouwen-duiveland.nl/DVSPortal/"
+#   api_url: "/DVSWebAPI/api"
 
 sittard_geleen:
   municipality_name: Sittard-Geleen
   provider_id: dvsportal
   base_url: "https://parkeren.sittard-geleen.nl"
+  gui_url: "https://parkeren.sittard-geleen.nl/DVSPortal/"
   api_url: "/DVSPortal/api"
 
 smallingerland:
   municipality_name: Smallingerland
   provider_id: dvsportal
   base_url: "https://parkeren.smallingerland.nl"
+  gui_url: "https://parkeren.smallingerland.nl/DVSPortal/"
   api_url: "/DVSPortal/api"
 
 sudwest_fryslan:
   municipality_name: Súdwest-Fryslân
   provider_id: dvsportal
   base_url: "https://parkeren.sudwestfryslan.nl"
+  gui_url: "https://parkeren.sudwestfryslan.nl/DVSPortal/"
   api_url: "/DVSWebAPI/api"
 
 sluis:
   municipality_name: Sluis
   provider_id: 2park
   base_url: "https://mijn.2park.nl"
+  gui_url: "https://mijn.2park.nl/"
   api_url: "/gsmpark-app-www/json"
 
 terneuzen:
   municipality_name: Terneuzen
   provider_id: 2park
   base_url: "https://mijn.2park.nl"
+  gui_url: "https://mijn.2park.nl/"
   api_url: "/gsmpark-app-www/json"
 
 tiel:
   municipality_name: Tiel
   provider_id: 2park
   base_url: "https://mijn.2park.nl"
+  gui_url: "https://mijn.2park.nl/"
   api_url: "/gsmpark-app-www/json"
 
 veere:
   municipality_name: Veere
   provider_id: dvsportal
   base_url: "https://parkeren.veere.nl"
+  gui_url: "https://parkeren.veere.nl/DVSPortal/"
   api_url: "/DVSWebAPI/api"
 
 veenendaal:
   municipality_name: Veenendaal
   provider_id: 2park
   base_url: "https://mijn.2park.nl"
+  gui_url: "https://mijn.2park.nl/"
   api_url: "/gsmpark-app-www/json"
 
 venlo:
   municipality_name: Venlo
   provider_id: dvsportal
   base_url: "https://parkeren.venlo.nl"
+  gui_url: "https://parkeren.venlo.nl/DVSPortal/"
   api_url: "/DVSWebAPI/api"
 
 vlaardingen:
   municipality_name: Vlaardingen
   provider_id: 2park
   base_url: "https://mijn.2park.nl"
+  gui_url: "https://mijn.2park.nl/"
   api_url: "/gsmpark-app-www/json"
 
 vlissingen:
   municipality_name: Vlissingen
   provider_id: dvsportal
   base_url: "https://parkeren.vlissingen.nl"
+  gui_url: "https://parkeren.vlissingen.nl/DVSPortal/"
   api_url: "/DVSPortal/api"
 
 waadhoeke:
   municipality_name: Waadhoeke
   provider_id: dvsportal
   base_url: "https://parkeren.waadhoeke.nl"
-  api_url: "/DVSWebAPI/api"
+  gui_url: "https://parkeren.waadhoeke.nl/DVSPortal/"
+  api_url: "/DVSPortal/api"
 
 waalwijk:
   municipality_name: Waalwijk
   provider_id: dvsportal
   base_url: "https://parkeren.waalwijk.nl"
+  gui_url: "https://parkeren.waalwijk.nl/DVSPortal/"
   api_url: "/DVSWebAPI/api"
 
 weert:
   municipality_name: Weert
   provider_id: dvsportal
   base_url: "https://parkeerloket.weert.nl"
+  gui_url: "https://parkeerloket.weert.nl/DVSPortal/"
   api_url: "/DVSPortal/api"
 
 zaanstad:
   municipality_name: Zaanstad
   provider_id: dvsportal
   base_url: "https://parkeren.zaanstad.nl"
-  api_url: "/DVSWebAPI/api"
+  gui_url: "https://parkeren.zaanstad.nl/DVSPortal/"
+  api_url: "/DVSPortal/api"
 
 zevenaar:
   municipality_name: Zevenaar
   provider_id: dvsportal
   base_url: "https://parkeren.zevenaar.nl"
+  gui_url: "https://parkeren.zevenaar.nl/DVSPortal/"
   api_url: "/DVSWebAPI/api"
 
 zutphen:
   municipality_name: Zutphen
   provider_id: dvsportal
   base_url: "https://parkeren.zutphen.nl"
+  gui_url: "https://parkeren.zutphen.nl/DVSPortal/"
   api_url: "/DVSWebAPI/api"
 
 zwolle:
   municipality_name: Zwolle
   provider_id: dvsportal
   base_url: "https://parkeerloket.zwolle.nl"
+  gui_url: "https://parkeerloket.zwolle.nl/DVSPortal/"
   api_url: "/DVSWebAPI/api"

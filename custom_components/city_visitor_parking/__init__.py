@@ -33,6 +33,7 @@ from .client import async_create_client
 from .const import (
     CONF_API_URL,
     CONF_BASE_URL,
+    CONF_GUI_URL,
     CONF_MUNICIPALITY,
     CONF_OPERATING_TIME_OVERRIDES,
     CONF_PERMIT_ID,
@@ -46,6 +47,7 @@ from .helpers import normalize_override_windows
 from .models import AutoEndState, OperatingTimeOverrides, ProviderConfig
 from .runtime_data import CityVisitorParkingRuntimeData
 from .services import async_setup_services
+from .version import async_get_versions, format_log_metadata
 from .websocket_api import async_setup_websocket
 
 if TYPE_CHECKING:
@@ -99,8 +101,16 @@ CONFIG_SCHEMA: Final[Callable[[ConfigType], ConfigType]] = _config_entry_only_sc
 )
 
 
-async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
+async def async_setup(hass: HomeAssistant, _config: ConfigType) -> bool:
     """Set up the City visitor parking integration."""
+    ha_cvp_version, pycvp_version = await async_get_versions(hass)
+    _LOGGER.debug(
+        "City Visitor Parking starting %s",
+        format_log_metadata(
+            ha_cvp_version=ha_cvp_version,
+            pycvp_version=pycvp_version,
+        ),
+    )
     await _async_register_frontend(hass, "http")
     async_when_setup(hass, "lovelace", _async_register_lovelace_resources)
     _LOGGER.debug("Setting up services and websocket API")
@@ -125,12 +135,17 @@ async def async_setup_entry(
         municipality_name=entry.data[CONF_MUNICIPALITY],
         base_url=entry.data.get(CONF_BASE_URL),
         api_url=entry.data.get(CONF_API_URL),
+        gui_url=entry.data.get(CONF_GUI_URL),
     )
+    ha_cvp_version, pycvp_version = await async_get_versions(hass)
     client = await async_create_client(hass, provider_config)
     provider = await client.get_provider(
         provider_config.provider_id,
         base_url=provider_config.base_url,
         api_uri=provider_config.api_url,
+        request_context=provider_config.municipality_name,
+        ha_cvp_version=ha_cvp_version,
+        pycvp_version=pycvp_version,
     )
     _install_zone_validity_logging(provider)
     login_started = time.perf_counter()
@@ -228,7 +243,7 @@ def _install_zone_validity_logging(provider: object) -> None:
             return map_zone_validity(raw, fallback_zone=fallback_zone)
         return map_zone_validity(raw)
 
-    cast("object", provider)._map_zone_validity = _wrap  # type: ignore[attr-defined]
+    cast("object", provider)._map_zone_validity = _wrap  # type: ignore[attr-defined]  # pylint: disable=protected-access
 
 
 def _normalize_operating_time_overrides(
@@ -307,8 +322,14 @@ async def _async_register_frontend(hass: HomeAssistant, _component: str) -> None
             )
         )
     else:
+        ha_cvp_version, pycvp_version = await async_get_versions(hass)
         _LOGGER.warning(
-            "Frontend translations directory is missing: %s", translations_path
+            "Frontend translations directory is missing: %s %s",
+            translations_path,
+            format_log_metadata(
+                ha_cvp_version=ha_cvp_version,
+                pycvp_version=pycvp_version,
+            ),
         )
 
     await http.async_register_static_paths(static_paths)
