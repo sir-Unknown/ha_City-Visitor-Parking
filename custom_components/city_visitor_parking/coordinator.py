@@ -25,6 +25,7 @@ from .models import (
 )
 from .models import Favorite as CoordinatorFavorite
 from .time_windows import windows_for_today
+from .version import async_get_versions, format_log_metadata
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Iterable, Mapping
@@ -96,6 +97,7 @@ class CityVisitorParkingCoordinator(DataUpdateCoordinator[CoordinatorData]):
 
     async def _async_update_data(self) -> CoordinatorData:
         """Fetch data from the API and normalize it."""
+        ha_cvp_version, pycvp_version = await async_get_versions(self.hass)
         try:
             _LOGGER.debug(
                 "Fetching permit, reservations, and favorites for %s (permit %s)",
@@ -132,25 +134,53 @@ class CityVisitorParkingCoordinator(DataUpdateCoordinator[CoordinatorData]):
                 self._unavailable_logged = False
         except AuthError as err:
             self._log_unavailable_once()
-            raise ConfigEntryAuthFailed from err
-        except (NetworkError, PyCityVisitorParkingError) as err:
-            self._log_unavailable_once()
             _LOGGER.debug(
-                "Coordinator fetch failed for %s (permit %s): %s: %s",
+                "Coordinator auth failed for %s (permit %s): %s: %s %s",
                 self._entry_title,
                 self._permit_id,
                 type(err).__name__,
                 err,
+                format_log_metadata(
+                    provider=self._provider.provider_id,
+                    city=getattr(self._provider, "_request_context_name", None)
+                    or "unknown",
+                    ha_cvp_version=ha_cvp_version,
+                    pycvp_version=pycvp_version,
+                ),
+            )
+            raise ConfigEntryAuthFailed from err
+        except (NetworkError, PyCityVisitorParkingError) as err:
+            self._log_unavailable_once()
+            _LOGGER.debug(
+                "Coordinator fetch failed for %s (permit %s): %s: %s %s",
+                self._entry_title,
+                self._permit_id,
+                type(err).__name__,
+                err,
+                format_log_metadata(
+                    provider=self._provider.provider_id,
+                    city=getattr(self._provider, "_request_context_name", None)
+                    or "unknown",
+                    ha_cvp_version=ha_cvp_version,
+                    pycvp_version=pycvp_version,
+                ),
             )
             raise UpdateFailed("API communication error") from err
         except Exception as err:  # Allowed in background tasks
             self._log_unavailable_once()
             _LOGGER.debug(
-                "Coordinator fetch failed unexpectedly for %s (permit %s): %s: %s",
+                "Coordinator fetch failed unexpectedly for %s (permit %s): %s: %s %s",
                 self._entry_title,
                 self._permit_id,
                 type(err).__name__,
                 err,
+                format_log_metadata(
+                    provider=self._provider.provider_id,
+                    city=getattr(self._provider, "_request_context_name", None)
+                    or "unknown",
+                    ha_cvp_version=ha_cvp_version,
+                    pycvp_version=pycvp_version,
+                ),
             )
             raise UpdateFailed("Unexpected error") from err
 

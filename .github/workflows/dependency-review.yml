@@ -12,11 +12,6 @@ on:
   workflow_dispatch:
   pull_request:
     branches: ["main"]
-    paths:
-      - "requirements*.txt"
-      - "pyproject.toml"
-      - "custom_components/city_visitor_parking/frontend/package.json"
-      - "custom_components/city_visitor_parking/frontend/yarn.lock"
 
 concurrency:
   group: dependency-review-${{ github.event.pull_request.number || github.ref }}
@@ -49,5 +44,9 @@ jobs:
           head-ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
           comment-summary-in-pr: on-failure
           fail-on-severity: moderate
+          # Temporary exceptions: Home Assistant 2026.4.1 currently pins PyJWT==2.10.1
+          # and cryptography==46.0.5 exactly, so the uv-managed dev/test lockfile
+          # cannot move off these advisories until upstream updates.
+          allow-ghsas: GHSA-752w-5fwx-jx9f,GHSA-p423-j2cm-9vmq
           retry-on-snapshot-warnings: true
         #   deny-licenses: GPL-1.0-or-later, LGPL-2.0-or-later

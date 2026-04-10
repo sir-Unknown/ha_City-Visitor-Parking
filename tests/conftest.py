@@ -9,7 +9,7 @@ from typing import Any, cast
 
 import pytest
 
-pytest_plugins = "pytest_homeassistant_custom_component"
+pytest_plugins = "pytest_homeassistant_custom_component"  # pylint: disable=invalid-name
 
 
 class PyCityVisitorParkingError(Exception):
@@ -30,6 +30,14 @@ class ProviderError(PyCityVisitorParkingError):
 
 class ValidationError(PyCityVisitorParkingError):
     """Stub validation error."""
+
+
+class RateLimitError(ProviderError):
+    """Stub rate limit error."""
+
+
+class ServiceUnavailableError(ProviderError):
+    """Stub service unavailable error."""
 
 
 class Client:
@@ -113,6 +121,8 @@ exceptions_module.AuthError = AuthError
 exceptions_module.NetworkError = NetworkError
 exceptions_module.ProviderError = ProviderError
 exceptions_module.ValidationError = ValidationError
+exceptions_module.RateLimitError = RateLimitError
+exceptions_module.ServiceUnavailableError = ServiceUnavailableError
 
 sys.modules.setdefault("pycityvisitorparking", module)
 sys.modules.setdefault("pycityvisitorparking.exceptions", exceptions_module)

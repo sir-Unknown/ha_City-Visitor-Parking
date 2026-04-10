@@ -1,6 +1,6 @@
 name: Bug report
 description: Report a problem with the City Visitor Parking integration
-labels: ["bug"]
+labels: ["bugfix"]
 assignees: ["sir-Unknown"]
 body:
   - type: markdown

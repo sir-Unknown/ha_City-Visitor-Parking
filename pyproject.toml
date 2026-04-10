@@ -1,8 +1,71 @@
+[project]
+name = "ha-city-visitor-parking"
+version = "0.0.0"
+requires-python = ">=3.14.2"
+dependencies = ["pycityvisitorparking==0.5.20"]
+
+[dependency-groups]
+dev = [
+  "mypy==1.15.0",
+  "pre-commit==4.5.1",
+  "pyright==1.1.408",
+  "ruff==0.15.9",
+  "types-PyYAML==6.0.12.20260408",
+  "zizmor==1.23.1",
+]
+test = [
+  "pytest==9.0.0",
+  "pytest-asyncio==1.3.0",
+  "pytest-cov==7.0.0",
+  "pytest-homeassistant-custom-component==0.13.322",
+  "freezegun==1.5.2",
+]
+perf = [
+  "isal==1.8.0",
+  "zlib-ng==1.0.0",
+]
+
+# ----------------------------
+# Mypy configuration
+# ----------------------------
+[tool.mypy]
+python_version = "3.14"
+namespace_packages = true
+explicit_package_bases = true
+mypy_path = "../homeassistant-core"
+follow_imports = "skip"
+
+[[tool.mypy.overrides]]
+module = "pytest_homeassistant_custom_component.*"
+ignore_missing_imports = true
+disable_error_code = ["import-untyped"]
+
+# ----------------------------
+# Pyright configuration
+# ----------------------------
+[tool.pyright]
+include = ["custom_components/city_visitor_parking"]
+extraPaths = ["../homeassistant-core", "../pyCityVisitorParking/src"]
+pythonVersion = "3.14"
+typeCheckingMode = "strict"
+reportMissingImports = "none"
+reportPrivateImportUsage = "none"
+reportUnknownVariableType = "none"
+reportUnknownMemberType = "none"
+reportUnknownArgumentType = "none"
+reportUnknownParameterType = "none"
+
+# ----------------------------
+# Pytest configuration
+# ----------------------------
 [tool.pytest.ini_options]
 addopts = "-ra"
 asyncio_mode = "auto"
 testpaths = ["tests"]
 
+# ----------------------------
+# Ruff configuration
+# ----------------------------
 [tool.ruff]
 target-version = "py314"
 line-length = 88
@@ -16,4 +79,3 @@ convention = "google"
 
 [tool.ruff.format]
 quote-style = "double"
-

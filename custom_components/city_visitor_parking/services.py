@@ -37,6 +37,7 @@ from .const import (
 )
 from .helpers import normalize_plate
 from .payloads import build_status_payload, normalize_favorites, reservation_payload
+from .version import async_get_versions, format_log_metadata
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -76,6 +77,14 @@ SELECTOR = cast("_SelectorModule", selector).selector
 DEVICE_SELECTOR: Final[selector.Selector[Mapping[str, object]]] = SELECTOR(
     {"device": {"integration": DOMAIN}}
 )
+
+
+def _runtime_log_context(runtime: CityVisitorParkingRuntimeData) -> dict[str, str]:
+    """Return logging context fields for a runtime-bound provider."""
+    return {
+        "provider": runtime.provider_config.provider_id,
+        "city": runtime.provider_config.municipality_name,
+    }
 
 
 def _error_detail(err: PyCityVisitorParkingError) -> str | None:
@@ -131,10 +140,27 @@ def _favorite_error_key(err: PyCityVisitorParkingError, detail_present: bool) ->
     return _error_key(err, "favorite", detail_present)
 
 
-def _raise_reservation_error(err: PyCityVisitorParkingError) -> NoReturn:
+def _raise_reservation_error(
+    err: PyCityVisitorParkingError,
+    *,
+    provider: str = "unknown",
+    city: str = "unknown",
+    ha_cvp_version: str = "unknown",
+    pycvp_version: str = "unknown",
+) -> NoReturn:
     """Raise a translated Home Assistant error for reservation failures."""
     detail = _error_detail(err)
-    _LOGGER.debug("Reservation request failed: %s: %s", type(err).__name__, err)
+    _LOGGER.debug(
+        "Reservation request failed: %s: %s %s",
+        type(err).__name__,
+        err,
+        format_log_metadata(
+            provider=provider,
+            city=city,
+            ha_cvp_version=ha_cvp_version,
+            pycvp_version=pycvp_version,
+        ),
+    )
     raise HomeAssistantError(
         translation_domain=DOMAIN,
         translation_key=_reservation_error_key(err, detail is not None),
@@ -142,16 +168,43 @@ def _raise_reservation_error(err: PyCityVisitorParkingError) -> NoReturn:
     ) from err
 
 
-def _raise_favorite_error(err: PyCityVisitorParkingError | TypeError) -> NoReturn:
+def _raise_favorite_error(
+    err: PyCityVisitorParkingError | TypeError,
+    *,
+    provider: str = "unknown",
+    city: str = "unknown",
+    ha_cvp_version: str = "unknown",
+    pycvp_version: str = "unknown",
+) -> NoReturn:
     """Raise a translated Home Assistant error for favorite failures."""
     if not isinstance(err, PyCityVisitorParkingError):
-        _LOGGER.debug("Favorite request failed: %s: %s", type(err).__name__, err)
+        _LOGGER.debug(
+            "Favorite request failed: %s: %s %s",
+            type(err).__name__,
+            err,
+            format_log_metadata(
+                provider=provider,
+                city=city,
+                ha_cvp_version=ha_cvp_version,
+                pycvp_version=pycvp_version,
+            ),
+        )
         raise HomeAssistantError(
             translation_domain=DOMAIN,
             translation_key="favorite_operation_failed",
         ) from err
     detail = _error_detail(err)
-    _LOGGER.debug("Favorite request failed: %s: %s", type(err).__name__, err)
+    _LOGGER.debug(
+        "Favorite request failed: %s: %s %s",
+        type(err).__name__,
+        err,
+        format_log_metadata(
+            provider=provider,
+            city=city,
+            ha_cvp_version=ha_cvp_version,
+            pycvp_version=pycvp_version,
+        ),
+    )
     raise HomeAssistantError(
         translation_domain=DOMAIN,
         translation_key=_favorite_error_key(err, detail is not None),
@@ -338,7 +391,13 @@ async def _async_handle_start_reservation(call: ServiceCall) -> None:
             end_time=end,
         )
     except PyCityVisitorParkingError as err:
-        _raise_reservation_error(err)
+        ha_cvp_version, pycvp_version = await async_get_versions(call.hass)
+        _raise_reservation_error(
+            err,
+            **_runtime_log_context(runtime),
+            ha_cvp_version=ha_cvp_version,
+            pycvp_version=pycvp_version,
+        )
     else:
         _LOGGER.debug(
             "Reservation start requested for device %s (start=%s end=%s)",
@@ -409,7 +468,13 @@ async def _async_handle_update_reservation(call: ServiceCall) -> None:
         )
     except (NotImplementedError, ProviderError) as err:
         if isinstance(err, ProviderError) and not _is_not_supported(err):
-            _raise_reservation_error(err)
+            ha_cvp_version, pycvp_version = await async_get_versions(call.hass)
+            _raise_reservation_error(
+                err,
+                **_runtime_log_context(runtime),
+                ha_cvp_version=ha_cvp_version,
+                pycvp_version=pycvp_version,
+            )
         await _fallback_update_reservation(
             runtime,
             reservation_id,
@@ -418,7 +483,13 @@ async def _async_handle_update_reservation(call: ServiceCall) -> None:
             license_plate,
         )
     except PyCityVisitorParkingError as err:
-        _raise_reservation_error(err)
+        ha_cvp_version, pycvp_version = await async_get_versions(call.hass)
+        _raise_reservation_error(
+            err,
+            **_runtime_log_context(runtime),
+            ha_cvp_version=ha_cvp_version,
+            pycvp_version=pycvp_version,
+        )
     else:
         _LOGGER.debug(
             "Reservation update requested for device %s reservation %s "
@@ -441,7 +512,13 @@ async def _async_handle_end_reservation(call: ServiceCall) -> None:
             dt_util.utcnow(),
         )
     except PyCityVisitorParkingError as err:
-        _raise_reservation_error(err)
+        ha_cvp_version, pycvp_version = await async_get_versions(call.hass)
+        _raise_reservation_error(
+            err,
+            **_runtime_log_context(runtime),
+            ha_cvp_version=ha_cvp_version,
+            pycvp_version=pycvp_version,
+        )
     else:
         _LOGGER.debug(
             "Reservation end requested for device %s reservation %s",
@@ -468,7 +545,13 @@ async def _async_handle_add_favorite(call: ServiceCall) -> None:
             type(err).__name__,
             err,
         )
-        _raise_favorite_error(err)
+        ha_cvp_version, pycvp_version = await async_get_versions(call.hass)
+        _raise_favorite_error(
+            err,
+            **_runtime_log_context(runtime),
+            ha_cvp_version=ha_cvp_version,
+            pycvp_version=pycvp_version,
+        )
 
 
 async def _async_handle_update_favorite(call: ServiceCall) -> None:
@@ -494,7 +577,13 @@ async def _async_handle_update_favorite(call: ServiceCall) -> None:
         await runtime.provider.update_favorite(**update_data)
     except (NotImplementedError, ProviderError) as err:
         if isinstance(err, ProviderError) and not _is_not_supported(err):
-            _raise_favorite_error(err)
+            ha_cvp_version, pycvp_version = await async_get_versions(call.hass)
+            _raise_favorite_error(
+                err,
+                **_runtime_log_context(runtime),
+                ha_cvp_version=ha_cvp_version,
+                pycvp_version=pycvp_version,
+            )
         await _fallback_update_favorite(runtime, favorite_id, license_plate, name)
     except (TypeError, PyCityVisitorParkingError) as err:
         _LOGGER.debug(
@@ -504,7 +593,13 @@ async def _async_handle_update_favorite(call: ServiceCall) -> None:
             type(err).__name__,
             err,
         )
-        _raise_favorite_error(err)
+        ha_cvp_version, pycvp_version = await async_get_versions(call.hass)
+        _raise_favorite_error(
+            err,
+            **_runtime_log_context(runtime),
+            ha_cvp_version=ha_cvp_version,
+            pycvp_version=pycvp_version,
+        )
 
 
 async def _async_handle_remove_favorite(call: ServiceCall) -> None:
@@ -516,7 +611,13 @@ async def _async_handle_remove_favorite(call: ServiceCall) -> None:
         await runtime.provider.remove_favorite(favorite_id)
         _LOGGER.debug("Removed favorite for device %s", call.data[ATTR_DEVICE_ID])
     except PyCityVisitorParkingError as err:
-        _raise_favorite_error(err)
+        ha_cvp_version, pycvp_version = await async_get_versions(call.hass)
+        _raise_favorite_error(
+            err,
+            **_runtime_log_context(runtime),
+            ha_cvp_version=ha_cvp_version,
+            pycvp_version=pycvp_version,
+        )
 
 
 async def _async_handle_list_reservations(
@@ -588,7 +689,13 @@ async def _async_handle_list_favorites(call: ServiceCall) -> dict[str, JsonValue
     try:
         favorites = await runtime.provider.list_favorites()
     except PyCityVisitorParkingError as err:
-        _raise_favorite_error(err)
+        ha_cvp_version, pycvp_version = await async_get_versions(call.hass)
+        _raise_favorite_error(
+            err,
+            **_runtime_log_context(runtime),
+            ha_cvp_version=ha_cvp_version,
+            pycvp_version=pycvp_version,
+        )
 
     normalized: list[JsonValueType] = []
     for favorite in normalize_favorites(favorites):
@@ -686,7 +793,15 @@ async def _fallback_update_reservation(
             type(err).__name__,
             err,
         )
-        _raise_reservation_error(err)
+        ha_cvp_version, pycvp_version = await async_get_versions(
+            runtime.coordinator.hass
+        )
+        _raise_reservation_error(
+            err,
+            **_runtime_log_context(runtime),
+            ha_cvp_version=ha_cvp_version,
+            pycvp_version=pycvp_version,
+        )
     else:
         _LOGGER.debug("Fallback reservation update succeeded for %s", reservation_id)
 
@@ -729,7 +844,15 @@ async def _fallback_update_favorite(
             type(err).__name__,
             err,
         )
-        _raise_favorite_error(err)
+        ha_cvp_version, pycvp_version = await async_get_versions(
+            runtime.coordinator.hass
+        )
+        _raise_favorite_error(
+            err,
+            **_runtime_log_context(runtime),
+            ha_cvp_version=ha_cvp_version,
+            pycvp_version=pycvp_version,
+        )
     else:
         _LOGGER.debug("Fallback favorite update succeeded for %s", favorite_id)
 

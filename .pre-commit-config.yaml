@@ -1,10 +1,11 @@
 repos:
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.15.8
+    rev: v0.15.9
     hooks:
       - id: ruff-check
         args:
           - --fix
+        files: ^(custom_components|tests)/.+\.(py|pyi)$
       - id: ruff-format
         files: ^(custom_components|tests)/.+\.(py|pyi)$
   - repo: https://github.com/zizmorcore/zizmor-pre-commit
@@ -12,7 +13,7 @@ repos:
     hooks:
       - id: zizmor
   - repo: https://github.com/codespell-project/codespell
-    rev: v2.4.1
+    rev: v2.4.2
     hooks:
       - id: codespell
         args:
@@ -42,15 +43,15 @@ repos:
       - id: prettier
         exclude: ^custom_components/city_visitor_parking/frontend/(dist|src)/
         additional_dependencies:
-          - prettier@3.6.2
-          - prettier-plugin-sort-json@4.1.1
+          - prettier@3.8.1
+          - prettier-plugin-sort-json@4.2.0
   - repo: https://github.com/cdce8p/python-typing-update
     rev: v0.8.1
     hooks:
       - id: python-typing-update
         stages: [manual]
         args:
-          - --py311-plus
+          - --py314-plus
           - --force
           - --keep-updates
         files: ^(custom_components|tests)/.+\.py$
@@ -61,9 +62,6 @@ repos:
         entry: bash scripts/run-python-tool.sh mypy
         language: system
         require_serial: true
-        args:
-          - --config-file
-          - mypy.ini
         types_or: [python, pyi]
         files: ^(custom_components|tests)/.+\.(py|pyi)$
       - id: pyright
@@ -73,18 +71,6 @@ repos:
         pass_filenames: false
   - repo: local
     hooks:
-      - id: hassfest
-        name: hassfest (city_visitor_parking)
-        entry: bash scripts/run-hassfest.sh
-        args:
-          - --action
-          - validate
-          - --core-path
-          - ../homeassistant-core
-          - --integration-path
-          - custom_components/city_visitor_parking
-        language: system
-        pass_filenames: false
       - id: pytest
         name: pytest
         entry: bash scripts/run-python-tool.sh pytest
