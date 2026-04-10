@@ -244,7 +244,7 @@ class CityVisitorParkingConfigFlow(config_entries.ConfigFlow):
                                 value=provider.municipality_name,
                                 label=provider.municipality_name,
                             )
-                            for key, provider in sorted(
+                            for _, provider in sorted(
                                 self._providers.items(),
                                 key=lambda item: item[1].municipality_name,
                             )
