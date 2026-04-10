@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from datetime import UTC, datetime, time, timedelta
 from types import SimpleNamespace
 from typing import TYPE_CHECKING, Any, cast
@@ -54,6 +55,7 @@ if TYPE_CHECKING:
     from types import ModuleType
 
     from homeassistant.core import HomeAssistant
+    from pytest import LogCaptureFixture, MonkeyPatch
 
 EXPECTED_MINUTES = 15
 
@@ -91,7 +93,10 @@ async def test_auto_end_reservation_once(hass: HomeAssistant) -> None:
 
 
 async def test_auth_failure_triggers_reauth(
-    hass: HomeAssistant, pv_library: ModuleType
+    hass: HomeAssistant,
+    pv_library: ModuleType,
+    monkeypatch: MonkeyPatch,
+    caplog: LogCaptureFixture,
 ) -> None:
     """Auth errors should raise ConfigEntryAuthFailed."""
     entry = _create_entry(auto_end=False)
@@ -99,6 +104,10 @@ async def test_auth_failure_triggers_reauth(
 
     provider = AsyncMock()
     provider.get_permit.side_effect = pv_library.AuthError
+    monkeypatch.setattr(
+        "custom_components.city_visitor_parking.coordinator.async_get_versions",
+        AsyncMock(return_value=("1.2.3", "4.5.6")),
+    )
 
     coordinator = CityVisitorParkingCoordinator(
         hass,
@@ -108,12 +117,19 @@ async def test_auth_failure_triggers_reauth(
         auto_end_state=AutoEndState(),
     )
 
-    await coordinator.async_refresh()
+    with caplog.at_level(
+        logging.DEBUG, logger="custom_components.city_visitor_parking.coordinator"
+    ):
+        await coordinator.async_refresh()
     assert isinstance(coordinator.last_exception, ConfigEntryAuthFailed)
+    assert "hacvp=1.2.3 pycvp=4.5.6" in caplog.text
 
 
 async def test_network_failure_raises_updatefailed(
-    hass: HomeAssistant, pv_library: ModuleType
+    hass: HomeAssistant,
+    pv_library: ModuleType,
+    monkeypatch: MonkeyPatch,
+    caplog: LogCaptureFixture,
 ) -> None:
     """Network failures should raise UpdateFailed."""
     entry = _create_entry(auto_end=False)
@@ -121,6 +137,10 @@ async def test_network_failure_raises_updatefailed(
 
     provider = AsyncMock()
     provider.get_permit.side_effect = pv_library.NetworkError
+    monkeypatch.setattr(
+        "custom_components.city_visitor_parking.coordinator.async_get_versions",
+        AsyncMock(return_value=("1.2.3", "4.5.6")),
+    )
 
     coordinator = CityVisitorParkingCoordinator(
         hass,
@@ -130,8 +150,12 @@ async def test_network_failure_raises_updatefailed(
         auto_end_state=AutoEndState(),
     )
 
-    await coordinator.async_refresh()
+    with caplog.at_level(
+        logging.DEBUG, logger="custom_components.city_visitor_parking.coordinator"
+    ):
+        await coordinator.async_refresh()
     assert isinstance(coordinator.last_exception, UpdateFailed)
+    assert "hacvp=1.2.3 pycvp=4.5.6" in caplog.text
 
 
 async def test_unexpected_failure_raises_updatefailed(hass: HomeAssistant) -> None:

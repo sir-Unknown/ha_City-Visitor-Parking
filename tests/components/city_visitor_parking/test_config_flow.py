@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from datetime import time
 from types import SimpleNamespace
 from typing import TYPE_CHECKING, Protocol
@@ -9,10 +10,10 @@ from unittest.mock import AsyncMock
 
 import voluptuous as vol
 from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
+from homeassistant.helpers import selector
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.city_visitor_parking.config_flow import (
-    OTHER_OPTION,
     CityVisitorParkingConfigFlow,
     _day_windows_key,
     _format_override_windows,
@@ -24,6 +25,7 @@ from custom_components.city_visitor_parking.config_flow import (
 from custom_components.city_visitor_parking.const import (
     CONF_API_URL,
     CONF_BASE_URL,
+    CONF_GUI_URL,
     CONF_MUNICIPALITY,
     CONF_PERMIT_ID,
     CONF_PROVIDER_ID,
@@ -39,126 +41,41 @@ if TYPE_CHECKING:
     from types import ModuleType
 
     from homeassistant.core import HomeAssistant
-    from pytest import MonkeyPatch
+    from pytest import LogCaptureFixture, MonkeyPatch
 
-KNOWN_MUNICIPALITY = "apeldoorn"
+KNOWN_MUNICIPALITY = "Apeldoorn"
 
 
-async def test_municipality_dropdown_includes_other(hass: HomeAssistant) -> None:
-    """Ensure the municipality list includes "Other"."""
+async def test_municipality_selector_uses_sorted_dropdown(
+    hass: HomeAssistant,
+) -> None:
+    """Ensure the municipality field uses a sorted HA select dropdown."""
     result = await hass.config_entries.flow.async_init(
         DOMAIN, context={"source": "user"}
     )
     assert result["type"] == "form"
 
     schema = result["data_schema"].schema
-    selector = schema[vol.Required(CONF_MUNICIPALITY)]
-    values = _extract_option_values(selector)
+    municipality_selector = schema[vol.Required(CONF_MUNICIPALITY)]
+    values = _extract_option_values(municipality_selector)
+    config = _extract_selector_config(municipality_selector)
+    labels = _extract_option_labels(municipality_selector)
 
+    assert isinstance(municipality_selector, selector.SelectSelector)
     assert KNOWN_MUNICIPALITY in values
-    assert OTHER_OPTION in values
+    assert CONF_USERNAME in {key.schema for key in schema}
+    assert CONF_PASSWORD in {key.schema for key in schema}
+    assert "other" not in values
+    assert config["custom_value"] is True
+    assert config["mode"] == selector.SelectSelectorMode.DROPDOWN
+    assert config["sort"] is True
+    assert labels == sorted(labels)
 
 
-async def test_known_municipality_skips_manual_step(hass: HomeAssistant) -> None:
-    """Known municipalities should jump to auth."""
-    result = await hass.config_entries.flow.async_init(
-        DOMAIN, context={"source": "user"}
-    )
-    result = await hass.config_entries.flow.async_configure(
-        result["flow_id"], {CONF_MUNICIPALITY: KNOWN_MUNICIPALITY}
-    )
-
-    assert result["type"] == "form"
-    assert result["step_id"] == "auth"
-
-
-async def test_other_municipality_requires_manual_fields(hass: HomeAssistant) -> None:
-    """Other municipality must show manual provider fields."""
-    result = await hass.config_entries.flow.async_init(
-        DOMAIN, context={"source": "user"}
-    )
-    result = await hass.config_entries.flow.async_configure(
-        result["flow_id"], {CONF_MUNICIPALITY: OTHER_OPTION}
-    )
-
-    schema = result["data_schema"].schema
-    assert CONF_PROVIDER_ID in {key.schema for key in schema}
-    assert CONF_MUNICIPALITY in {key.schema for key in schema}
-
-
-async def test_other_municipality_list_providers_network_error(
-    hass: HomeAssistant, monkeypatch: MonkeyPatch, pv_library: ModuleType
-) -> None:
-    """Provider list errors should surface in the form."""
-    monkeypatch.setattr(
-        "custom_components.city_visitor_parking.config_flow._async_list_providers",
-        AsyncMock(side_effect=pv_library.NetworkError),
-    )
-
-    result = await hass.config_entries.flow.async_init(
-        DOMAIN, context={"source": "user"}
-    )
-    result = await hass.config_entries.flow.async_configure(
-        result["flow_id"], {CONF_MUNICIPALITY: OTHER_OPTION}
-    )
-
-    assert result["type"] == "form"
-    assert result["errors"]["base"] == "cannot_connect"
-
-
-async def test_other_municipality_list_providers_unknown_error(
+async def test_config_flow_accepts_custom_municipality_label(
     hass: HomeAssistant, monkeypatch: MonkeyPatch
 ) -> None:
-    """Unexpected provider list errors should map to unknown."""
-    monkeypatch.setattr(
-        "custom_components.city_visitor_parking.config_flow._async_list_providers",
-        AsyncMock(side_effect=RuntimeError),
-    )
-
-    result = await hass.config_entries.flow.async_init(
-        DOMAIN, context={"source": "user"}
-    )
-    result = await hass.config_entries.flow.async_configure(
-        result["flow_id"], {CONF_MUNICIPALITY: OTHER_OPTION}
-    )
-
-    assert result["type"] == "form"
-    assert result["errors"]["base"] == "unknown"
-
-
-async def test_other_municipality_manual_provider_flow(
-    hass: HomeAssistant, monkeypatch: MonkeyPatch
-) -> None:
-    """Manual provider step should proceed to auth."""
-    monkeypatch.setattr(
-        "custom_components.city_visitor_parking.config_flow._async_list_providers",
-        AsyncMock(return_value=["manual"]),
-    )
-
-    result = await hass.config_entries.flow.async_init(
-        DOMAIN, context={"source": "user"}
-    )
-    result = await hass.config_entries.flow.async_configure(
-        result["flow_id"], {CONF_MUNICIPALITY: OTHER_OPTION}
-    )
-    result = await hass.config_entries.flow.async_configure(
-        result["flow_id"],
-        {
-            CONF_PROVIDER_ID: "manual",
-            CONF_MUNICIPALITY: "Custom",
-            "base_url": "https://example.com",
-            "api_url": "https://example.com/api",
-        },
-    )
-
-    assert result["type"] == "form"
-    assert result["step_id"] == "auth"
-
-
-async def test_config_flow_success(
-    hass: HomeAssistant, monkeypatch: MonkeyPatch
-) -> None:
-    """Successful flow creates the entry with a permit title."""
+    """A typed municipality label should resolve to the matching provider."""
     provider = AsyncMock()
     provider.get_permit.return_value = {"id": "PERMIT1", "name": "Permit One"}
     client = AsyncMock()
@@ -172,23 +89,24 @@ async def test_config_flow_success(
         DOMAIN, context={"source": "user"}
     )
     result = await hass.config_entries.flow.async_configure(
-        result["flow_id"], {CONF_MUNICIPALITY: KNOWN_MUNICIPALITY}
-    )
-    result = await hass.config_entries.flow.async_configure(
-        result["flow_id"], {CONF_USERNAME: "user", CONF_PASSWORD: "pass"}
+        result["flow_id"],
+        {
+            CONF_MUNICIPALITY: "Apeldoorn",
+            CONF_USERNAME: "user",
+            CONF_PASSWORD: "pass",
+        },
     )
 
     assert result["type"] == "create_entry"
     assert result["title"] == "Apeldoorn - PERMIT1"
-    assert result["data"][CONF_PERMIT_ID] == "PERMIT1"
 
 
-async def test_config_flow_invalid_auth(
-    hass: HomeAssistant, monkeypatch: MonkeyPatch, pv_library: ModuleType
+async def test_config_flow_accepts_slugified_municipality_input(
+    hass: HomeAssistant, monkeypatch: MonkeyPatch
 ) -> None:
-    """Invalid credentials should be reported."""
+    """A slugified municipality value should still resolve for compatibility."""
     provider = AsyncMock()
-    provider.login.side_effect = pv_library.AuthError
+    provider.get_permit.return_value = {"id": "PERMIT1", "name": "Permit One"}
     client = AsyncMock()
     client.get_provider.return_value = provider
     monkeypatch.setattr(
@@ -200,14 +118,107 @@ async def test_config_flow_invalid_auth(
         DOMAIN, context={"source": "user"}
     )
     result = await hass.config_entries.flow.async_configure(
-        result["flow_id"], {CONF_MUNICIPALITY: KNOWN_MUNICIPALITY}
+        result["flow_id"],
+        {
+            CONF_MUNICIPALITY: "apeldoorn",
+            CONF_USERNAME: "user",
+            CONF_PASSWORD: "pass",
+        },
+    )
+
+    assert result["type"] == "create_entry"
+    assert result["title"] == "Apeldoorn - PERMIT1"
+
+
+async def test_config_flow_rejects_unknown_custom_municipality(
+    hass: HomeAssistant,
+) -> None:
+    """An unknown typed municipality should return a validation error."""
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": "user"}
     )
     result = await hass.config_entries.flow.async_configure(
-        result["flow_id"], {CONF_USERNAME: "user", CONF_PASSWORD: "pass"}
+        result["flow_id"],
+        {
+            CONF_MUNICIPALITY: "Not A Real Municipality",
+            CONF_USERNAME: "user",
+            CONF_PASSWORD: "pass",
+        },
     )
 
     assert result["type"] == "form"
+    assert result["errors"]["base"] == "invalid_municipality"
+
+
+async def test_config_flow_success(
+    hass: HomeAssistant, monkeypatch: MonkeyPatch
+) -> None:
+    """Successful flow creates the entry from the initial step."""
+    provider = AsyncMock()
+    provider.get_permit.return_value = {"id": "PERMIT1", "name": "Permit One"}
+    client = AsyncMock()
+    client.get_provider.return_value = provider
+    monkeypatch.setattr(
+        "custom_components.city_visitor_parking.config_flow.async_create_client",
+        AsyncMock(return_value=client),
+    )
+
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": "user"}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {
+            CONF_MUNICIPALITY: KNOWN_MUNICIPALITY,
+            CONF_USERNAME: "user",
+            CONF_PASSWORD: "pass",
+        },
+    )
+
+    assert result["type"] == "create_entry"
+    assert result["title"] == "Apeldoorn - PERMIT1"
+    assert result["data"][CONF_PERMIT_ID] == "PERMIT1"
+    assert result["data"][CONF_GUI_URL] == "https://parkeren.apeldoorn.nl/DVSPortal/"
+
+
+async def test_config_flow_invalid_auth(
+    hass: HomeAssistant,
+    monkeypatch: MonkeyPatch,
+    pv_library: ModuleType,
+    caplog: LogCaptureFixture,
+) -> None:
+    """Invalid credentials should be reported."""
+    provider = AsyncMock()
+    provider.login.side_effect = pv_library.AuthError
+    client = AsyncMock()
+    client.get_provider.return_value = provider
+    monkeypatch.setattr(
+        "custom_components.city_visitor_parking.config_flow.async_create_client",
+        AsyncMock(return_value=client),
+    )
+    monkeypatch.setattr(
+        "custom_components.city_visitor_parking.config_flow.async_get_versions",
+        AsyncMock(return_value=("1.2.3", "4.5.6")),
+    )
+
+    with caplog.at_level(
+        logging.DEBUG, logger="custom_components.city_visitor_parking.config_flow"
+    ):
+        result = await hass.config_entries.flow.async_init(
+            DOMAIN, context={"source": "user"}
+        )
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"],
+            {
+                CONF_MUNICIPALITY: KNOWN_MUNICIPALITY,
+                CONF_USERNAME: "user",
+                CONF_PASSWORD: "pass",
+            },
+        )
+
+    assert result["type"] == "form"
     assert result["errors"]["base"] == "invalid_auth"
+    assert "hacvp=1.2.3 pycvp=4.5.6" in caplog.text
 
 
 async def test_config_flow_cannot_connect(
@@ -227,10 +238,12 @@ async def test_config_flow_cannot_connect(
         DOMAIN, context={"source": "user"}
     )
     result = await hass.config_entries.flow.async_configure(
-        result["flow_id"], {CONF_MUNICIPALITY: KNOWN_MUNICIPALITY}
-    )
-    result = await hass.config_entries.flow.async_configure(
-        result["flow_id"], {CONF_USERNAME: "user", CONF_PASSWORD: "pass"}
+        result["flow_id"],
+        {
+            CONF_MUNICIPALITY: KNOWN_MUNICIPALITY,
+            CONF_USERNAME: "user",
+            CONF_PASSWORD: "pass",
+        },
     )
 
     assert result["type"] == "form"
@@ -254,10 +267,12 @@ async def test_config_flow_unknown_error(
         DOMAIN, context={"source": "user"}
     )
     result = await hass.config_entries.flow.async_configure(
-        result["flow_id"], {CONF_MUNICIPALITY: KNOWN_MUNICIPALITY}
-    )
-    result = await hass.config_entries.flow.async_configure(
-        result["flow_id"], {CONF_USERNAME: "user", CONF_PASSWORD: "pass"}
+        result["flow_id"],
+        {
+            CONF_MUNICIPALITY: KNOWN_MUNICIPALITY,
+            CONF_USERNAME: "user",
+            CONF_PASSWORD: "pass",
+        },
     )
 
     assert result["type"] == "form"
@@ -421,7 +436,7 @@ async def test_validate_credentials_requires_provider(hass: HomeAssistant) -> No
 
 
 async def test_validate_credentials_unexpected_error(
-    hass: HomeAssistant, monkeypatch: MonkeyPatch
+    hass: HomeAssistant, monkeypatch: MonkeyPatch, caplog: LogCaptureFixture
 ) -> None:
     """Unexpected errors during validation should map to unknown."""
     flow = CityVisitorParkingConfigFlow()
@@ -437,12 +452,20 @@ async def test_validate_credentials_unexpected_error(
         "custom_components.city_visitor_parking.config_flow.async_create_client",
         AsyncMock(side_effect=RuntimeError),
     )
+    monkeypatch.setattr(
+        "custom_components.city_visitor_parking.config_flow.async_get_versions",
+        AsyncMock(return_value=("1.2.3", "4.5.6")),
+    )
 
     errors: dict[str, str] = {}
-    permit_id = await flow._async_validate_credentials("user", "pass", errors)
+    with caplog.at_level(
+        logging.DEBUG, logger="custom_components.city_visitor_parking.config_flow"
+    ):
+        permit_id = await flow._async_validate_credentials("user", "pass", errors)
 
     assert permit_id is None
     assert errors["base"] == "unknown"
+    assert "hacvp=1.2.3 pycvp=4.5.6" in caplog.text
 
 
 async def test_validate_credentials_no_permits(
@@ -511,8 +534,47 @@ class _SelectorConfig(Protocol):
     config: dict[str, object]
 
 
+def _extract_selector_config(selector: _SelectorConfig) -> dict[str, object]:
+    """Return the config dict from a selector field."""
+    return selector.config
+
+
 def _extract_option_values(selector: dict[str, object] | _SelectorConfig) -> list[str]:
     """Return option values from a selector field."""
+    option_dicts = _extract_selector_options(selector)
+
+    values: list[str] = []
+    for option in option_dicts:
+        if isinstance(option, str):
+            values.append(option)
+            continue
+        if isinstance(option, dict):
+            values.append(option["value"])
+        else:
+            values.append(option.value)
+    return values
+
+
+def _extract_option_labels(selector: dict[str, object] | _SelectorConfig) -> list[str]:
+    """Return option labels from a selector field."""
+    option_dicts = _extract_selector_options(selector)
+
+    labels: list[str] = []
+    for option in option_dicts:
+        if isinstance(option, str):
+            labels.append(option)
+            continue
+        if isinstance(option, dict):
+            labels.append(option["label"])
+        else:
+            labels.append(option.label)
+    return labels
+
+
+def _extract_selector_options(
+    selector: dict[str, object] | _SelectorConfig,
+) -> list[object]:
+    """Return the option entries from a selector field."""
     if isinstance(selector, dict):
         selector_dict = selector
         nested = selector_dict.get("selector")
@@ -528,17 +590,7 @@ def _extract_option_values(selector: dict[str, object] | _SelectorConfig) -> lis
             options = selector_dict.get("options", [])
     else:
         options = selector.config["options"]
-
-    values: list[str] = []
-    for option in options:
-        if isinstance(option, str):
-            values.append(option)
-            continue
-        if isinstance(option, dict):
-            values.append(option["value"])
-        else:
-            values.append(option.value)
-    return values
+    return list(options)
 
 
 def _create_entry() -> MockConfigEntry:

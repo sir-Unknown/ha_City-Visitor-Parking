@@ -3,19 +3,11 @@
     "step": {
       "user": {
         "title": "Set up visitor parking",
-        "description": "Choose your municipality.",
+        "description": "Choose your municipality and sign in to your visitor parking account.",
         "data": {
-          "municipality_name": "Municipality"
-        }
-      },
-      "other": {
-        "title": "Other municipality",
-        "description": "Enter the provider details for your municipality.",
-        "data": {
-          "provider_id": "Provider ID",
-          "municipality_name": "Municipality name",
-          "base_url": "Base URL",
-          "api_url": "API URL"
+          "municipality_name": "Municipality",
+          "username": "Username",
+          "password": "Password"
         }
       },
       "auth": {
@@ -57,6 +49,7 @@
     },
     "error": {
       "cannot_connect": "Unable to connect. Check your network connection and try again.",
+      "invalid_municipality": "Unknown municipality. Choose a municipality from the list or enter a matching name.",
       "invalid_auth": "Invalid credentials.",
       "no_permits": "No permits were found for this account.",
       "rate_limit": "Too many requests to the provider. Please wait a moment and try again.",

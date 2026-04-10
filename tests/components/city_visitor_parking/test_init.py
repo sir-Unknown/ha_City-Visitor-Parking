@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from types import SimpleNamespace
 from typing import TYPE_CHECKING
@@ -36,7 +37,7 @@ if TYPE_CHECKING:
     from types import ModuleType
 
     from homeassistant.core import HomeAssistant
-    from pytest import MonkeyPatch
+    from pytest import LogCaptureFixture, MonkeyPatch
 
 
 async def test_async_setup_entry_auth_error(
@@ -180,7 +181,9 @@ async def test_register_frontend_assets_missing_dist(
 
 
 async def test_register_frontend_assets_missing_translations(
-    hass: HomeAssistant, monkeypatch: MonkeyPatch
+    hass: HomeAssistant,
+    monkeypatch: MonkeyPatch,
+    caplog: LogCaptureFixture,
 ) -> None:
     """Frontend assets should warn when translations are missing."""
     hass.config.components.add("frontend")
@@ -194,11 +197,18 @@ async def test_register_frontend_assets_missing_translations(
         return original_is_dir(self)
 
     monkeypatch.setattr(Path, "is_dir", _fake_is_dir)
+    monkeypatch.setattr(
+        init_module, "async_get_versions", AsyncMock(return_value=("1.2.3", "4.5.6"))
+    )
 
-    await init_module._async_register_frontend(hass, "frontend")
+    with caplog.at_level(
+        logging.WARNING, logger="custom_components.city_visitor_parking"
+    ):
+        await init_module._async_register_frontend(hass, "frontend")
 
     hass.http.async_register_static_paths.assert_awaited_once()
     assert hass.data[DOMAIN]["frontend_registered"] is True
+    assert "hacvp=1.2.3 pycvp=4.5.6" in caplog.text
 
 
 async def test_register_lovelace_resources_non_storage(

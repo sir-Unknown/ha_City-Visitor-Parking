@@ -3,19 +3,11 @@
     "step": {
       "user": {
         "title": "Bezoekersparkeren instellen",
-        "description": "Kies je gemeente.",
+        "description": "Kies je gemeente en meld je aan bij je bezoekersparkeren-account.",
         "data": {
-          "municipality_name": "Gemeente"
-        }
-      },
-      "other": {
-        "title": "Andere gemeente",
-        "description": "Voer de providergegevens van je gemeente in.",
-        "data": {
-          "provider_id": "Provider-ID",
-          "municipality_name": "Gemeentenaam",
-          "base_url": "Basis-URL",
-          "api_url": "API-URL"
+          "municipality_name": "Gemeente",
+          "username": "Gebruikersnaam",
+          "password": "Wachtwoord"
         }
       },
       "auth": {
@@ -57,6 +49,7 @@
     },
     "error": {
       "cannot_connect": "Kan geen verbinding maken. Controleer je netwerk en probeer het opnieuw.",
+      "invalid_municipality": "Onbekende gemeente. Kies een gemeente uit de lijst of voer een overeenkomende naam in.",
       "invalid_auth": "Ongeldige inloggegevens.",
       "no_permits": "Geen vergunningen gevonden voor dit account.",
       "rate_limit": "Te veel verzoeken naar de provider. Wacht even en probeer het later opnieuw.",

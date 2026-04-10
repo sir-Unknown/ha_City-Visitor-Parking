@@ -73,6 +73,23 @@ async def test_entity_unique_id_and_device_info() -> None:
     assert (DOMAIN, entry_two.entry_id) in device_info_two["identifiers"]
 
 
+async def test_entity_device_info_includes_configuration_url() -> None:
+    """Entities should expose the provider GUI URL in device info."""
+    coordinator = _make_coordinator(_sample_data())
+    entry = _create_entry("provider:permit1:city")
+    entry.runtime_data = SimpleNamespace(
+        provider_config=SimpleNamespace(
+            gui_url="https://parkeren.rijswijk.nl/DVSPortal/"
+        )
+    )
+
+    sensor = ActiveReservationsSensor(coordinator, entry)
+
+    device_info = sensor.device_info
+    assert device_info is not None
+    assert device_info["configuration_url"] == "https://parkeren.rijswijk.nl/DVSPortal/"
+
+
 async def test_zone_availability_uses_overrides() -> None:
     """Zone availability should reflect overrides for the current day."""
     now = datetime(2025, 1, 6, 9, 30, tzinfo=UTC)
