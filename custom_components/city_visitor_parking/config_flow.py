@@ -6,7 +6,7 @@ import logging
 from collections.abc import Mapping
 from datetime import time
 from importlib import resources
-from typing import Final, Protocol, cast
+from typing import Final, cast
 
 import voluptuous as vol
 import yaml
@@ -18,14 +18,19 @@ from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers import selector
 from homeassistant.util import dt as dt_util
 from homeassistant.util import slugify
-from pycityvisitorparking import AuthError, Client, NetworkError
-from pycityvisitorparking.exceptions import PyCityVisitorParkingError
+from pycityvisitorparking import AuthError, NetworkError
+from pycityvisitorparking.exceptions import (
+    PyCityVisitorParkingError,
+    RateLimitError,
+    ServiceUnavailableError,
+)
 
 from .client import async_create_client
 from .const import (
     CONF_API_URL,
     CONF_AUTO_END,
     CONF_BASE_URL,
+    CONF_GUI_URL,
     CONF_MUNICIPALITY,
     CONF_OPERATING_TIME_OVERRIDES,
     CONF_PERMIT_ID,
@@ -35,8 +40,8 @@ from .const import (
 )
 from .helpers import get_attr, normalize_override_windows
 from .models import ProviderConfig
+from .version import async_get_versions, format_log_metadata
 
-OTHER_OPTION: Final[str] = "other"
 SECTION_OPERATING_TIMES: Final[str] = "operating_times"
 
 _AUTH_SCHEMA: Final[vol.Schema] = vol.Schema(
@@ -45,19 +50,6 @@ _AUTH_SCHEMA: Final[vol.Schema] = vol.Schema(
         vol.Required(CONF_PASSWORD): cv.string,
     }
 )
-
-
-class _SelectorModule(Protocol):
-    """Protocol for selector module helpers."""
-
-    def selector(
-        self, config: Mapping[str, object]
-    ) -> selector.Selector[Mapping[str, object]]:
-        """Instantiate a selector."""
-        raise NotImplementedError
-
-
-SELECTOR = cast("_SelectorModule", selector).selector
 
 WEEKDAY_LABELS: Final[dict[str, str]] = {
     "mon": "monday",
@@ -91,79 +83,27 @@ class CityVisitorParkingConfigFlow(config_entries.ConfigFlow):
     ) -> config_entries.ConfigFlowResult:
         """Handle the initial step."""
         self._providers = await _async_load_providers(self.hass)
-        options = [
-            selector.SelectOptionDict(value=key, label=provider.municipality_name)
-            for key, provider in sorted(
-                self._providers.items(),
-                key=lambda item: item[1].municipality_name,
-            )
-        ]
-        options.append(selector.SelectOptionDict(value=OTHER_OPTION, label="Other"))
+        errors: dict[str, str] = {}
 
         if user_input is None:
-            schema = vol.Schema(
-                {
-                    vol.Required(CONF_MUNICIPALITY): SELECTOR(
-                        {"select": {"options": options}}
-                    )
-                }
-            )
-            return self.async_show_form(step_id="user", data_schema=schema)
+            return self._show_user_form(user_input, errors)
 
         selected = cast("str", user_input[CONF_MUNICIPALITY])
-        if selected == OTHER_OPTION:
-            return await self.async_step_other()
+        username = cast("str", user_input[CONF_USERNAME])
+        password = cast("str", user_input[CONF_PASSWORD])
+        self._credentials = {CONF_USERNAME: username, CONF_PASSWORD: password}
 
-        self._provider_config = self._providers[selected]
-        return await self.async_step_auth()
+        self._provider_config = self._resolve_provider_config(selected)
+        if self._provider_config is None:
+            errors["base"] = "invalid_municipality"
+            return self._show_user_form(user_input, errors)
+        permit_id = await self._async_validate_credentials(username, password, errors)
+        if errors:
+            return self._show_user_form(user_input, errors)
+        if permit_id is None:
+            return self.async_abort(reason="unknown")
 
-    async def async_step_other(
-        self, user_input: dict[str, object] | None = None
-    ) -> config_entries.ConfigFlowResult:
-        """Handle manual provider configuration."""
-        if user_input is None:
-            errors: dict[str, str] = {}
-            try:
-                providers = await _async_list_providers()
-            except NetworkError:
-                errors["base"] = "cannot_connect"
-                providers = []
-            # Allowed in config flow
-            except Exception as err:
-                _LOGGER.debug(
-                    "Unexpected error while listing providers: %s",
-                    type(err).__name__,
-                )
-                errors["base"] = "unknown"
-                providers = []
-
-            provider_options = [
-                selector.SelectOptionDict(value=provider, label=provider)
-                for provider in providers
-            ]
-            schema = vol.Schema(
-                {
-                    vol.Required(CONF_PROVIDER_ID): SELECTOR(
-                        {"select": {"options": provider_options}}
-                    ),
-                    vol.Required(CONF_MUNICIPALITY): cv.string,
-                    vol.Optional(CONF_BASE_URL): cv.string,
-                    vol.Optional(CONF_API_URL): cv.string,
-                }
-            )
-            return self.async_show_form(
-                step_id="other",
-                data_schema=schema,
-                errors=errors,
-            )
-
-        self._provider_config = ProviderConfig(
-            provider_id=cast("str", user_input[CONF_PROVIDER_ID]),
-            municipality_name=cast("str", user_input[CONF_MUNICIPALITY]),
-            base_url=cast("str | None", user_input.get(CONF_BASE_URL)),
-            api_url=cast("str | None", user_input.get(CONF_API_URL)),
-        )
-        return await self.async_step_auth()
+        return await self._async_create_entry_for_permit(permit_id)
 
     async def async_step_auth(
         self, user_input: dict[str, object] | None = None
@@ -291,6 +231,59 @@ class CityVisitorParkingConfigFlow(config_entries.ConfigFlow):
 
         return await self._async_create_entry_for_permit(permit_id)
 
+    def _show_user_form(
+        self, user_input: Mapping[str, object] | None, errors: dict[str, str]
+    ) -> config_entries.ConfigFlowResult:
+        """Show the initial municipality and credential form."""
+        schema = vol.Schema(
+            {
+                vol.Required(CONF_MUNICIPALITY): selector.SelectSelector(
+                    selector.SelectSelectorConfig(
+                        options=[
+                            selector.SelectOptionDict(
+                                value=provider.municipality_name,
+                                label=provider.municipality_name,
+                            )
+                            for key, provider in sorted(
+                                self._providers.items(),
+                                key=lambda item: item[1].municipality_name,
+                            )
+                        ],
+                        custom_value=True,
+                        mode=selector.SelectSelectorMode.DROPDOWN,
+                        sort=True,
+                    )
+                ),
+                vol.Required(CONF_USERNAME): cv.string,
+                vol.Required(CONF_PASSWORD): cv.string,
+            }
+        )
+        suggested_values: dict[str, object] = {}
+        if user_input is not None:
+            suggested_values.update(user_input)
+            suggested_values.pop(CONF_PASSWORD, None)
+        return self.async_show_form(
+            step_id="user",
+            data_schema=self.add_suggested_values_to_schema(schema, suggested_values),
+            errors=errors,
+        )
+
+    def _resolve_provider_config(self, selection: str) -> ProviderConfig | None:
+        """Resolve a typed municipality selection to a known provider config."""
+        if provider_config := self._providers.get(selection):
+            return provider_config
+
+        normalized_selection = slugify(selection)
+        for key, provider in self._providers.items():
+            if provider.municipality_name.casefold() == selection.casefold():
+                return provider
+            if slugify(provider.municipality_name) == normalized_selection:
+                return provider
+            if slugify(key) == normalized_selection:
+                return provider
+
+        return None
+
     async def _async_create_entry_for_permit(
         self, permit_id: str
     ) -> config_entries.ConfigFlowResult:
@@ -309,6 +302,7 @@ class CityVisitorParkingConfigFlow(config_entries.ConfigFlow):
             CONF_MUNICIPALITY: self._provider_config.municipality_name,
             CONF_BASE_URL: self._provider_config.base_url,
             CONF_API_URL: self._provider_config.api_url,
+            CONF_GUI_URL: self._provider_config.gui_url,
             CONF_PERMIT_ID: permit_id,
             **self._credentials,
         }
@@ -325,32 +319,89 @@ class CityVisitorParkingConfigFlow(config_entries.ConfigFlow):
 
         error_key: str | None = None
         permit: object | None = None
+        ha_cvp_version, pycvp_version = await async_get_versions(self.hass)
         try:
             client = await async_create_client(self.hass, self._provider_config)
             provider = await client.get_provider(
                 self._provider_config.provider_id,
                 base_url=self._provider_config.base_url,
                 api_uri=self._provider_config.api_url,
+                request_context=self._provider_config.municipality_name,
+                ha_cvp_version=ha_cvp_version,
+                pycvp_version=pycvp_version,
             )
             await provider.login(username=username, password=password)
             permit = await provider.get_permit()
-        except AuthError:
+        except AuthError as err:
+            _LOGGER.debug(
+                "Auth error during login for %s: %s %s",
+                self._provider_config.provider_id,
+                err,
+                format_log_metadata(
+                    provider=self._provider_config.provider_id,
+                    city=self._provider_config.municipality_name,
+                    ha_cvp_version=ha_cvp_version,
+                    pycvp_version=pycvp_version,
+                ),
+            )
             error_key = "invalid_auth"
         except NetworkError:
             error_key = "cannot_connect"
-        except PyCityVisitorParkingError as err:
+        except RateLimitError as err:
             _LOGGER.debug(
-                "Provider error during login for %s: %s",
+                "Rate limit during login for %s: %s: %s %s",
                 self._provider_config.provider_id,
                 type(err).__name__,
+                err,
+                format_log_metadata(
+                    provider=self._provider_config.provider_id,
+                    city=self._provider_config.municipality_name,
+                    ha_cvp_version=ha_cvp_version,
+                    pycvp_version=pycvp_version,
+                ),
+            )
+            error_key = "rate_limit"
+        except ServiceUnavailableError as err:
+            _LOGGER.debug(
+                "Service unavailable during login for %s: %s: %s %s",
+                self._provider_config.provider_id,
+                type(err).__name__,
+                err,
+                format_log_metadata(
+                    provider=self._provider_config.provider_id,
+                    city=self._provider_config.municipality_name,
+                    ha_cvp_version=ha_cvp_version,
+                    pycvp_version=pycvp_version,
+                ),
+            )
+            error_key = "service_unavailable"
+        except PyCityVisitorParkingError as err:
+            _LOGGER.debug(
+                "Provider error during login for %s: %s: %s %s",
+                self._provider_config.provider_id,
+                type(err).__name__,
+                err,
+                format_log_metadata(
+                    provider=self._provider_config.provider_id,
+                    city=self._provider_config.municipality_name,
+                    ha_cvp_version=ha_cvp_version,
+                    pycvp_version=pycvp_version,
+                ),
             )
             error_key = "unknown"
         # Allowed in config flow
         except Exception as err:
             _LOGGER.debug(
-                "Unexpected error during login for %s: %s",
+                "Unexpected error during login for %s: %s: %s %s",
                 self._provider_config.provider_id,
                 type(err).__name__,
+                err,
+                format_log_metadata(
+                    provider=self._provider_config.provider_id,
+                    city=self._provider_config.municipality_name,
+                    ha_cvp_version=ha_cvp_version,
+                    pycvp_version=pycvp_version,
+                ),
             )
             error_key = "unknown"
 
@@ -484,15 +535,9 @@ def _load_providers_sync() -> dict[str, ProviderConfig]:
             municipality_name=str(config["municipality_name"]),
             base_url=_normalize_optional_text(config.get("base_url")),
             api_url=_normalize_optional_text(config.get("api_url")),
+            gui_url=_normalize_optional_text(config.get("gui_url")),
         )
     return providers
-
-
-async def _async_list_providers() -> list[str]:
-    """Return provider IDs from the client library."""
-    client = Client()
-    providers = await client.list_providers()
-    return [provider.id for provider in providers]
 
 
 def _parse_time(value: object) -> time | None:
@@ -613,8 +658,8 @@ def _build_day_schema(
             raw_value = section_input.get(day_key, default_windows)
             if isinstance(raw_value, str):
                 default_windows = raw_value
-        day_schema[vol.Optional(day_key, default=default_windows)] = SELECTOR(
-            {"text": {}}
+        day_schema[vol.Optional(day_key, default=default_windows)] = (
+            selector.TextSelector(selector.TextSelectorConfig())
         )
     return day_schema
 

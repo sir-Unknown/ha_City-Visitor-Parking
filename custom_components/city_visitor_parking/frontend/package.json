@@ -13,19 +13,19 @@
     "test": "vitest run --passWithNoTests"
   },
   "devDependencies": {
-    "@emnapi/core": "^1.7.1",
-    "@emnapi/runtime": "^1.7.1",
+    "@emnapi/core": "^1.9.2",
+    "@emnapi/runtime": "^1.9.2",
     "@eslint/js": "10.0.1",
-    "@typescript-eslint/eslint-plugin": "8.57.2",
-    "@typescript-eslint/parser": "8.57.2",
-    "esbuild": "^0.27.4",
+    "@typescript-eslint/eslint-plugin": "8.58.0",
+    "@typescript-eslint/parser": "8.58.0",
+    "esbuild": "^0.27.7",
     "eslint": "10.1.0",
     "eslint-plugin-lit": "2.2.1",
     "globals": "^17.4.0",
     "lit": "^3.3.2",
     "prettier": "^3.8.1",
     "typescript": "^5.9.3",
-    "vite": "^8.0.3",
+    "vite": "^8.0.5",
     "vitest": "^4.1.0"
   },
   "packageManager": "yarn@4.12.0+sha512.f45ab632439a67f8bc759bf32ead036a1f413287b9042726b7cc4818b7b49e14e9423ba49b18f9e06ea4941c1ad062385b1d8760a8d5091a1a31e5f6219afca8"

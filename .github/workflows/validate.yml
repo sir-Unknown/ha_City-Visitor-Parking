@@ -43,15 +43,15 @@ jobs:
           persist-credentials: false
 
       - name: Set up uv
-        uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7.6.0
+        uses: astral-sh/setup-uv@cec208311dfd045dd5311c1add060b2062131d57 # v8.0.0
         with:
           enable-cache: false
 
       - name: Ruff check
-        run: uv run --python "$(cat .python-version)" --with-requirements requirements-dev.txt ruff check .
+        run: uv run --python "$(sed -n 's/^requires-python = \">=\\([0-9][0-9.]*\\)\"$/\\1/p' pyproject.toml)" --only-group dev ruff check .
 
       - name: Ruff format check
-        run: uv run --python "$(cat .python-version)" --with-requirements requirements-dev.txt ruff format --check .
+        run: uv run --python "$(sed -n 's/^requires-python = \">=\\([0-9][0-9.]*\\)\"$/\\1/p' pyproject.toml)" --only-group dev ruff format --check .
 
   hassfest:
     name: Hassfest validation
@@ -66,7 +66,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Run hassfest validation
-        uses: home-assistant/actions/hassfest@d56d093b9ab8d2105bc0cb6ee9bcc0ef4ec8b96d # master
+        uses: home-assistant/actions/hassfest@5752577ea7cc5aefb064b0b21432f18fe4d6ba90 # master
 
   hacs:
     name: HACS validation
@@ -101,20 +101,84 @@ jobs:
           persist-credentials: false
 
       - name: Set up uv
-        uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7.6.0
+        uses: astral-sh/setup-uv@cec208311dfd045dd5311c1add060b2062131d57 # v8.0.0
         with:
           enable-cache: false
 
-      - name: Create uv-managed virtual environment
-        run: uv venv --python "$(cat .python-version)"
-
       - name: Install dependencies
-        run: uv pip install --python .venv/bin/python -r requirements.txt -r requirements_test.txt pytest-cov
+        run: uv sync --python "$(sed -n 's/^requires-python = \">=\\([0-9][0-9.]*\\)\"$/\\1/p' pyproject.toml)" --group test --no-install-project
 
       - name: Run pytest (with coverage)
         env:
           PYTHONPATH: ${{ github.workspace }}
-        run: .venv/bin/pytest tests/components/city_visitor_parking --cov=custom_components.city_visitor_parking --cov-report=term-missing
+        run: uv run pytest tests/components/city_visitor_parking --cov=custom_components.city_visitor_parking --cov-report=term-missing
+
+  manifest-version:
+    name: Manifest Python package version
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Checkout the repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Check pycityvisitorparking version in manifest.json
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          LATEST=$(python3 - <<'PYEOF'
+          import urllib.request, json, time, sys
+          for attempt in range(3):
+              try:
+                  with urllib.request.urlopen(
+                      "https://pypi.org/pypi/pycityvisitorparking/json", timeout=15
+                  ) as r:
+                      print(json.load(r)["info"]["version"])
+                      sys.exit(0)
+              except Exception as e:
+                  if attempt == 2:
+                      print(f"::warning::Could not reach PyPI after 3 attempts: {e} — skipping version check.", file=sys.stderr)
+                      sys.exit(2)
+                  time.sleep(10)
+          PYEOF
+          ) || exit 0
+          MANIFEST=$(python3 -c "
+          import json
+          data = json.load(open('custom_components/city_visitor_parking/manifest.json'))
+          pkg = next(r for r in data['requirements'] if r.startswith('pycityvisitorparking=='))
+          print(pkg.split('==')[1])
+          ")
+          echo "Latest on PyPI : $LATEST"
+          echo "In manifest.json: $MANIFEST"
+          if [ "$LATEST" != "$MANIFEST" ]; then
+            echo "::warning::manifest.json uses pycityvisitorparking==$MANIFEST but latest release is $LATEST."
+            if [ -n "$PR_NUMBER" ]; then
+              EXISTING=$(gh api "repos/$REPO/pulls/$PR_NUMBER/reviews" \
+                --jq '[.[] | select(.state == "CHANGES_REQUESTED" and .user.login == "github-actions[bot]")] | length')
+              if [ "$EXISTING" -eq 0 ]; then
+                gh pr review "$PR_NUMBER" \
+                  --request-changes \
+                  --body "**\`manifest.json\` is out of date.**
+          \`pycityvisitorparking\` is pinned at \`$MANIFEST\` but the latest release on PyPI is \`$LATEST\`.
+          Please update \`requirements\` in \`manifest.json\` before merging."
+              fi
+            fi
+          else
+            if [ -n "$PR_NUMBER" ]; then
+              gh api "repos/$REPO/pulls/$PR_NUMBER/reviews" \
+                --jq '.[] | select(.state == "CHANGES_REQUESTED" and .user.login == "github-actions[bot]") | .id' \
+              | while read -r ID; do
+                  gh api "repos/$REPO/pulls/$PR_NUMBER/reviews/$ID/dismissals" \
+                    -X PUT -f message="pycityvisitorparking is now up to date in manifest.json."
+                done
+            fi
+          fi
 
   frontend:
     name: Frontend build

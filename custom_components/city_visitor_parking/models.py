@@ -17,6 +17,7 @@ class ProviderConfig:
     municipality_name: str
     base_url: str | None
     api_url: str | None
+    gui_url: str | None = None
 
 
 @dataclass(frozen=True)
