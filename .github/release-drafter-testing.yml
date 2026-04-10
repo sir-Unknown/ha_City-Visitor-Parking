@@ -1,0 +1,74 @@
+name-template: "v$RESOLVED_VERSION-beta"
+tag-template: "v$RESOLVED_VERSION-beta"
+commitish: "testing"
+change-template: "- $TITLE @$AUTHOR (#$NUMBER)"
+no-changes-template: "- No changes"
+sort-direction: ascending
+include-paths:
+  - "custom_components/**"
+categories:
+  - title: "🚨 Breaking changes"
+    labels:
+      - "breaking-change"
+  - title: "✨ New features"
+    labels:
+      - "new-feature"
+  - title: "🐛 Bug fixes"
+    labels:
+      - "bugfix"
+  - title: "🚀 Enhancements"
+    labels:
+      - "enhancement"
+      - "refactor"
+      - "performance"
+  - title: "🧰 Maintenance"
+    labels:
+      - "maintenance"
+      - "ci"
+  - title: "⬆️ Dependency updates"
+    labels:
+      - "dependencies"
+  - title: "🧪 Tests"
+    labels:
+      - "tests"
+  - title: "📚 Documentation"
+    labels:
+      - "documentation"
+version-resolver:
+  major:
+    labels:
+      - "major"
+      - "breaking-change"
+  minor:
+    labels:
+      - "minor"
+      - "new-feature"
+  patch:
+    labels:
+      - "bugfix"
+      - "ci"
+      - "dependencies"
+      - "documentation"
+      - "enhancement"
+      - "maintenance"
+      - "performance"
+      - "refactor"
+      - "tests"
+  default: patch
+autolabeler:
+  - label: "documentation"
+    files:
+      - "**/*.md"
+      - "docs/**"
+  - label: "tests"
+    files:
+      - "tests/**"
+  - label: "maintenance"
+    files:
+      - ".github/**"
+template: |
+  # 🚗 City Visitor Parking (pre-release)
+
+  $CHANGES
+
+  # 🚗 City Visitor Parking (pre-release)

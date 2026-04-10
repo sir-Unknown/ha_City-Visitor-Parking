@@ -78,6 +78,10 @@ class CityVisitorParkingConfigFlow(config_entries.ConfigFlow):
         self._credentials: dict[str, str] = {}
         self._reauth_entry: config_entries.ConfigEntry | None = None
 
+    def is_matching(self, other_flow: CityVisitorParkingConfigFlow) -> bool:
+        """Return True if other_flow matches this flow."""
+        return False
+
     async def async_step_user(
         self, user_input: dict[str, object] | None = None
     ) -> config_entries.ConfigFlowResult:
@@ -119,7 +123,7 @@ class CityVisitorParkingConfigFlow(config_entries.ConfigFlow):
         return self.hass.config_entries.async_get_entry(entry_id)
 
     async def async_step_reauth(
-        self, user_input: dict[str, object] | None = None
+        self, _user_input: dict[str, object] | None = None
     ) -> config_entries.ConfigFlowResult:
         """Handle reauthentication."""
         entry = self._entry_from_context()
@@ -244,9 +248,9 @@ class CityVisitorParkingConfigFlow(config_entries.ConfigFlow):
                                 value=provider.municipality_name,
                                 label=provider.municipality_name,
                             )
-                            for key, provider in sorted(
-                                self._providers.items(),
-                                key=lambda item: item[1].municipality_name,
+                            for provider in sorted(
+                                self._providers.values(),
+                                key=lambda p: p.municipality_name,
                             )
                         ],
                         custom_value=True,
@@ -390,7 +394,7 @@ class CityVisitorParkingConfigFlow(config_entries.ConfigFlow):
             )
             error_key = "unknown"
         # Allowed in config flow
-        except Exception as err:
+        except Exception as err:  # pylint: disable=broad-exception-caught
             _LOGGER.debug(
                 "Unexpected error during login for %s: %s: %s %s",
                 self._provider_config.provider_id,
