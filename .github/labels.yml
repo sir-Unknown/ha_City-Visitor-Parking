@@ -4,7 +4,7 @@
   description: "A breaking change for existing users."
 - name: "bugfix"
   color: ee0701
-  description: "Inconsistencies or issues which will cause a problem for users or implementors."
+  description: "Inconsistencies or issues which will cause a problem for users or implementers."
 - name: "documentation"
   color: 0052cc
   description: "Solely about the documentation of the project."
@@ -74,3 +74,6 @@
 - name: "minor"
   color: 0e8a16
   description: "This PR causes a minor version bump in the version number."
+- name: "testing"
+  color: fbca04
+  description: "Related to the testing branch or pre-release testing."
