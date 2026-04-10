@@ -9,6 +9,9 @@ tests:
       - any-glob-to-any-file:
           - "tests/**"
 
+testing:
+  - head-branch: ["testing"]
+
 ci:
   - changed-files:
       - any-glob-to-any-file:
