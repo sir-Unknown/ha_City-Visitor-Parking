@@ -413,7 +413,7 @@ async def test_service_start_reservation_error(
             },
             blocking=True,
         )
-    assert "hacvp=1.2.3 pycvp=4.5.6" in caplog.text
+    assert "hacvp=1.2.3, pycvp=4.5.6" in caplog.text
 
 
 async def test_update_reservation_requires_full_details(
@@ -603,7 +603,7 @@ async def test_service_add_favorite_error(
             },
             blocking=True,
         )
-    assert "hacvp=1.2.3 pycvp=4.5.6" in caplog.text
+    assert "hacvp=1.2.3, pycvp=4.5.6" in caplog.text
 
 
 async def test_service_update_favorite_requires_changes(
@@ -768,11 +768,15 @@ async def test_service_invalid_entry_state(hass: HomeAssistant) -> None:
 
 
 async def test_fallback_update_reservation_error(
-    hass: HomeAssistant, pv_library: ModuleType
+    hass: HomeAssistant, pv_library: ModuleType, monkeypatch: MonkeyPatch
 ) -> None:
     """Fallback update reservation errors should raise HomeAssistantError."""
     entry, _device, provider = _create_entry_with_device(hass, "permit1")
     provider.end_reservation.side_effect = pv_library.ProviderError("boom")
+    monkeypatch.setattr(
+        "custom_components.city_visitor_parking.services.async_get_versions",
+        AsyncMock(return_value=("1.2.3", "4.5.6")),
+    )
 
     start = datetime.now(UTC)
     end = start + timedelta(hours=1)
@@ -797,10 +801,16 @@ async def test_fallback_update_favorite_validation_error(
         await _fallback_update_favorite(entry.runtime_data, "fav1", None, None)
 
 
-async def test_fallback_update_favorite_error(hass: HomeAssistant) -> None:
+async def test_fallback_update_favorite_error(
+    hass: HomeAssistant, monkeypatch: MonkeyPatch
+) -> None:
     """Fallback update favorite errors should raise HomeAssistantError."""
     entry, _device, provider = _create_entry_with_device(hass, "permit1")
     provider.add_favorite.side_effect = TypeError("boom")
+    monkeypatch.setattr(
+        "custom_components.city_visitor_parking.services.async_get_versions",
+        AsyncMock(return_value=("1.2.3", "4.5.6")),
+    )
 
     with pytest.raises(HomeAssistantError):
         await _fallback_update_favorite(

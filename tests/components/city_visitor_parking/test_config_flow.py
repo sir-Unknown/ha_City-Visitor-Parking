@@ -218,7 +218,7 @@ async def test_config_flow_invalid_auth(
 
     assert result["type"] == "form"
     assert result["errors"]["base"] == "invalid_auth"
-    assert "hacvp=1.2.3 pycvp=4.5.6" in caplog.text
+    assert "hacvp=1.2.3, pycvp=4.5.6" in caplog.text
 
 
 async def test_config_flow_cannot_connect(
@@ -465,7 +465,7 @@ async def test_validate_credentials_unexpected_error(
 
     assert permit_id is None
     assert errors["base"] == "unknown"
-    assert "hacvp=1.2.3 pycvp=4.5.6" in caplog.text
+    assert "hacvp=1.2.3, pycvp=4.5.6" in caplog.text
 
 
 async def test_validate_credentials_no_permits(
