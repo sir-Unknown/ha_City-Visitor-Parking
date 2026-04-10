@@ -62,6 +62,7 @@ class CoordinatorData:
 
     permit_id: str
     permit_remaining_minutes: int
+    permit_balance_unit: str | None
     zone_validity: tuple[TimeRange, ...]
     reservations: tuple[Reservation, ...]
     favorites: tuple[Favorite, ...]

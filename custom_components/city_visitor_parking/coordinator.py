@@ -185,6 +185,7 @@ class CityVisitorParkingCoordinator(DataUpdateCoordinator[CoordinatorData]):
             raise UpdateFailed("Unexpected error") from err
 
         remaining_minutes = _normalize_remaining_minutes(permit)
+        balance_unit = get_attr(permit, "balance_unit")
         zone_validity = _normalize_zone_validity(permit)
         normalized_reservations = _normalize_reservations(reservations)
         normalized_favorites = _normalize_favorites(favorites)
@@ -199,6 +200,7 @@ class CityVisitorParkingCoordinator(DataUpdateCoordinator[CoordinatorData]):
         data = CoordinatorData(
             permit_id=self._permit_id,
             permit_remaining_minutes=remaining_minutes,
+            permit_balance_unit=balance_unit if isinstance(balance_unit, str) else None,
             zone_validity=tuple(zone_validity),
             reservations=tuple(normalized_reservations),
             favorites=tuple(normalized_favorites),
@@ -297,7 +299,7 @@ def _normalize_remaining_minutes(permit: Permit) -> int:
         if not isinstance(raw, int | float | str):
             return 0
         value = int(raw)
-    except TypeError, ValueError:
+    except (TypeError, ValueError):
         return 0
     return max(0, value)
 
