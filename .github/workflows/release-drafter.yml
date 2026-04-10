@@ -5,10 +5,16 @@ on:
   push:
     branches:
       - main
+      - testing
     paths:
       - custom_components/**
   pull_request:
   workflow_dispatch:
+    inputs:
+      version:
+        description: "Version override (e.g. 0.1.35). Leave empty to auto-resolve from PR labels."
+        required: false
+        type: string
 
 permissions: {}
 
@@ -23,8 +29,20 @@ jobs:
         if: github.event_name == 'pull_request'
         run: echo "PR check only; release drafts are updated on pushes to main."
 
-      - name: Run Release Drafter
-        if: github.event_name != 'pull_request'
+      - name: Run Release Drafter (stable)
+        if: github.event_name != 'pull_request' && github.ref_name == 'main'
         uses: release-drafter/release-drafter@139054aeaa9adc52ab36ddf67437541f039b88e2 # v7.1.1
+        with:
+          version: ${{ inputs.version }}
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+
+      - name: Run Release Drafter (pre-release)
+        if: github.event_name != 'pull_request' && github.ref_name == 'testing'
+        uses: release-drafter/release-drafter@139054aeaa9adc52ab36ddf67437541f039b88e2 # v7.1.1
+        with:
+          config-name: release-drafter-testing.yml
+          prerelease: true
+          version: ${{ inputs.version }}
         env:
           GITHUB_TOKEN: ${{ github.token }}
