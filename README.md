@@ -8,11 +8,11 @@ Manage Dutch municipality visitor parking permits from Home Assistant. Start, up
 
 Visitor parking card
 
-![Visitor parking card](docs/new_reservation.png)
+![Visitor parking card](docs/screenshots/demo-en_light_form-filled.png)
 
 Active reservations overview
 
-![Active reservations card](docs/active_reservations.png)
+![Active reservations card](docs/screenshots/active_reservations.png)
 
 More screenshots: [docs/screenshots.md](docs/screenshots.md)
 
@@ -27,6 +27,7 @@ More screenshots: [docs/screenshots.md](docs/screenshots.md)
 Quick links:
 
 - Lovelace cards: [docs/cards.md](docs/cards.md)
+- Screenshots: [docs/screenshots.md](docs/screenshots.md)
 - Services: [docs/services.md](docs/services.md)
 - Blueprints: [blueprints/README.md](blueprints/README.md)
 - Troubleshooting: [docs/troubleshooting.md](docs/troubleshooting.md)

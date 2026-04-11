@@ -56,6 +56,7 @@ To add multiple permits, add the integration multiple times.
 ## Next steps
 
 - Lovelace cards: [cards.md](cards.md)
+- Screenshots: [screenshots.md](screenshots.md)
 - Services: [services.md](services.md)
 - Troubleshooting: [troubleshooting.md](troubleshooting.md)
 - Privacy: [privacy.md](privacy.md)
