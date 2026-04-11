@@ -56,6 +56,7 @@ Meerdere vergunningen? Voeg de integratie meerdere keren toe.
 ## Volgende stappen
 
 - Lovelace-kaarten: [../cards.md](../cards.md)
+- Screenshots: [../screenshots.md](../screenshots.md)
 - Diensten: [../services.md](../services.md)
 - Problemen oplossen: [../troubleshooting.md](../troubleshooting.md)
 - Privacy: [../privacy.md](../privacy.md)
