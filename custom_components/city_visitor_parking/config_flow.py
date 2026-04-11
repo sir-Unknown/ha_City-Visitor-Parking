@@ -40,7 +40,7 @@ from .const import (
 )
 from .helpers import get_attr, normalize_override_windows
 from .models import ProviderConfig
-from .version import async_get_versions, format_log_metadata
+from .version import async_get_versions, build_log_block
 
 SECTION_OPERATING_TIMES: Final[str] = "operating_times"
 
@@ -338,10 +338,10 @@ class CityVisitorParkingConfigFlow(config_entries.ConfigFlow):
             permit = await provider.get_permit()
         except AuthError as err:
             _LOGGER.debug(
-                "Auth error during login for %s: %s %s",
-                self._provider_config.provider_id,
-                err,
-                format_log_metadata(
+                "%s",
+                build_log_block(
+                    "login failed",
+                    {"error-type": type(err).__name__, "error": str(err)},
                     provider=self._provider_config.provider_id,
                     city=self._provider_config.municipality_name,
                     ha_cvp_version=ha_cvp_version,
@@ -353,11 +353,10 @@ class CityVisitorParkingConfigFlow(config_entries.ConfigFlow):
             error_key = "cannot_connect"
         except RateLimitError as err:
             _LOGGER.debug(
-                "Rate limit during login for %s: %s: %s %s",
-                self._provider_config.provider_id,
-                type(err).__name__,
-                err,
-                format_log_metadata(
+                "%s",
+                build_log_block(
+                    "login rate-limited",
+                    {"error-type": type(err).__name__, "error": str(err)},
                     provider=self._provider_config.provider_id,
                     city=self._provider_config.municipality_name,
                     ha_cvp_version=ha_cvp_version,
@@ -367,11 +366,10 @@ class CityVisitorParkingConfigFlow(config_entries.ConfigFlow):
             error_key = "rate_limit"
         except ServiceUnavailableError as err:
             _LOGGER.debug(
-                "Service unavailable during login for %s: %s: %s %s",
-                self._provider_config.provider_id,
-                type(err).__name__,
-                err,
-                format_log_metadata(
+                "%s",
+                build_log_block(
+                    "login service unavailable",
+                    {"error-type": type(err).__name__, "error": str(err)},
                     provider=self._provider_config.provider_id,
                     city=self._provider_config.municipality_name,
                     ha_cvp_version=ha_cvp_version,
@@ -381,11 +379,10 @@ class CityVisitorParkingConfigFlow(config_entries.ConfigFlow):
             error_key = "service_unavailable"
         except PyCityVisitorParkingError as err:
             _LOGGER.debug(
-                "Provider error during login for %s: %s: %s %s",
-                self._provider_config.provider_id,
-                type(err).__name__,
-                err,
-                format_log_metadata(
+                "%s",
+                build_log_block(
+                    "login provider error",
+                    {"error-type": type(err).__name__, "error": str(err)},
                     provider=self._provider_config.provider_id,
                     city=self._provider_config.municipality_name,
                     ha_cvp_version=ha_cvp_version,
@@ -396,11 +393,10 @@ class CityVisitorParkingConfigFlow(config_entries.ConfigFlow):
         # Allowed in config flow
         except Exception as err:  # pylint: disable=broad-exception-caught
             _LOGGER.debug(
-                "Unexpected error during login for %s: %s: %s %s",
-                self._provider_config.provider_id,
-                type(err).__name__,
-                err,
-                format_log_metadata(
+                "%s",
+                build_log_block(
+                    "login unexpected error",
+                    {"error-type": type(err).__name__, "error": str(err)},
                     provider=self._provider_config.provider_id,
                     city=self._provider_config.municipality_name,
                     ha_cvp_version=ha_cvp_version,

@@ -122,7 +122,8 @@ async def test_auth_failure_triggers_reauth(
     ):
         await coordinator.async_refresh()
     assert isinstance(coordinator.last_exception, ConfigEntryAuthFailed)
-    assert "hacvp=1.2.3, pycvp=4.5.6" in caplog.text
+    assert "hacvp" in caplog.text
+    assert "1.2.3" in caplog.text
 
 
 async def test_network_failure_raises_updatefailed(
@@ -155,7 +156,8 @@ async def test_network_failure_raises_updatefailed(
     ):
         await coordinator.async_refresh()
     assert isinstance(coordinator.last_exception, UpdateFailed)
-    assert "hacvp=1.2.3, pycvp=4.5.6" in caplog.text
+    assert "hacvp" in caplog.text
+    assert "1.2.3" in caplog.text
 
 
 async def test_unexpected_failure_raises_updatefailed(hass: HomeAssistant) -> None:

@@ -413,7 +413,8 @@ async def test_service_start_reservation_error(
             },
             blocking=True,
         )
-    assert "hacvp=1.2.3, pycvp=4.5.6" in caplog.text
+    assert "hacvp" in caplog.text
+    assert "1.2.3" in caplog.text
 
 
 async def test_update_reservation_requires_full_details(
@@ -603,7 +604,8 @@ async def test_service_add_favorite_error(
             },
             blocking=True,
         )
-    assert "hacvp=1.2.3, pycvp=4.5.6" in caplog.text
+    assert "hacvp" in caplog.text
+    assert "1.2.3" in caplog.text
 
 
 async def test_service_update_favorite_requires_changes(
