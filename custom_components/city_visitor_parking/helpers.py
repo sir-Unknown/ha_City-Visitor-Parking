@@ -27,6 +27,11 @@ def normalize_plate(value: str | None) -> str:
     return "".join(ch for ch in value.strip().upper() if ch.isalnum())
 
 
+def parse_comma_separated(value: str) -> list[str]:
+    """Split a comma-separated string into a list of stripped, non-empty items."""
+    return [x.strip() for x in value.split(",") if x.strip()]
+
+
 def get_attr(obj: object, name: str) -> object | None:
     """Return attribute or mapping value for name."""
     if isinstance(obj, Mapping):

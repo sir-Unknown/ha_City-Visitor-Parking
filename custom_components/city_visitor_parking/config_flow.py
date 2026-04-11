@@ -30,6 +30,7 @@ from .const import (
     CONF_API_URL,
     CONF_AUTO_END,
     CONF_BASE_URL,
+    CONF_FREE_DATES,
     CONF_GUI_URL,
     CONF_MUNICIPALITY,
     CONF_OPERATING_TIME_OVERRIDES,
@@ -38,7 +39,7 @@ from .const import (
     DOMAIN,
     WEEKDAY_KEYS,
 )
-from .helpers import get_attr, normalize_override_windows
+from .helpers import get_attr, normalize_override_windows, parse_comma_separated
 from .models import ProviderConfig
 from .version import async_get_versions, format_log_metadata
 
@@ -459,6 +460,9 @@ class CityVisitorParkingOptionsFlow(config_entries.OptionsFlow):
                 title="",
                 data={
                     CONF_AUTO_END: cast("bool", user_input[CONF_AUTO_END]),
+                    CONF_FREE_DATES: _normalize_free_dates(
+                        cast("str", cast("Mapping[str, object]", section_input).get(CONF_FREE_DATES, ""))
+                    ),
                     CONF_OPERATING_TIME_OVERRIDES: overrides,
                 },
             )
@@ -479,13 +483,21 @@ class CityVisitorParkingOptionsFlow(config_entries.OptionsFlow):
             if isinstance(raw_auto_end, bool):
                 defaults[CONF_AUTO_END] = raw_auto_end
 
-        expanded = _should_expand_overrides(overrides, user_input)
+        free_dates_default = str(self._config_entry.options.get(CONF_FREE_DATES, ""))
+        if user_input is not None:
+            section_input = user_input.get(SECTION_OPERATING_TIMES, {})
+            if isinstance(section_input, Mapping):
+                raw_free_dates = cast("Mapping[str, object]", section_input).get(CONF_FREE_DATES)
+                if isinstance(raw_free_dates, str):
+                    free_dates_default = raw_free_dates
+
+        expanded = _should_expand_overrides(overrides, user_input) or bool(free_dates_default.strip())
 
         schema: dict[object, object] = {
             vol.Required(CONF_AUTO_END, default=defaults[CONF_AUTO_END]): cv.boolean,
         }
 
-        day_schema = _build_day_schema(overrides, user_input)
+        day_schema = _build_day_schema(overrides, user_input, free_dates_default)
 
         schema[vol.Required(SECTION_OPERATING_TIMES)] = section(
             vol.Schema(day_schema), {"collapsed": not expanded}
@@ -645,7 +657,9 @@ def _should_expand_overrides(
 
 
 def _build_day_schema(
-    overrides: Mapping[str, object], user_input: dict[str, object] | None
+    overrides: Mapping[str, object],
+    user_input: dict[str, object] | None,
+    free_dates_default: str = "",
 ) -> dict[object, object]:
     """Build the schema for weekday override inputs."""
     day_schema: dict[object, object] = {}
@@ -665,7 +679,15 @@ def _build_day_schema(
         day_schema[vol.Optional(day_key, default=default_windows)] = (
             selector.TextSelector(selector.TextSelectorConfig())
         )
+    day_schema[vol.Optional(CONF_FREE_DATES, default=free_dates_default)] = SELECTOR(
+        {"text": {}}
+    )
     return day_schema
+
+
+def _normalize_free_dates(value: str) -> str:
+    """Normalize a comma-separated free-dates string."""
+    return ", ".join(parse_comma_separated(value))
 
 
 def _normalize_optional_text(value: object) -> str | None:

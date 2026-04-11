@@ -8,8 +8,8 @@ from typing import cast
 
 from homeassistant.util import dt as dt_util
 
-from .const import CONF_OPERATING_TIME_OVERRIDES, WEEKDAY_KEYS
-from .helpers import normalize_override_windows
+from .const import CONF_FREE_DATES, CONF_OPERATING_TIME_OVERRIDES, WEEKDAY_KEYS
+from .helpers import normalize_override_windows, parse_comma_separated
 from .models import TimeRange
 
 
@@ -55,6 +55,16 @@ def windows_for_today(
     """Return chargeable windows for today, applying overrides if present."""
     local_now = dt_util.as_local(now)
     local_date = local_now.date()
+
+    # Return no chargeable windows when today is a configured free date.
+    free_dates_raw = options.get(CONF_FREE_DATES)
+    if isinstance(free_dates_raw, str) and free_dates_raw.strip():
+        today_ddmm = local_now.strftime("%d-%m")
+        today_ddmmyyyy = local_now.strftime("%d-%m-%Y")
+        for d in parse_comma_separated(free_dates_raw):
+            if d in (today_ddmm, today_ddmmyyyy):
+                return []
+
     local_day = WEEKDAY_KEYS[local_now.weekday()]
 
     overrides = options.get(CONF_OPERATING_TIME_OVERRIDES)

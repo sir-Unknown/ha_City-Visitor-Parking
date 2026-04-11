@@ -76,7 +76,8 @@
               "thursday_chargeable_windows": "Thursday",
               "friday_chargeable_windows": "Friday",
               "saturday_chargeable_windows": "Saturday",
-              "sunday_chargeable_windows": "Sunday"
+              "sunday_chargeable_windows": "Sunday",
+              "free_dates": "Free dates"
             },
             "data_description": {
               "monday_chargeable_windows": "Enter chargeable windows, for example 09:00-13:00, 14:00-17:30.",
@@ -85,7 +86,8 @@
               "thursday_chargeable_windows": "Enter chargeable windows, for example 09:00-13:00, 14:00-17:30.",
               "friday_chargeable_windows": "Enter chargeable windows, for example 09:00-13:00, 14:00-17:30.",
               "saturday_chargeable_windows": "Enter chargeable windows, for example 09:00-13:00, 14:00-17:30.",
-              "sunday_chargeable_windows": "Enter chargeable windows, for example 09:00-13:00, 14:00-17:30."
+              "sunday_chargeable_windows": "Enter chargeable windows, for example 09:00-13:00, 14:00-17:30.",
+              "free_dates": "Comma-separated dates when parking is free. Use DD-MM for annual dates (e.g. 25-12, 01-01) or DD-MM-YYYY for one-off dates (e.g. 18-04-2025)."
             }
           }
         }
