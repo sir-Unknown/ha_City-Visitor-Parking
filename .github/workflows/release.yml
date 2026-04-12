@@ -206,10 +206,10 @@ jobs:
           data["version"] = os.environ["VERSION"]
           pycvp_commit = os.environ.get("PYCVP_COMMIT", "")
           if pycvp_commit:
-              data["requirements"] = [
-                  re.sub(r'[a-f0-9]{40}$', pycvp_commit, r)
-                  for r in data["requirements"]
-              ]
+              new_reqs = [re.sub(r'[a-f0-9]{40}$', pycvp_commit, r) for r in data["requirements"]]
+              if new_reqs == data["requirements"]:
+                  raise ValueError("No pyCityVisitorParking SHA found in requirements to replace")
+              data["requirements"] = new_reqs
           p.write_text(json.dumps(data, indent=2) + "\n")
           PYEOF
           cd /tmp/release-build && zip -r "$GITHUB_WORKSPACE/city_visitor_parking.zip" .
