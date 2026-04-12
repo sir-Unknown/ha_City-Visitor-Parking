@@ -183,7 +183,7 @@ jobs:
         env:
           RELEASE_BODY: ${{ github.event.release.body }}
         run: |
-          COMMIT=$(echo "$RELEASE_BODY" | grep -oE '\*\*Commit:\*\* `([a-f0-9]{40})`' | grep -oE '[a-f0-9]{40}')
+          COMMIT=$(echo "$RELEASE_BODY" | grep -oE '\*\*Commit:\*\* `?([a-f0-9]{40})`?' | grep -oE '[a-f0-9]{40}')
           if [ -z "$COMMIT" ]; then
             echo "::error::No pyCityVisitorParking commit found in release body. Fill in the 'Commit' field in the release draft."
             exit 1
