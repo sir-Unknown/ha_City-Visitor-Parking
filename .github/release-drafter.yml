@@ -2,7 +2,11 @@ name-template: "v$RESOLVED_VERSION"
 tag-template: "v$RESOLVED_VERSION"
 commitish: "main"
 change-template: "- $TITLE @$AUTHOR (#$NUMBER)"
-no-changes-template: "- No changes"
+no-changes-template: "- No changes in `custom_components/**` since the last release."
+exclude-labels:
+  - "skip-changelog"
+  - "duplicate"
+  - "invalid"
 sort-direction: ascending
 include-paths:
   - "custom_components/**"
@@ -67,8 +71,20 @@ autolabeler:
     files:
       - ".github/**"
 template: |
-  # 🚗 City Visitor Parking
+  🚗 City Visitor Parking is a Home Assistant integration that lets you register visitor parking permits directly from your dashboard.
+
+  ## 📋 Changes
 
   $CHANGES
 
-  # 🚗 City Visitor Parking
+  ## 📦 Installation
+
+  [![Open in HACS](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=sir-Unknown&repository=ha_City-Visitor-Parking&category=integration)
+
+  ## 📚 Documentation
+
+  See the [README](https://github.com/sir-Unknown/ha_City-Visitor-Parking#readme) for setup instructions and configuration options.
+
+  ## 🐛 Reporting issues
+
+  [![Open an issue](https://img.shields.io/badge/Report%20a%20bug-red?logo=github)](https://github.com/sir-Unknown/ha_City-Visitor-Parking/issues/new)

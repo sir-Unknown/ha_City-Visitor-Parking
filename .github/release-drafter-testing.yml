@@ -1,8 +1,12 @@
-name-template: "v$RESOLVED_VERSION-beta"
-tag-template: "v$RESOLVED_VERSION-beta"
+name-template: "v$RESOLVED_VERSION"
+tag-template: "v$RESOLVED_VERSION"
 commitish: "testing"
 change-template: "- $TITLE @$AUTHOR (#$NUMBER)"
-no-changes-template: "- No changes"
+no-changes-template: "- No changes in `custom_components/**` since the last release."
+exclude-labels:
+  - "skip-changelog"
+  - "duplicate"
+  - "invalid"
 sort-direction: ascending
 include-paths:
   - "custom_components/**"
@@ -34,27 +38,6 @@ categories:
   - title: "📚 Documentation"
     labels:
       - "documentation"
-version-resolver:
-  major:
-    labels:
-      - "major"
-      - "breaking-change"
-  minor:
-    labels:
-      - "minor"
-      - "new-feature"
-  patch:
-    labels:
-      - "bugfix"
-      - "ci"
-      - "dependencies"
-      - "documentation"
-      - "enhancement"
-      - "maintenance"
-      - "performance"
-      - "refactor"
-      - "tests"
-  default: patch
 autolabeler:
   - label: "documentation"
     files:
@@ -67,8 +50,45 @@ autolabeler:
     files:
       - ".github/**"
 template: |
-  # 🚗 City Visitor Parking (pre-release)
+  > [!WARNING]
+  > **This is a testing release and is highly unstable.**
+  > It may contain breaking changes, incomplete features, or regressions.
+  > **Only install this if you were explicitly asked to by the maintainer.**
+  > Do not use this in a production Home Assistant environment.
+
+  ## 🔗 pyCityVisitorParking
+
+  **Commit:** `FILL_IN_COMMIT_SHA`
+
+  ## 📋 Changes
 
   $CHANGES
 
-  # 🚗 City Visitor Parking (pre-release)
+  ## 📦 Installation
+
+  In HACS, go to **City Visitor Parking** → **⋮** → **Redownload** → select this version from the version dropdown.
+
+  ## 🔁 Rollback
+
+  If something breaks, reinstall the latest stable release the same way: **HACS** → **City Visitor Parking** → **⋮** → **Redownload** → select the stable version.
+
+  ## 🪲 Enable debug logging
+
+  To help with testing, add the following to your `configuration.yaml` and restart Home Assistant:
+
+  ```yaml
+  logger:
+    default: info
+    logs:
+      custom_components.city_visitor_parking: debug
+      pycityvisitorparking.provider: debug
+      pycityvisitorparking.provider.dvsportal_new: debug
+  ```
+
+  ## 🐛 Reporting issues
+
+  Before opening an issue, download the diagnostics file via **Settings** → **Devices & services** → **City Visitor Parking** → **⋮** → **Download diagnostics**, and attach it to your report.
+
+  [![Open an issue](https://img.shields.io/badge/Report%20a%20bug-red?logo=github)](https://github.com/sir-Unknown/ha_City-Visitor-Parking/issues/new)
+
+  Include the release version, a description of the problem, relevant logs, and the diagnostics file if available.
