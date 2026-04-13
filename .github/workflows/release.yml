@@ -4,12 +4,6 @@ on:
   release:
     types:
       - published
-  workflow_dispatch:
-    inputs:
-      tag:
-        description: "Release tag to process (e.g. v1.0.0-testing.1)"
-        required: true
-        type: string
 
 permissions: {}
 
@@ -23,16 +17,13 @@ jobs:
     outputs:
       release_sha: ${{ steps.resolve_tag.outputs.sha }}
       should_release: ${{ steps.component_changes.outputs.should_release }}
-      tag: ${{ steps.resolve_tag.outputs.tag }}
     steps:
       - name: Resolve release tag to commit
         id: resolve_tag
-        env:
-          RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.event.release.tag_name }}
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
         with:
           script: |
-            const tag = process.env.RELEASE_TAG;
+            const tag = context.payload.release.tag_name;
             const { data: ref } = await github.rest.git.getRef({
               owner: context.repo.owner,
               repo: context.repo.repo,
@@ -48,13 +39,12 @@ jobs:
               sha = tagObject.object.sha;
             }
             core.setOutput("sha", sha);
-            core.setOutput("tag", tag);
 
       - name: Detect custom_components changes since previous release
         id: component_changes
         env:
           RELEASE_SHA: ${{ steps.resolve_tag.outputs.sha }}
-          RELEASE_TAG: ${{ steps.resolve_tag.outputs.tag }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
         with:
           script: |
@@ -182,30 +172,18 @@ jobs:
       - name: Normalize release version
         id: version
         env:
-          RELEASE_TAG: ${{ needs.validate.outputs.tag }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
         run: |
           version="${RELEASE_TAG,,}"
           version="${version#v}"
           echo "version=$version" >> "$GITHUB_OUTPUT"
-      - name: Fetch release body
-        id: release_body
-        env:
-          GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ needs.validate.outputs.tag }}
-        run: |
-          body=$(gh release view "$RELEASE_TAG" --json body --jq '.body')
-          {
-            echo "body<<RELEASE_BODY_EOF"
-            echo "$body"
-            echo "RELEASE_BODY_EOF"
-          } >> "$GITHUB_OUTPUT"
       - name: Extract pyCityVisitorParking commit from release body
-        if: contains(needs.validate.outputs.tag, '-testing.')
+        if: contains(github.event.release.tag_name, '-testing.')
         id: pycvp
         env:
-          RELEASE_BODY: ${{ steps.release_body.outputs.body }}
+          RELEASE_BODY: ${{ github.event.release.body }}
         run: |
-          COMMIT=$(echo "$RELEASE_BODY" | grep -oE '\*\*Commit:\*\* `?([a-f0-9]{40})`?' | grep -oE '[a-f0-9]{40}')
+          COMMIT=$(echo "$RELEASE_BODY" | grep -oE '\*\*Commit:\*\* `([a-f0-9]{40})`' | grep -oE '[a-f0-9]{40}')
           if [ -z "$COMMIT" ]; then
             echo "::error::No pyCityVisitorParking commit found in release body. Fill in the 'Commit' field in the release draft."
             exit 1
@@ -238,7 +216,7 @@ jobs:
       - name: Upload release asset
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ needs.validate.outputs.tag }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
         run: gh release upload "$RELEASE_TAG" city_visitor_parking.zip --clobber
 
   skip-release:

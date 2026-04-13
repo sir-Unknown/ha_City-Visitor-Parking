@@ -909,7 +909,7 @@ test = [
 ]
 
 [package.metadata]
-requires-dist = [{ name = "pycityvisitorparking", git = "https://github.com/sir-Unknown/pyCityVisitorParking.git?rev=9afac8d0501a93057f464a76cf5be810c90d5d3b" }]
+requires-dist = [{ name = "pycityvisitorparking", specifier = "==0.5.21" }]
 
 [package.metadata.requires-dev]
 dev = [
@@ -1609,10 +1609,14 @@ wheels = [
 
 [[package]]
 name = "pycityvisitorparking"
-version = "0.5.21.dev6+g9afac8d05"
-source = { git = "https://github.com/sir-Unknown/pyCityVisitorParking.git?rev=9afac8d0501a93057f464a76cf5be810c90d5d3b#9afac8d0501a93057f464a76cf5be810c90d5d3b" }
+version = "0.5.21"
+source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "aiohttp" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/6a/55/2b2ceb8cd96eaff14141726455350d6249e3151a34fe6f46906cdad6d01b/pycityvisitorparking-0.5.21.tar.gz", hash = "sha256:848909b17ecc44592f84f15db51e512b3a9017dacc9f11816b116e3b1be0c23d", size = 62789, upload-time = "2026-04-10T17:47:46.539Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/83/98/481a52122724f3de497b145f27c6066f306076ad505c85a7820dd8c5b4db/pycityvisitorparking-0.5.21-py3-none-any.whl", hash = "sha256:33cfaf7281474f36bd677b516650098b68ba658469c2cc2b078a1682166d8010", size = 58293, upload-time = "2026-04-10T17:47:45.082Z" },
 ]
 
 [[package]]
