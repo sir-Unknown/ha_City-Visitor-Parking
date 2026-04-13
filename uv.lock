@@ -909,7 +909,7 @@ test = [
 ]
 
 [package.metadata]
-requires-dist = [{ name = "pycityvisitorparking", git = "https://github.com/sir-Unknown/pyCityVisitorParking.git?rev=ecaea25bc5e05001acdaa716ff25dcb8883e1e9b" }]
+requires-dist = [{ name = "pycityvisitorparking", git = "https://github.com/sir-Unknown/pyCityVisitorParking.git?rev=9afac8d0501a93057f464a76cf5be810c90d5d3b" }]
 
 [package.metadata.requires-dev]
 dev = [
@@ -1609,8 +1609,8 @@ wheels = [
 
 [[package]]
 name = "pycityvisitorparking"
-version = "0.5.21.dev5+gecaea25bc"
-source = { git = "https://github.com/sir-Unknown/pyCityVisitorParking.git?rev=ecaea25bc5e05001acdaa716ff25dcb8883e1e9b#ecaea25bc5e05001acdaa716ff25dcb8883e1e9b" }
+version = "0.5.21.dev6+g9afac8d05"
+source = { git = "https://github.com/sir-Unknown/pyCityVisitorParking.git?rev=9afac8d0501a93057f464a76cf5be810c90d5d3b#9afac8d0501a93057f464a76cf5be810c90d5d3b" }
 dependencies = [
     { name = "aiohttp" },
 ]

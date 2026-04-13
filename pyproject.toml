@@ -2,7 +2,7 @@
 name = "ha-city-visitor-parking"
 version = "0.0.0"
 requires-python = ">=3.14.2"
-dependencies = ["pycityvisitorparking @ git+https://github.com/sir-Unknown/pyCityVisitorParking.git@ecaea25bc5e05001acdaa716ff25dcb8883e1e9b"]
+dependencies = ["pycityvisitorparking @ git+https://github.com/sir-Unknown/pyCityVisitorParking.git@9afac8d0501a93057f464a76cf5be810c90d5d3b"]
 
 [dependency-groups]
 dev = [
