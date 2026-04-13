@@ -14,11 +14,11 @@ dev = [
   "zizmor==1.23.1",
 ]
 test = [
-  "pytest==9.0.3",
+  "pytest==9.0.0",
   "pytest-asyncio==1.3.0",
-  "pytest-cov==7.1.0",
+  "pytest-cov==7.0.0",
   "pytest-homeassistant-custom-component==0.13.322",
-  "freezegun==1.5.5",
+  "freezegun==1.5.2",
 ]
 perf = [
   "isal==1.8.0",
