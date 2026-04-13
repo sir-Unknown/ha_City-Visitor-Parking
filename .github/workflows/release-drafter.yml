@@ -1,3 +1,8 @@
+# Maintains a draft GitHub Release that is kept up-to-date with every push to
+# main or testing that touches custom_components/. The draft is populated using
+# the rules in .github/release-drafter.yml (categories, version bump strategy,
+# etc.). When a release is ready, the draft is manually published which triggers
+# the release.yml workflow to build and upload the release asset.
 name: Release Drafter
 
 # yamllint disable-line rule:truthy
@@ -31,6 +36,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      pull-requests: read # Required to read PR titles and labels for release note generation.
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
