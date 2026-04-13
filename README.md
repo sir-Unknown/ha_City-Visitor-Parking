@@ -231,6 +231,35 @@ See: [docs/privacy.md](docs/privacy.md)
 
 See: [docs/troubleshooting.md](docs/troubleshooting.md)
 
+## Development
+
+For local testing against a sibling `pyCityVisitorParking` git checkout, switch the
+dependency and DVSPortal provider IDs with:
+
+```bash
+python scripts/set_pycvp_dependency.py local-git --repo ../pyCityVisitorParking
+```
+
+The helper defaults to the current branch in that checkout. Use `--ref <branch-or-tag>`
+to force a specific git ref. To switch the repository back to the published setup:
+
+```bash
+python scripts/set_pycvp_dependency.py release
+```
+
+Restart Home Assistant after switching modes so it reloads the requirement cleanly.
+
+If you want to release `ha_City-Visitor-Parking` against an unreleased
+`pyCityVisitorParking` change, first push that pyCVP branch or commit to GitHub and
+then pin HACVP to that public ref:
+
+```bash
+python scripts/set_pycvp_dependency.py remote-git --ref <public-branch-or-commit>
+```
+
+That keeps HACVP releasable without a PyPI release of `pycityvisitorparking`, while
+still using a dependency that Home Assistant users can actually install.
+
 ## Support
 
 When opening an issue, include:

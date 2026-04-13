@@ -1,7 +1,9 @@
----
+# Keeps GitHub issue/PR labels in sync with the label definitions in
+# .github/labels.yml. Runs automatically when that file changes on main,
+# so the repository's label set is always the canonical source of truth.
 name: Sync labels
-
 # yamllint disable-line rule:truthy
+
 on:
   push:
     branches:
@@ -10,14 +12,20 @@ on:
       - .github/labels.yml
   workflow_dispatch:
 
-permissions:
-  contents: read
-  issues: write
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   labels:
     name: Sync labels
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+
     steps:
       - name: Check out code from GitHub
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
