@@ -4,6 +4,16 @@ documentation:
           - "**/*.md"
           - "docs/**"
 
+enhancement:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "custom_components/city_visitor_parking/frontend/**"
+
+frontend:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "custom_components/city_visitor_parking/frontend/**"
+
 tests:
   - changed-files:
       - any-glob-to-any-file:
