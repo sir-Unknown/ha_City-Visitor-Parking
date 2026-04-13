@@ -38,6 +38,9 @@
 - name: "javascript"
   color: f1e05a
   description: "Changes related to JavaScript or frontend dependencies."
+- name: "frontend"
+  color: f1e05a
+  description: "Changes related to frontend code or user interface behavior."
 - name: "tests"
   color: 5319e7
   description: "Adds or updates test coverage."
