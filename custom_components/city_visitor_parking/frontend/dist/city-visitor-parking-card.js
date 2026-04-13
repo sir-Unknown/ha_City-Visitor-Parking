@@ -723,18 +723,6 @@ var applyZoneStatus = (context, status) => {
   });
 };
 var resetZoneStatusThrottle = (context) => context._zoneStatusTsByEntryId.clear();
-var openDateTimePickerForField = (field) => {
-  if (!field) return;
-  const input = field instanceof HTMLInputElement ? field : field.shadowRoot?.querySelector(
-    "input"
-  );
-  if (!input) return;
-  if (typeof input.showPicker === "function") {
-    input.showPicker();
-    return;
-  }
-  input.focus();
-};
 var DOMAIN = "city_visitor_parking";
 var RESERVATION_STARTED_EVENT = "city-visitor-parking-reservation-started";
 var createStatusState = () => ({
@@ -806,17 +794,7 @@ var BASE_CARD_STYLES = i`
     font-size: 0.85rem;
   }
   .datetime-row {
-    position: relative;
-  }
-  .datetime-row ha-textfield {
-    width: 100%;
-  }
-  .datetime-picker-button {
-    position: absolute;
-    inset-inline-end: var(--ha-space-1);
-    top: 50%;
-    transform: translateY(-50%);
-    z-index: 1;
+    display: block;
   }
 `;
 var buildPermitOptions = (entries) => entries.map((entry) => ({
@@ -1398,7 +1376,6 @@ var getActiveCardConfigForm = createConfigFormGetter(
       this._onChange = (event) => this._handleChange(event);
       this._onPermitSelectChange = (event) => this._handlePermitSelectChange(event);
       this._onFavoriteSelectChange = (event) => this._handleFavoriteSelectChange(event);
-      this._onDateTimePickerClick = (event) => this._handleDateTimePickerClick(event);
     }
     static async getConfigForm(hass) {
       return getCardConfigForm(hass);
@@ -1748,16 +1725,6 @@ var getActiveCardConfigForm = createConfigFormGetter(
                       @input=${this._onInput}
                       @change=${this._onChange}
                     ></ha-textfield>
-                    <ha-icon-button
-                      class="datetime-picker-button"
-                      data-picker-field="startDateTime"
-                      aria-label=${localizeFn("field.start_time")}
-                      title=${localizeFn("field.start_time")}
-                      ?disabled=${controlsDisabled}
-                      @click=${this._onDateTimePickerClick}
-                    >
-                      <ha-icon icon="mdi:calendar-month-outline"></ha-icon>
-                    </ha-icon-button>
                   </div>
                 ` : A}
             ${showEnd ? b2`
@@ -1772,16 +1739,6 @@ var getActiveCardConfigForm = createConfigFormGetter(
                       @input=${this._onInput}
                       @change=${this._onChange}
                     ></ha-textfield>
-                    <ha-icon-button
-                      class="datetime-picker-button"
-                      data-picker-field="endDateTime"
-                      aria-label=${localizeFn("field.end_time")}
-                      title=${localizeFn("field.end_time")}
-                      ?disabled=${controlsDisabled}
-                      @click=${this._onDateTimePickerClick}
-                    >
-                      <ha-icon icon="mdi:calendar-month-outline"></ha-icon>
-                    </ha-icon-button>
                   </div>
                 ` : A}
             ${renderFavoriteActionRow({
@@ -1869,14 +1826,6 @@ var getActiveCardConfigForm = createConfigFormGetter(
       if (fieldId === "startDateTime" && this._config?.show_start_time && this._config?.show_end_time) {
         this._syncEndWithStart();
       }
-    }
-    _handleDateTimePickerClick(event) {
-      if (this._isInEditor()) return;
-      event.stopPropagation();
-      const target = event.currentTarget;
-      const fieldId = target?.dataset.pickerField;
-      if (!fieldId) return;
-      openDateTimePickerForField(this.renderRoot.querySelector(`#${fieldId}`));
     }
     _handlePermitSelectChange(event) {
       if (this._isInEditor()) return;
@@ -2384,7 +2333,6 @@ var getActiveCardConfigForm = createConfigFormGetter(
       this._onActionClick = (event) => this._handleActionClick(event);
       this._onReservationInput = (event) => this._handleReservationInput(event);
       this._onReservationChange = (event) => this._handleReservationChange(event);
-      this._onReservationPickerClick = (event) => this._handleReservationPickerClick(event);
     }
     connectedCallback() {
       super.connectedCallback();
@@ -2637,17 +2585,6 @@ var getActiveCardConfigForm = createConfigFormGetter(
                 @input=${this._onReservationInput}
                 @change=${this._onReservationChange}
               ></ha-textfield>
-              <ha-icon-button
-                class="datetime-picker-button"
-                data-picker-reservation-id=${reservation.reservation_id}
-                data-picker-field="start"
-                aria-label=${this._localize("field.start_time")}
-                title=${this._localize("field.start_time")}
-                ?disabled=${controlsDisabled || !allowStart || isBusy}
-                @click=${this._onReservationPickerClick}
-              >
-                <ha-icon icon="mdi:calendar-month-outline"></ha-icon>
-              </ha-icon-button>
             </div>
             <div class="datetime-row">
               <ha-textfield
@@ -2661,17 +2598,6 @@ var getActiveCardConfigForm = createConfigFormGetter(
                 @input=${this._onReservationInput}
                 @change=${this._onReservationChange}
               ></ha-textfield>
-              <ha-icon-button
-                class="datetime-picker-button"
-                data-picker-reservation-id=${reservation.reservation_id}
-                data-picker-field="end"
-                aria-label=${this._localize("field.end_time")}
-                title=${this._localize("field.end_time")}
-                ?disabled=${controlsDisabled || !allowEnd || isBusy}
-                @click=${this._onReservationPickerClick}
-              >
-                <ha-icon icon="mdi:calendar-month-outline"></ha-icon>
-              </ha-icon-button>
             </div>
           </div>
           <div class="active-reservation-actions">
@@ -2709,22 +2635,6 @@ var getActiveCardConfigForm = createConfigFormGetter(
         if (this._endButtonSuccessByReservationId.has(reservationId)) return;
         void this._handleActiveReservationEnd(reservationId);
       }
-    }
-    _handleReservationPickerClick(event) {
-      if (this._isInEditor()) return;
-      event.stopPropagation();
-      const target = event.currentTarget;
-      const reservationId = target?.dataset.pickerReservationId;
-      const field = target?.dataset.pickerField;
-      if (!reservationId || field !== "start" && field !== "end") return;
-      const pickerField = Array.from(
-        this.renderRoot.querySelectorAll(
-          "ha-textfield[data-reservation-id][data-field]"
-        )
-      ).find(
-        (element) => element.dataset.reservationId === reservationId && element.dataset.field === field
-      );
-      openDateTimePickerForField(pickerField ?? null);
     }
     _handleReservationInput(event, resolved) {
       const reservationField = resolved ?? this._getReservationField(event);
