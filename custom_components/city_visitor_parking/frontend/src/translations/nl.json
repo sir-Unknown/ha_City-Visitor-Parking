@@ -41,7 +41,7 @@
   "action.remove_favorite": "Favoriet verwijderen",
   "action.start_reservation": "Reservering starten",
   "button.update_reservation": "Reservering bijwerken",
-  "button.end_reservation": "Reservering be\u00ebindigen",
+  "button.end_reservation": "Reservering beëindigen",
   "section.active_reservations": "Actieve reserveringen",
   "label.parking_status": "Parkeerstatus",
   "label.window": "Tijdvenster",
@@ -70,7 +70,9 @@
   "message.reservation_start_failed": "We kunnen je reservering niet starten.",
   "message.reservation_updated": "Je reservering is bijgewerkt.",
   "message.reservation_update_failed": "We kunnen je reservering niet bijwerken.",
-  "message.reservation_ended": "Je reservering is be\u00ebindigd.",
-  "message.reservation_end_failed": "We kunnen je reservering niet be\u00ebindigen.",
-  "placeholder.license_plate": "AA-123-B"
+  "message.reservation_ended": "Je reservering is beëindigd.",
+  "message.reservation_end_failed": "We kunnen je reservering niet beëindigen.",
+  "placeholder.license_plate": "AA-123-B",
+  "editor.field.default_license_plate": "Standaard kenteken",
+  "editor.description.default_license_plate": "Optioneel. Vul het kentekenveld voorin met deze waarde als het formulier leeg of gereset is."
 }
