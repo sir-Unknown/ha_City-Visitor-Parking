@@ -12,6 +12,7 @@ from custom_components.city_visitor_parking.config_flow import (
 )
 from custom_components.city_visitor_parking.const import (
     CONF_AUTO_END,
+    CONF_FREE_DATES,
     CONF_MUNICIPALITY,
     CONF_OPERATING_TIME_OVERRIDES,
     CONF_PERMIT_ID,
@@ -38,6 +39,7 @@ async def test_options_flow_save_overrides(hass: HomeAssistant) -> None:
             "operating_times": {
                 "monday_chargeable_windows": "09:00-13:00, 14:00-17:30",
             },
+            "free_parking_dates": {CONF_FREE_DATES: ""},
         },
     )
 
@@ -62,6 +64,7 @@ async def test_options_flow_invalid_range(hass: HomeAssistant) -> None:
         {
             CONF_AUTO_END: False,
             "operating_times": {"monday_chargeable_windows": "18:00-08:00"},
+            "free_parking_dates": {CONF_FREE_DATES: ""},
         },
     )
 
@@ -80,6 +83,7 @@ async def test_options_flow_incomplete_override(hass: HomeAssistant) -> None:
         {
             CONF_AUTO_END: False,
             "operating_times": {"monday_chargeable_windows": "08:00-"},
+            "free_parking_dates": {CONF_FREE_DATES: ""},
         },
     )
 

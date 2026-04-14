@@ -16,10 +16,8 @@ if TYPE_CHECKING:
     type CityVisitorParkingConfigEntry = ConfigEntry["CityVisitorParkingRuntimeData"]
 else:
 
-    class BaseProvider:  # pragma: no cover - runtime typing fallback
+    class BaseProvider:
         """Fallback provider type when typing is unavailable."""
-
-        pass
 
     CityVisitorParkingConfigEntry = object
 
@@ -35,3 +33,4 @@ class CityVisitorParkingRuntimeData:
     permit_id: str
     auto_end_state: AutoEndState
     operating_time_overrides: OperatingTimeOverrides
+    free_dates: str
