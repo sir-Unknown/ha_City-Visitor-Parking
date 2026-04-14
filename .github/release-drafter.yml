@@ -59,17 +59,6 @@ version-resolver:
       - "refactor"
       - "tests"
   default: patch
-autolabeler:
-  - label: "documentation"
-    files:
-      - "**/*.md"
-      - "docs/**"
-  - label: "tests"
-    files:
-      - "tests/**"
-  - label: "maintenance"
-    files:
-      - ".github/**"
 template: |
   🚗 City Visitor Parking is a Home Assistant integration that lets you register visitor parking permits directly from your dashboard.
 
