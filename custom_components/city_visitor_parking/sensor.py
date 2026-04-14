@@ -82,7 +82,7 @@ class RemainingTimeSensor(CityVisitorParkingEntity):
 
     _entity_key = "remaining_time"
     _attr_translation_key: str | None = "remaining_time"
-    _attr_device_class: SensorDeviceClass | None = SensorDeviceClass.DURATION
+    _attr_device_class: SensorDeviceClass | None = None
     _attr_native_unit_of_measurement: str | None = UnitOfTime.HOURS
     _attr_suggested_display_precision: int | None = 2
 
@@ -107,7 +107,7 @@ class RemainingTimeSensor(CityVisitorParkingEntity):
             self._attr_suggested_display_precision = 2
             self._attr_native_value = float(remaining_minutes)
         else:
-            self._attr_device_class = SensorDeviceClass.DURATION
+            self._attr_device_class = None
             self._attr_native_unit_of_measurement = UnitOfTime.HOURS
             self._attr_suggested_display_precision = 2
             attributes["remaining_minutes"] = remaining_minutes
