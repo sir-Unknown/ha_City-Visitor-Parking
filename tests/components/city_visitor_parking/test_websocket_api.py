@@ -316,4 +316,5 @@ def _runtime(
         permit_id="permit",
         auto_end_state=AutoEndState(),
         operating_time_overrides={},
+        free_dates="",
     )
