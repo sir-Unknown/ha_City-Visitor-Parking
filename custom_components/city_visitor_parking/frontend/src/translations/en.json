@@ -8,6 +8,8 @@
   "editor.field.icon": "Icon",
   "editor.field.type": "Card type",
   "editor.field.display_options": "Display options",
+  "editor.field.default_license_plate": "Default license plate",
+  "editor.field.show_name": "Show name",
   "editor.field.show_favorites": "Show favorites",
   "editor.field.show_start_time": "Show start time",
   "editor.field.show_end_time": "Show end time",
@@ -16,6 +18,8 @@
   "editor.description.config_entry": "Optional. Choose a permit to link the card to. Leave empty to show a selector.",
   "editor.description.title": "Optional custom title shown at the top of the card.",
   "editor.description.icon": "Optional icon shown next to the title.",
+  "editor.description.default_license_plate": "Optional. Pre-fill the license plate field with this value when the form is empty or reset.",
+  "editor.description.show_name": "Show the name field in the reservation form.",
   "editor.description.show_favorites": "Show the favorites picker in the reservation form.",
   "editor.description.show_start_time": "Allow selecting a start time in the reservation form.",
   "editor.description.show_end_time": "Allow selecting an end time in the reservation form.",
@@ -72,7 +76,5 @@
   "message.reservation_update_failed": "We could not update your reservation.",
   "message.reservation_ended": "Your reservation was ended.",
   "message.reservation_end_failed": "We could not end your reservation.",
-  "placeholder.license_plate": "AA-123-B",
-  "editor.field.default_license_plate": "Default license plate",
-  "editor.description.default_license_plate": "Optional. Pre-fill the license plate field with this value when the form is empty or reset."
+  "placeholder.license_plate": "AA-123-B"
 }

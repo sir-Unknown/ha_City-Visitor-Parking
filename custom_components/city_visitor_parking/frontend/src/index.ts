@@ -505,8 +505,21 @@ const renderPermitSelect = (params: {
   label: string;
   value: string;
   disabled: boolean;
+  preview?: boolean;
   onSelected: (event: Event) => void;
 }): TemplateResult => {
+  if (params.preview) {
+    return html`
+      <div class="row">
+        <ha-input
+          appearance="material"
+          .label=${params.label}
+          .value=${params.value}
+          ?disabled=${true}
+        ></ha-input>
+      </div>
+    `;
+  }
   return html`
     <div class="row">
       <ha-selector
@@ -528,17 +541,19 @@ const renderPermitSelect = (params: {
 };
 
 const renderFavoriteSelect = (params: {
+  showName: boolean;
   showFavorites: boolean;
   favoriteValue: string;
   favoriteSelectDisabled: boolean;
   hass: HomeAssistant | null | undefined;
   favoritesOptions: FavoriteOption[];
   favoritesError: string | null;
+  preview?: boolean;
   wrapSelect?: (content: TemplateResult) => unknown;
   localize: (key: string, ...args: Array<string | number>) => string;
   onSelected: (event: Event) => void;
 }): TemplateResult | typeof nothing => {
-  if (!params.showFavorites) return nothing;
+  if (!params.showName) return nothing;
 
   type FavoriteSelectOption = {
     value: string;
@@ -570,6 +585,32 @@ const renderFavoriteSelect = (params: {
   );
   selectOptions.push(...favoriteItems);
   const inputValue = params.favoriteValue;
+
+  if (params.preview) {
+    return html`
+      <div class="row">
+        <ha-input
+          appearance="material"
+          .label=${params.localize("field.name")}
+          .value=${inputValue}
+          ?disabled=${true}
+        ></ha-input>
+      </div>
+    `;
+  }
+
+  if (!params.showFavorites) {
+    return html`
+      <div class="row">
+        <ha-input
+          id="favorite"
+          appearance="material"
+          .label=${params.localize("field.name")}
+          .value=${inputValue}
+        ></ha-input>
+      </div>
+    `;
+  }
 
   const selectContent = html`
     <ha-selector
@@ -962,11 +1003,12 @@ type ParkingCardEditorConfig = {
   type: string;
   title?: string;
   icon?: string;
+  show_name?: boolean;
   show_favorites?: boolean;
   show_start_time?: boolean;
   show_end_time?: boolean;
-  config_entry_id?: string;
   default_license_plate?: string;
+  config_entry_id?: string;
 };
 
 type CardEditorFormSchema = ReadonlyArray<Record<string, unknown>>;
@@ -994,10 +1036,15 @@ const buildCardEditorSchema = (
         selector: { config_entry: { integration: DOMAIN } },
         required: false,
       },
+      { name: "show_name", selector: { boolean: {} }, default: true },
       { name: "show_favorites", selector: { boolean: {} }, default: true },
       { name: "show_start_time", selector: { boolean: {} }, default: true },
       { name: "show_end_time", selector: { boolean: {} }, default: true },
-      { name: "default_license_plate", selector: { text: {} }, required: false },
+      {
+        name: "default_license_plate",
+        selector: { text: {} },
+        required: false,
+      },
     ],
   },
 ];
@@ -1014,6 +1061,7 @@ class CityVisitorParkingCardEditor extends BaseCardEditor<ParkingCardEditorConfi
     const cardTypeOptions = buildCardTypeOptions(localizeTarget, "editor");
     const displayOptionsExpanded = Boolean(
       this._config?.config_entry_id ||
+      this._config?.show_name === false ||
       this._config?.show_favorites === false ||
       this._config?.show_start_time === false ||
       this._config?.show_end_time === false ||
@@ -1175,12 +1223,13 @@ const getActiveCardConfigForm = createConfigFormGetter(
     type: string;
     title?: string;
     icon?: string;
+    show_name?: boolean;
     show_favorites?: boolean;
     show_start_time?: boolean;
     show_end_time?: boolean;
+    default_license_plate?: string;
     config_entry_id?: string;
     device_id?: string;
-    default_license_plate?: string;
   };
   type CheckedElement = HTMLElement & { checked: boolean; disabled?: boolean };
   type FavoriteActionState = {
@@ -1192,6 +1241,7 @@ const getActiveCardConfigForm = createConfigFormGetter(
 
   const INPUT_VALUE_IDS = new Set([
     "licensePlate",
+    "favorite",
     "startDateTime",
     "endDateTime",
   ]);
@@ -1306,6 +1356,7 @@ const getActiveCardConfigForm = createConfigFormGetter(
     static getStubConfig(): CardConfig {
       return {
         type: `custom:${CARD_TYPE}`,
+        show_name: true,
         show_favorites: true,
         show_start_time: true,
         show_end_time: true,
@@ -1322,15 +1373,23 @@ const getActiveCardConfigForm = createConfigFormGetter(
         );
       }
       const priorEntryId = this._getActiveEntryId();
+      const priorShowName = this._config?.show_name ?? true;
       const priorShowFavorites = this._config?.show_favorites ?? true;
       this._config = {
+        show_name: config.show_name !== false,
         show_favorites: config.show_favorites !== false,
         show_start_time: config.show_start_time !== false,
         show_end_time: config.show_end_time !== false,
         ...config,
       };
-      if (this._config.default_license_plate && !this._formValues["licensePlate"]) {
+      if (
+        this._config.default_license_plate &&
+        !this._formValues["licensePlate"]
+      ) {
         this._setInputValue("licensePlate", this._config.default_license_plate);
+      }
+      if (priorShowName && !this._config.show_name) {
+        this._setInputValue("favorite", "");
       }
       if (priorShowFavorites && !this._config.show_favorites) {
         this._resetFavoritesState();
@@ -1385,8 +1444,7 @@ const getActiveCardConfigForm = createConfigFormGetter(
     getGridOptions(): Record<string, number> {
       return {
         columns: 12,
-        rows: 4,
-        min_columns: 4,
+        min_columns: 6,
         min_rows: 2,
       };
     }
@@ -1475,7 +1533,12 @@ const getActiveCardConfigForm = createConfigFormGetter(
     }
 
     async _maybeLoadFavorites(): Promise<void> {
-      if (!this._hass || !this._config?.show_favorites) return;
+      if (
+        !this._hass ||
+        !this._config?.show_favorites ||
+        !this._config?.show_name
+      )
+        return;
       if (!isHassRunning(this._hass)) return;
       const entryId = this._getActiveEntryId();
       if (!entryId) return;
@@ -1571,7 +1634,7 @@ const getActiveCardConfigForm = createConfigFormGetter(
     }
 
     _getFavoriteActionState(): FavoriteActionState {
-      if (!this._config?.show_favorites) {
+      if (!this._config?.show_favorites || !this._config?.show_name) {
         return {
           showAddFavorite: false,
           showRemoveFavorite: false,
@@ -1629,6 +1692,7 @@ const getActiveCardConfigForm = createConfigFormGetter(
 
       const title = this._config.title || "";
       const icon = this._config.icon;
+      const showName = this._config.show_name ?? true;
       const showFavorites = this._config.show_favorites ?? true;
       const showStart = this._config.show_start_time ?? true;
       const showEnd = this._config.show_end_time ?? true;
@@ -1674,16 +1738,19 @@ const getActiveCardConfigForm = createConfigFormGetter(
                   label: localizeFn("field.permit"),
                   value: permitSelectValue,
                   disabled: permitSelectDisabled,
+                  preview: controlsDisabled,
                   onSelected: this._onPermitSelectChange,
                 })
               : nothing}
             ${renderFavoriteSelect({
+              showName,
               showFavorites,
               favoriteValue,
               favoriteSelectDisabled,
               hass: this._hass,
               favoritesOptions,
               favoritesError: this._favoritesError,
+              preview: controlsDisabled,
               localize: localizeFn,
               onSelected: this._onFavoriteSelectChange,
               wrapSelect: (content) => keyed(activeEntryId ?? "", content),
@@ -1698,6 +1765,7 @@ const getActiveCardConfigForm = createConfigFormGetter(
                   ? localizeFn("placeholder.license_plate")
                   : ""}
                 .value=${priorLicense}
+                ?disabled=${controlsDisabled}
                 @focusin=${this._onLicensePlateFocusIn}
                 @focusout=${this._onLicensePlateFocusOut}
               ></ha-input>
@@ -1743,7 +1811,7 @@ const getActiveCardConfigForm = createConfigFormGetter(
                 `
               : nothing}
             ${renderFavoriteActionRow({
-              showFavorites,
+              showFavorites: showFavorites && showName,
               showAddFavorite,
               showRemoveFavorite,
               selectedFavoriteId:
@@ -1774,7 +1842,7 @@ const getActiveCardConfigForm = createConfigFormGetter(
     }
 
     _scheduleFavoriteActionsUpdate(): void {
-      if (!this._config?.show_favorites) return;
+      if (!this._config?.show_favorites || !this._config?.show_name) return;
       const license = this._getInputValue("licensePlate").trim();
       const name = this._getInputValue("favorite").trim();
       const matchingFavorite = this._findFavorite(license, name);
@@ -1858,7 +1926,12 @@ const getActiveCardConfigForm = createConfigFormGetter(
     }
 
     _handleFavoriteSelectChange(event: Event): void {
-      if (!this._config?.show_favorites || this._isInEditor()) return;
+      if (
+        !this._config?.show_favorites ||
+        !this._config?.show_name ||
+        this._isInEditor()
+      )
+        return;
       const detail = (event as CustomEvent<{ value?: string | null }>).detail;
       const select = event.currentTarget as ValueElement | null;
       const path = event.composedPath();
@@ -2597,9 +2670,8 @@ const getActiveCardConfigForm = createConfigFormGetter(
     getGridOptions(): Record<string, number> {
       return {
         columns: 12,
-        rows: 4,
-        min_columns: 4,
-        min_rows: 1,
+        min_columns: 6,
+        min_rows: 4,
       };
     }
 
