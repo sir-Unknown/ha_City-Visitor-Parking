@@ -8,8 +8,8 @@ from typing import cast
 
 from homeassistant.util import dt as dt_util
 
-from .const import CONF_OPERATING_TIME_OVERRIDES, WEEKDAY_KEYS
-from .helpers import normalize_override_windows
+from .const import CONF_FREE_DATES, CONF_OPERATING_TIME_OVERRIDES, WEEKDAY_KEYS
+from .helpers import normalize_override_windows, parse_comma_separated
 from .models import TimeRange
 
 
@@ -31,17 +31,25 @@ def current_or_next_window_with_overrides(
 ) -> TimeRange | None:
     """Return the current or next chargeable window, honoring overrides."""
     overrides = options.get(CONF_OPERATING_TIME_OVERRIDES)
-    if not isinstance(overrides, Mapping) or not overrides:
+    free_dates_raw = options.get(CONF_FREE_DATES)
+    has_free_dates = isinstance(free_dates_raw, str) and bool(free_dates_raw.strip())
+    has_overrides = isinstance(overrides, Mapping) and bool(overrides)
+
+    if not has_free_dates and not has_overrides:
         return current_or_next_window(zone_validity, now)
 
     windows: list[TimeRange] = []
-    # Look ahead one week to apply weekday overrides for upcoming windows.
+    # Look ahead one week to apply weekday overrides and free dates.
     for offset in range(7):
         windows.extend(
             windows_for_today(zone_validity, options, now + timedelta(days=offset))
         )
 
     if not windows:
+        # When free_dates are configured an empty result may be intentional —
+        # do not fall back to unfiltered provider windows in that case.
+        if has_free_dates:
+            return None
         return current_or_next_window(zone_validity, now)
 
     return current_or_next_window(windows, now)
@@ -55,6 +63,16 @@ def windows_for_today(
     """Return chargeable windows for today, applying overrides if present."""
     local_now = dt_util.as_local(now)
     local_date = local_now.date()
+
+    # Return no chargeable windows when today is a configured free date.
+    free_dates_raw = options.get(CONF_FREE_DATES)
+    if isinstance(free_dates_raw, str) and free_dates_raw.strip():
+        today_ddmm = local_now.strftime("%d-%m")
+        today_ddmmyyyy = local_now.strftime("%d-%m-%Y")
+        for d in parse_comma_separated(free_dates_raw):
+            if d in (today_ddmm, today_ddmmyyyy):
+                return []
+
     local_day = WEEKDAY_KEYS[local_now.weekday()]
 
     overrides = options.get(CONF_OPERATING_TIME_OVERRIDES)

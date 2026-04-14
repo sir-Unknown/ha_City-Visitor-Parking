@@ -882,6 +882,18 @@ var renderCardHeader = (title, icon) => {
   `;
 };
 var renderPermitSelect = (params) => {
+  if (params.preview) {
+    return b2`
+      <div class="row">
+        <ha-input
+          appearance="material"
+          .label=${params.label}
+          .value=${params.value}
+          ?disabled=${true}
+        ></ha-input>
+      </div>
+    `;
+  }
   return b2`
     <div class="row">
       <ha-selector
@@ -902,7 +914,7 @@ var renderPermitSelect = (params) => {
   `;
 };
 var renderFavoriteSelect = (params) => {
-  if (!params.showFavorites) return A;
+  if (!params.showName) return A;
   const selectOptions = [];
   const favoriteItems = [];
   const seenValues = /* @__PURE__ */ new Set();
@@ -923,6 +935,30 @@ var renderFavoriteSelect = (params) => {
   );
   selectOptions.push(...favoriteItems);
   const inputValue = params.favoriteValue;
+  if (params.preview) {
+    return b2`
+      <div class="row">
+        <ha-input
+          appearance="material"
+          .label=${params.localize("field.name")}
+          .value=${inputValue}
+          ?disabled=${true}
+        ></ha-input>
+      </div>
+    `;
+  }
+  if (!params.showFavorites) {
+    return b2`
+      <div class="row">
+        <ha-input
+          id="favorite"
+          appearance="material"
+          .label=${params.localize("field.name")}
+          .value=${inputValue}
+        ></ha-input>
+      </div>
+    `;
+  }
   const selectContent = b2`
     <ha-selector
       id="favorite"
@@ -1216,9 +1252,15 @@ var buildCardEditorSchema = (cardTypeOptions, displayOptionsExpanded) => [
         selector: { config_entry: { integration: DOMAIN } },
         required: false
       },
+      { name: "show_name", selector: { boolean: {} }, default: true },
       { name: "show_favorites", selector: { boolean: {} }, default: true },
       { name: "show_start_time", selector: { boolean: {} }, default: true },
-      { name: "show_end_time", selector: { boolean: {} }, default: true }
+      { name: "show_end_time", selector: { boolean: {} }, default: true },
+      {
+        name: "default_license_plate",
+        selector: { text: {} },
+        required: false
+      }
     ]
   }
 ];
@@ -1233,7 +1275,7 @@ var CityVisitorParkingCardEditor = class extends BaseCardEditor {
     );
     const cardTypeOptions = buildCardTypeOptions(localizeTarget, "editor");
     const displayOptionsExpanded = Boolean(
-      this._config?.config_entry_id || this._config?.show_favorites === false || this._config?.show_start_time === false || this._config?.show_end_time === false
+      this._config?.config_entry_id || this._config?.show_name === false || this._config?.show_favorites === false || this._config?.show_start_time === false || this._config?.show_end_time === false || this._config?.default_license_plate
     );
     return b2`
       <ha-form
@@ -1350,6 +1392,7 @@ var getActiveCardConfigForm = createConfigFormGetter(
   const STATUS_REFRESH_MS = 6e4;
   const INPUT_VALUE_IDS = /* @__PURE__ */ new Set([
     "licensePlate",
+    "favorite",
     "startDateTime",
     "endDateTime"
   ]);
@@ -1421,6 +1464,7 @@ var getActiveCardConfigForm = createConfigFormGetter(
     static getStubConfig() {
       return {
         type: `custom:${CARD_TYPE}`,
+        show_name: true,
         show_favorites: true,
         show_start_time: true,
         show_end_time: true
@@ -1436,13 +1480,21 @@ var getActiveCardConfigForm = createConfigFormGetter(
         );
       }
       const priorEntryId = this._getActiveEntryId();
+      const priorShowName = this._config?.show_name ?? true;
       const priorShowFavorites = this._config?.show_favorites ?? true;
       this._config = {
+        show_name: config.show_name !== false,
         show_favorites: config.show_favorites !== false,
         show_start_time: config.show_start_time !== false,
         show_end_time: config.show_end_time !== false,
         ...config
       };
+      if (this._config.default_license_plate && !this._formValues["licensePlate"]) {
+        this._setInputValue("licensePlate", this._config.default_license_plate);
+      }
+      if (priorShowName && !this._config.show_name) {
+        this._setInputValue("favorite", "");
+      }
       if (priorShowFavorites && !this._config.show_favorites) {
         this._resetFavoritesState();
         this._setInputValue("favorite", "");
@@ -1489,8 +1541,7 @@ var getActiveCardConfigForm = createConfigFormGetter(
     getGridOptions() {
       return {
         columns: 12,
-        rows: 4,
-        min_columns: 4,
+        min_columns: 6,
         min_rows: 2
       };
     }
@@ -1567,7 +1618,8 @@ var getActiveCardConfigForm = createConfigFormGetter(
       return loadPromise;
     }
     async _maybeLoadFavorites() {
-      if (!this._hass || !this._config?.show_favorites) return;
+      if (!this._hass || !this._config?.show_favorites || !this._config?.show_name)
+        return;
       if (!isHassRunning(this._hass)) return;
       const entryId = this._getActiveEntryId();
       if (!entryId) return;
@@ -1661,7 +1713,7 @@ var getActiveCardConfigForm = createConfigFormGetter(
       return loadPromise;
     }
     _getFavoriteActionState() {
-      if (!this._config?.show_favorites) {
+      if (!this._config?.show_favorites || !this._config?.show_name) {
         return {
           showAddFavorite: false,
           showRemoveFavorite: false,
@@ -1701,6 +1753,7 @@ var getActiveCardConfigForm = createConfigFormGetter(
       const priorFavorite = this._getInputValue("favorite");
       const title = this._config.title || "";
       const icon = this._config.icon;
+      const showName = this._config.show_name ?? true;
       const showFavorites = this._config.show_favorites ?? true;
       const showStart = this._config.show_start_time ?? true;
       const showEnd = this._config.show_end_time ?? true;
@@ -1735,15 +1788,18 @@ var getActiveCardConfigForm = createConfigFormGetter(
         label: localizeFn("field.permit"),
         value: permitSelectValue,
         disabled: permitSelectDisabled,
+        preview: controlsDisabled,
         onSelected: this._onPermitSelectChange
       }) : A}
             ${renderFavoriteSelect({
+        showName,
         showFavorites,
         favoriteValue,
         favoriteSelectDisabled,
         hass: this._hass,
         favoritesOptions,
         favoritesError: this._favoritesError,
+        preview: controlsDisabled,
         localize: localizeFn,
         onSelected: this._onFavoriteSelectChange,
         wrapSelect: (content) => i6(activeEntryId ?? "", content)
@@ -1756,6 +1812,7 @@ var getActiveCardConfigForm = createConfigFormGetter(
                 .label=${localizeFn("field.license_plate")}
                 placeholder=${this._licensePlateFocused ? localizeFn("placeholder.license_plate") : ""}
                 .value=${priorLicense}
+                ?disabled=${controlsDisabled}
                 @focusin=${this._onLicensePlateFocusIn}
                 @focusout=${this._onLicensePlateFocusOut}
               ></ha-input>
@@ -1795,7 +1852,7 @@ var getActiveCardConfigForm = createConfigFormGetter(
                   </div>
                 ` : A}
             ${renderFavoriteActionRow({
-        showFavorites,
+        showFavorites: showFavorites && showName,
         showAddFavorite,
         showRemoveFavorite,
         selectedFavoriteId: removeFavorite?.id || removeFavorite?.license_plate || "",
@@ -1823,7 +1880,7 @@ var getActiveCardConfigForm = createConfigFormGetter(
       }
     }
     _scheduleFavoriteActionsUpdate() {
-      if (!this._config?.show_favorites) return;
+      if (!this._config?.show_favorites || !this._config?.show_name) return;
       const license = this._getInputValue("licensePlate").trim();
       const name = this._getInputValue("favorite").trim();
       const matchingFavorite = this._findFavorite(license, name);
@@ -1891,7 +1948,8 @@ var getActiveCardConfigForm = createConfigFormGetter(
       this._handlePermitChange(nextValue);
     }
     _handleFavoriteSelectChange(event) {
-      if (!this._config?.show_favorites || this._isInEditor()) return;
+      if (!this._config?.show_favorites || !this._config?.show_name || this._isInEditor())
+        return;
       const detail = event.detail;
       const select = event.currentTarget;
       const path = event.composedPath();
@@ -1977,6 +2035,9 @@ var getActiveCardConfigForm = createConfigFormGetter(
       const hadValues = Object.keys(this._formValues).length > 0;
       const hadAddFavoriteChecked = this._addFavoriteChecked;
       this._formValues = {};
+      if (this._config?.default_license_plate) {
+        this._formValues["licensePlate"] = this._config.default_license_plate;
+      }
       clearFavoriteTransientState(this);
       if (hadValues || hadAddFavoriteChecked) this._requestRender();
     }
@@ -2487,9 +2548,8 @@ var getActiveCardConfigForm = createConfigFormGetter(
     getGridOptions() {
       return {
         columns: 12,
-        rows: 4,
-        min_columns: 4,
-        min_rows: 1
+        min_columns: 6,
+        min_rows: 4
       };
     }
     async _maybeLoadActiveReservations(force = false) {
