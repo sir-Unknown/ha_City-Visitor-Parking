@@ -1,36 +1,36 @@
-# Dependency Review Action
+# Scans dependency changes in PRs for known vulnerabilities using the GitHub
+# Advisory Database. Fails on findings with severity >= moderate and posts a
+# summary comment on the PR when issues are found.
 #
-# This Action will scan dependency manifest files that change as part of a Pull Request,
-# surfacing known-vulnerable versions of the packages declared or updated in the PR.
-# Once installed, if the workflow run is marked as required, PRs introducing known-vulnerable
-# packages will be blocked from merging.
+# Triggers only when pyproject.toml or uv.lock changes, so routine code PRs
+# are unaffected.
 #
-# Source repository: https://github.com/actions/dependency-review-action
-# Public documentation: https://docs.github.com/en/code-security/supply-chain-security/understanding-your-software-supply-chain/about-dependency-review#dependency-review-enforcement
+# Note: allow-ghsas contains temporary exceptions for Home Assistant 2026.4.1
+# pinned dependencies (PyJWT and cryptography) that cannot be updated until
+# upstream Home Assistant updates.
 name: "Dependency review"
 on:
   workflow_dispatch:
   pull_request:
     branches: ["main"]
+    paths:
+      - "pyproject.toml"
+      - "uv.lock"
 
 concurrency:
   group: dependency-review-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
-# If using a dependency submission action in this workflow this permission will need to be set to:
-#
-# permissions:
-#   contents: write
-#
-# https://docs.github.com/en/enterprise-cloud@latest/code-security/supply-chain-security/understanding-your-software-supply-chain/using-the-dependency-submission-api
-permissions:
-  contents: read
-  pull-requests: write
+permissions: {}
 
 jobs:
   dependency-review:
+    name: Review dependency changes
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: write # Required because `comment-summary-in-pr: on-failure` posts a PR comment.
     steps:
       - name: "Checkout repository"
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -38,15 +38,10 @@ jobs:
           persist-credentials: false
       - name: "Dependency Review"
         uses: actions/dependency-review-action@2031cfc080254a8a887f58cffee85186f0e49e48 # v4.9.0
-        # Commonly enabled options, see https://github.com/actions/dependency-review-action#configuration-options for all available options.
         with:
           base-ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || 'refs/heads/main' }}
           head-ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
           comment-summary-in-pr: on-failure
           fail-on-severity: moderate
-          # Temporary exceptions: Home Assistant 2026.4.1 currently pins PyJWT==2.10.1
-          # and cryptography==46.0.5 exactly, so the uv-managed dev/test lockfile
-          # cannot move off these advisories until upstream updates.
           allow-ghsas: GHSA-752w-5fwx-jx9f,GHSA-p423-j2cm-9vmq
           retry-on-snapshot-warnings: true
-        #   deny-licenses: GPL-1.0-or-later, LGPL-2.0-or-later

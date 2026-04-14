@@ -1,6 +1,6 @@
 name-template: "v$RESOLVED_VERSION"
 tag-template: "v$RESOLVED_VERSION"
-commitish: "main"
+commitish: "testing"
 change-template: "- $TITLE @$AUTHOR (#$NUMBER)"
 no-changes-template: "- No changes in `custom_components/**` since the last release."
 exclude-labels:
@@ -38,27 +38,6 @@ categories:
   - title: "📚 Documentation"
     labels:
       - "documentation"
-version-resolver:
-  major:
-    labels:
-      - "major"
-      - "breaking-change"
-  minor:
-    labels:
-      - "minor"
-      - "new-feature"
-  patch:
-    labels:
-      - "bugfix"
-      - "ci"
-      - "dependencies"
-      - "documentation"
-      - "enhancement"
-      - "maintenance"
-      - "performance"
-      - "refactor"
-      - "tests"
-  default: patch
 autolabeler:
   - label: "documentation"
     files:
@@ -71,7 +50,15 @@ autolabeler:
     files:
       - ".github/**"
 template: |
-  🚗 City Visitor Parking is a Home Assistant integration that lets you register visitor parking permits directly from your dashboard.
+  > [!WARNING]
+  > **This is a testing release and is highly unstable.**
+  > It may contain breaking changes, incomplete features, or regressions.
+  > **Only install this if you were explicitly asked to by the maintainer.**
+  > Do not use this in a production Home Assistant environment.
+
+  ## 🔗 pyCityVisitorParking
+
+  **Commit:** `FILL_IN_COMMIT_SHA`
 
   ## 📋 Changes
 
@@ -79,12 +66,29 @@ template: |
 
   ## 📦 Installation
 
-  [![Open in HACS](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=sir-Unknown&repository=ha_City-Visitor-Parking&category=integration)
+  In HACS, go to **City Visitor Parking** → **⋮** → **Redownload** → select this version from the version dropdown.
 
-  ## 📚 Documentation
+  ## 🔁 Rollback
 
-  See the [README](https://github.com/sir-Unknown/ha_City-Visitor-Parking#readme) for setup instructions and configuration options.
+  If something breaks, reinstall the latest stable release the same way: **HACS** → **City Visitor Parking** → **⋮** → **Redownload** → select the stable version.
+
+  ## 🪲 Enable debug logging
+
+  To help with testing, add the following to your `configuration.yaml` and restart Home Assistant:
+
+  ```yaml
+  logger:
+    default: info
+    logs:
+      custom_components.city_visitor_parking: debug
+      pycityvisitorparking.provider: debug
+      pycityvisitorparking.provider.dvsportal_new: debug
+  ```
 
   ## 🐛 Reporting issues
 
+  Before opening an issue, download the diagnostics file via **Settings** → **Devices & services** → **City Visitor Parking** → **⋮** → **Download diagnostics**, and attach it to your report.
+
   [![Open an issue](https://img.shields.io/badge/Report%20a%20bug-red?logo=github)](https://github.com/sir-Unknown/ha_City-Visitor-Parking/issues/new)
+
+  Include the release version, a description of the problem, relevant logs, and the diagnostics file if available.

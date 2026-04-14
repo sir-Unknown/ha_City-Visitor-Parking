@@ -15,6 +15,7 @@ CONF_PROVIDER_ID: Final = "provider_id"
 CONF_MUNICIPALITY: Final = "municipality_name"
 CONF_BASE_URL: Final = "base_url"
 CONF_API_URL: Final = "api_url"
+CONF_GUI_URL: Final = "gui_url"
 CONF_PERMIT_ID: Final = "permit_id"
 CONF_DESCRIPTION: Final = "description"
 

@@ -1,3 +1,6 @@
+# Locks closed issues and PRs after an inactivity threshold to prevent
+# off-topic comments on resolved threads.
+# Thresholds: issues locked after 30 days, PRs after 14 days.
 name: Lock
 
 on:
@@ -16,13 +19,13 @@ jobs:
     name: Lock inactive threads
     runs-on: ubuntu-latest
     permissions:
-      issues: write
-      pull-requests: write
+      issues: write # Required to lock closed issues after the inactivity threshold.
+      pull-requests: write # Required to lock closed pull requests after the inactivity threshold.
     steps:
       - name: Lock closed issues and PRs
         uses: dessant/lock-threads@7266a7ce5c1df01b1c6db85bf8cd86c737dadbe7 # v6.0.0
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           issue-inactive-days: 30
-          pr-inactive-days: 1
+          pr-inactive-days: 14
           issue-lock-reason: "resolved"

@@ -12,6 +12,11 @@
     "source.organizeImports.ruff": "explicit"
   },
 
+  "yaml.schemaStore.enable": false,
+  "yaml.schemas": {
+    "https://raw.githubusercontent.com/SchemaStore/schemastore/master/src/schemas/json/dependabot-2.0.json": ".github/dependabot.yml"
+  },
+
   "files.insertFinalNewline": true,
   "files.trimTrailingWhitespace": true,
   "workbench.remoteIndicator.showExtensionRecommendations": false
