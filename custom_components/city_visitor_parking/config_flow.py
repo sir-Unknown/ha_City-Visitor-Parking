@@ -40,7 +40,7 @@ from .const import (
 )
 from .helpers import get_attr, normalize_override_windows
 from .models import ProviderConfig
-from .version import async_get_versions, format_log_metadata
+from .version import async_get_versions, build_log_block
 
 SECTION_OPERATING_TIMES: Final[str] = "operating_times"
 
@@ -77,6 +77,10 @@ class CityVisitorParkingConfigFlow(config_entries.ConfigFlow):
         self._provider_config: ProviderConfig | None = None
         self._credentials: dict[str, str] = {}
         self._reauth_entry: config_entries.ConfigEntry | None = None
+
+    def is_matching(self, other_flow: CityVisitorParkingConfigFlow) -> bool:
+        """Return True if other_flow matches this flow."""
+        return False
 
     async def async_step_user(
         self, user_input: dict[str, object] | None = None
@@ -119,7 +123,7 @@ class CityVisitorParkingConfigFlow(config_entries.ConfigFlow):
         return self.hass.config_entries.async_get_entry(entry_id)
 
     async def async_step_reauth(
-        self, user_input: dict[str, object] | None = None
+        self, _user_input: dict[str, object] | None = None
     ) -> config_entries.ConfigFlowResult:
         """Handle reauthentication."""
         entry = self._entry_from_context()
@@ -244,9 +248,9 @@ class CityVisitorParkingConfigFlow(config_entries.ConfigFlow):
                                 value=provider.municipality_name,
                                 label=provider.municipality_name,
                             )
-                            for key, provider in sorted(
-                                self._providers.items(),
-                                key=lambda item: item[1].municipality_name,
+                            for provider in sorted(
+                                self._providers.values(),
+                                key=lambda p: p.municipality_name,
                             )
                         ],
                         custom_value=True,
@@ -334,10 +338,10 @@ class CityVisitorParkingConfigFlow(config_entries.ConfigFlow):
             permit = await provider.get_permit()
         except AuthError as err:
             _LOGGER.debug(
-                "Auth error during login for %s: %s %s",
-                self._provider_config.provider_id,
-                err,
-                format_log_metadata(
+                "%s",
+                build_log_block(
+                    "login failed",
+                    {"error-type": type(err).__name__, "error": str(err)},
                     provider=self._provider_config.provider_id,
                     city=self._provider_config.municipality_name,
                     ha_cvp_version=ha_cvp_version,
@@ -349,11 +353,10 @@ class CityVisitorParkingConfigFlow(config_entries.ConfigFlow):
             error_key = "cannot_connect"
         except RateLimitError as err:
             _LOGGER.debug(
-                "Rate limit during login for %s: %s: %s %s",
-                self._provider_config.provider_id,
-                type(err).__name__,
-                err,
-                format_log_metadata(
+                "%s",
+                build_log_block(
+                    "login rate-limited",
+                    {"error-type": type(err).__name__, "error": str(err)},
                     provider=self._provider_config.provider_id,
                     city=self._provider_config.municipality_name,
                     ha_cvp_version=ha_cvp_version,
@@ -363,11 +366,10 @@ class CityVisitorParkingConfigFlow(config_entries.ConfigFlow):
             error_key = "rate_limit"
         except ServiceUnavailableError as err:
             _LOGGER.debug(
-                "Service unavailable during login for %s: %s: %s %s",
-                self._provider_config.provider_id,
-                type(err).__name__,
-                err,
-                format_log_metadata(
+                "%s",
+                build_log_block(
+                    "login service unavailable",
+                    {"error-type": type(err).__name__, "error": str(err)},
                     provider=self._provider_config.provider_id,
                     city=self._provider_config.municipality_name,
                     ha_cvp_version=ha_cvp_version,
@@ -377,11 +379,10 @@ class CityVisitorParkingConfigFlow(config_entries.ConfigFlow):
             error_key = "service_unavailable"
         except PyCityVisitorParkingError as err:
             _LOGGER.debug(
-                "Provider error during login for %s: %s: %s %s",
-                self._provider_config.provider_id,
-                type(err).__name__,
-                err,
-                format_log_metadata(
+                "%s",
+                build_log_block(
+                    "login provider error",
+                    {"error-type": type(err).__name__, "error": str(err)},
                     provider=self._provider_config.provider_id,
                     city=self._provider_config.municipality_name,
                     ha_cvp_version=ha_cvp_version,
@@ -390,13 +391,12 @@ class CityVisitorParkingConfigFlow(config_entries.ConfigFlow):
             )
             error_key = "unknown"
         # Allowed in config flow
-        except Exception as err:
+        except Exception as err:  # pylint: disable=broad-exception-caught
             _LOGGER.debug(
-                "Unexpected error during login for %s: %s: %s %s",
-                self._provider_config.provider_id,
-                type(err).__name__,
-                err,
-                format_log_metadata(
+                "%s",
+                build_log_block(
+                    "login unexpected error",
+                    {"error-type": type(err).__name__, "error": str(err)},
                     provider=self._provider_config.provider_id,
                     city=self._provider_config.municipality_name,
                     ha_cvp_version=ha_cvp_version,

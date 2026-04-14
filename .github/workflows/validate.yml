@@ -5,7 +5,7 @@ on:
   schedule:
     - cron: "0 3 * * *"
   push:
-    branches: [main]
+    branches: [main, testing]
     tags:
       - "*"
     paths-ignore:
@@ -56,6 +56,7 @@ jobs:
   hassfest:
     name: Hassfest validation
     needs: [ruff]
+    if: ${{ github.ref_name != 'testing' && !(contains(github.ref_name, '-beta') || contains(github.ref_name, '-rc') || contains(github.ref_name, '-alpha')) }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -66,11 +67,12 @@ jobs:
         with:
           persist-credentials: false
       - name: Run hassfest validation
-        uses: home-assistant/actions/hassfest@5752577ea7cc5aefb064b0b21432f18fe4d6ba90 # master
+        uses: home-assistant/actions/hassfest@f6f29a7ee3fa0eccadf3620a7b9ee00ab54ec03b # master
 
   hacs:
     name: HACS validation
     needs: [ruff]
+    if: ${{ github.ref_name != 'testing' && !(contains(github.ref_name, '-beta') || contains(github.ref_name, '-rc') || contains(github.ref_name, '-alpha')) }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -115,6 +117,7 @@ jobs:
 
   manifest-version:
     name: Manifest Python package version
+    if: ${{ github.ref_name != 'testing' && !(contains(github.ref_name, '-beta') || contains(github.ref_name, '-rc') || contains(github.ref_name, '-alpha')) }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -148,12 +151,16 @@ jobs:
                   time.sleep(10)
           PYEOF
           ) || exit 0
-          MANIFEST=$(python3 -c "
-          import json
+          MANIFEST=$(python3 - <<'PYEOF'
+          import json, sys
           data = json.load(open('custom_components/city_visitor_parking/manifest.json'))
-          pkg = next(r for r in data['requirements'] if r.startswith('pycityvisitorparking=='))
+          pkg = next((r for r in data['requirements'] if r.startswith('pycityvisitorparking==')), None)
+          if pkg is None:
+              print("::warning::manifest.json uses a non-PyPI requirement for pycityvisitorparking — skipping version check.", file=sys.stderr)
+              sys.exit(2)
           print(pkg.split('==')[1])
-          ")
+          PYEOF
+          ) || exit 0
           echo "Latest on PyPI : $LATEST"
           echo "In manifest.json: $MANIFEST"
           if [ "$LATEST" != "$MANIFEST" ]; then

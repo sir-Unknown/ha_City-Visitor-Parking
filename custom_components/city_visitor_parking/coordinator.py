@@ -25,7 +25,7 @@ from .models import (
 )
 from .models import Favorite as CoordinatorFavorite
 from .time_windows import windows_for_today
-from .version import async_get_versions, format_log_metadata
+from .version import async_get_versions, build_log_block
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Iterable, Mapping
@@ -135,12 +135,15 @@ class CityVisitorParkingCoordinator(DataUpdateCoordinator[CoordinatorData]):
         except AuthError as err:
             self._log_unavailable_once()
             _LOGGER.debug(
-                "Coordinator auth failed for %s (permit %s): %s: %s %s",
-                self._entry_title,
-                self._permit_id,
-                type(err).__name__,
-                err,
-                format_log_metadata(
+                "%s",
+                build_log_block(
+                    "coordinator auth failed",
+                    {
+                        "entry": self._entry_title,
+                        "permit": self._permit_id,
+                        "error-type": type(err).__name__,
+                        "error": str(err),
+                    },
                     provider=self._provider.provider_id,
                     city=getattr(self._provider, "_request_context_name", None)
                     or "unknown",
@@ -152,12 +155,15 @@ class CityVisitorParkingCoordinator(DataUpdateCoordinator[CoordinatorData]):
         except (NetworkError, PyCityVisitorParkingError) as err:
             self._log_unavailable_once()
             _LOGGER.debug(
-                "Coordinator fetch failed for %s (permit %s): %s: %s %s",
-                self._entry_title,
-                self._permit_id,
-                type(err).__name__,
-                err,
-                format_log_metadata(
+                "%s",
+                build_log_block(
+                    "coordinator fetch failed",
+                    {
+                        "entry": self._entry_title,
+                        "permit": self._permit_id,
+                        "error-type": type(err).__name__,
+                        "error": str(err),
+                    },
                     provider=self._provider.provider_id,
                     city=getattr(self._provider, "_request_context_name", None)
                     or "unknown",
@@ -169,12 +175,15 @@ class CityVisitorParkingCoordinator(DataUpdateCoordinator[CoordinatorData]):
         except Exception as err:  # Allowed in background tasks
             self._log_unavailable_once()
             _LOGGER.debug(
-                "Coordinator fetch failed unexpectedly for %s (permit %s): %s: %s %s",
-                self._entry_title,
-                self._permit_id,
-                type(err).__name__,
-                err,
-                format_log_metadata(
+                "%s",
+                build_log_block(
+                    "coordinator fetch failed unexpectedly",
+                    {
+                        "entry": self._entry_title,
+                        "permit": self._permit_id,
+                        "error-type": type(err).__name__,
+                        "error": str(err),
+                    },
                     provider=self._provider.provider_id,
                     city=getattr(self._provider, "_request_context_name", None)
                     or "unknown",
