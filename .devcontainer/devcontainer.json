@@ -4,7 +4,8 @@
 
   "workspaceFolder": "/workspaces/ha_City-Visitor-Parking",
 
-  "postCreateCommand": "bash .devcontainer/setup.sh",
+  "onCreateCommand": "bash .devcontainer/setup.sh",
+  "updateContentCommand": "bash .devcontainer/update-content.sh",
 
   "features": {
     "ghcr.io/devcontainers/features/github-cli:1": {},
@@ -16,14 +17,14 @@
 
   "remoteEnv": {
     "COREPACK_ENABLE_DOWNLOAD_PROMPT": "0",
-    "VIRTUAL_ENV": "/home/vscode/.venv",
-    "PATH": "/home/vscode/.venv/bin:/home/vscode/.local/bin:${containerEnv:PATH}"
+    "VIRTUAL_ENV": "${containerWorkspaceFolder}/.venv",
+    "PATH": "${containerWorkspaceFolder}/.venv/bin:/home/vscode/.local/bin:${containerEnv:PATH}"
   },
 
   "customizations": {
     "vscode": {
       "settings": {
-        "python.defaultInterpreterPath": "/home/vscode/.venv/bin/python",
+        "python.defaultInterpreterPath": "${containerWorkspaceFolder}/.venv/bin/python",
         "editor.formatOnSave": true,
         "[python]": {
           "editor.defaultFormatter": "charliermarsh.ruff"
@@ -31,10 +32,12 @@
       },
       "extensions": [
         "ms-python.python",
+        "ms-python.vscode-pylance",
         "charliermarsh.ruff",
         "ms-python.debugpy",
         "github.vscode-github-actions",
-        "anthropic.claude-code"
+        "anthropic.claude-code",
+        "tamasfe.even-better-toml"
       ]
     }
   },

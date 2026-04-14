@@ -1,0 +1,36 @@
+# Automatically applies labels to pull requests based on the changed file paths,
+# using the rules defined in .github/labeler.yml. Labels are kept in sync on
+# every push to the PR branch.
+#
+# Uses pull_request_target so the labeler token has write access on PRs from
+# forks. Safe because this workflow never checks out or executes PR code.
+name: Labeler
+# yamllint disable-line rule:truthy
+
+on:
+  pull_request_target: # zizmor: ignore[dangerous-triggers] This workflow only applies labels and does not check out or run PR code.
+    types:
+      - opened
+      - reopened
+      - synchronize
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  labeler:
+    name: Apply labels
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write # Required to apply and synchronize labels on the pull request.
+    steps:
+      - name: Run labeler
+        uses: actions/labeler@634933edcd8ababfe52f92936142cc22ac488b1b # v6.0.1
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          sync-labels: true

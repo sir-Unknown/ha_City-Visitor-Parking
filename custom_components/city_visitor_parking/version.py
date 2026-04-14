@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import importlib.metadata
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from homeassistant.loader import async_get_integration
 
@@ -39,15 +39,25 @@ def get_cached_versions(hass: HomeAssistant) -> tuple[str, str]:
     return hass.data.get(_VERSION_CACHE_KEY, ("unknown", "unknown"))
 
 
-def format_log_metadata(
+def build_log_block(  # noqa: PLR0913
+    label: str,
+    fields: dict[str, Any] | None = None,
     *,
     provider: str = "unknown",
     city: str = "unknown",
     ha_cvp_version: str = "unknown",
     pycvp_version: str = "unknown",
 ) -> str:
-    """Return a consistent logging metadata suffix."""
-    return (
-        f"(provider={provider}, city={city}, "
-        f"hacvp={ha_cvp_version}, pycvp={pycvp_version})"
+    """Return a labelled multi-line key=value block with provider metadata."""
+    all_fields = {k: v for k, v in (fields or {}).items() if v is not None}
+    all_fields.update(
+        {
+            "provider": provider,
+            "city": city,
+            "hacvp": ha_cvp_version,
+            "pycvp": pycvp_version,
+        }
     )
+    width = max(len(k) for k in all_fields)
+    lines = [label, *[f"  {k:<{width}} = {v}" for k, v in all_fields.items()]]
+    return "\n".join(lines)

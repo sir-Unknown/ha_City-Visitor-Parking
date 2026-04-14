@@ -48,7 +48,7 @@ from .helpers import normalize_override_windows
 from .models import AutoEndState, OperatingTimeOverrides, ProviderConfig
 from .runtime_data import CityVisitorParkingRuntimeData
 from .services import async_setup_services
-from .version import async_get_versions, format_log_metadata
+from .version import async_get_versions, build_log_block
 from .websocket_api import async_setup_websocket
 
 if TYPE_CHECKING:
@@ -106,8 +106,9 @@ async def async_setup(hass: HomeAssistant, _config: ConfigType) -> bool:
     """Set up the City visitor parking integration."""
     ha_cvp_version, pycvp_version = await async_get_versions(hass)
     _LOGGER.debug(
-        "City Visitor Parking starting %s",
-        format_log_metadata(
+        "%s",
+        build_log_block(
+            "City Visitor Parking starting",
             ha_cvp_version=ha_cvp_version,
             pycvp_version=pycvp_version,
         ),
@@ -327,9 +328,10 @@ async def _async_register_frontend(hass: HomeAssistant, _component: str) -> None
     else:
         ha_cvp_version, pycvp_version = await async_get_versions(hass)
         _LOGGER.warning(
-            "Frontend translations directory is missing: %s %s",
-            translations_path,
-            format_log_metadata(
+            "%s",
+            build_log_block(
+                "frontend translations directory missing",
+                {"path": str(translations_path)},
                 ha_cvp_version=ha_cvp_version,
                 pycvp_version=pycvp_version,
             ),

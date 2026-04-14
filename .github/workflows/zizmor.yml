@@ -1,3 +1,10 @@
+# Security audit of all GitHub Actions workflows using zizmor. Findings are
+# uploaded as SARIF to GitHub code scanning so they appear in the Security tab.
+#
+# The zizmor step allows exit codes 0 (clean) and 1 (findings) — findings are
+# visible via the SARIF upload in the Security tab. Exit codes >= 2 (crashes)
+# still fail the job. The upload step runs with `if: always()` to ensure SARIF
+# is uploaded even when zizmor reports findings.
 name: Zizmor
 
 on:
@@ -5,10 +12,12 @@ on:
     branches: ["main"]
     paths:
       - ".github/workflows/**"
+      - ".github/codeql/**"
   pull_request:
     branches: ["main"]
     paths:
       - ".github/workflows/**"
+      - ".github/codeql/**"
   schedule:
     - cron: "0 6 * * 1" # every Monday at 06:00 UTC
   workflow_dispatch:
@@ -25,7 +34,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      security-events: write
+      security-events: write # Required to upload SARIF findings into GitHub code scanning.
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -38,10 +47,10 @@ jobs:
           enable-cache: false
 
       - name: Run zizmor
-        run: uvx zizmor@1.23.1 --format sarif . > zizmor.sarif
-        continue-on-error: true
+        run: uvx zizmor@1.23.1 --format sarif . > zizmor.sarif || [ $? -eq 1 ]
 
       - name: Upload SARIF results
+        if: always()
         uses: github/codeql-action/upload-sarif@c10b8064de6f491fea524254123dbe5e09572f13 # v4.35.1
         with:
           sarif_file: zizmor.sarif
