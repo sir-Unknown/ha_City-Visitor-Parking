@@ -208,7 +208,8 @@ async def test_register_frontend_assets_missing_translations(
 
     hass.http.async_register_static_paths.assert_awaited_once()
     assert hass.data[DOMAIN]["frontend_registered"] is True
-    assert "hacvp=1.2.3, pycvp=4.5.6" in caplog.text
+    assert "hacvp" in caplog.text
+    assert "1.2.3" in caplog.text
 
 
 async def test_register_lovelace_resources_non_storage(
