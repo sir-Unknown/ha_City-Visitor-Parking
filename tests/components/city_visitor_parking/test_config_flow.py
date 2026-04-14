@@ -218,7 +218,8 @@ async def test_config_flow_invalid_auth(
 
     assert result["type"] == "form"
     assert result["errors"]["base"] == "invalid_auth"
-    assert "hacvp=1.2.3, pycvp=4.5.6" in caplog.text
+    assert "hacvp" in caplog.text
+    assert "1.2.3" in caplog.text
 
 
 async def test_config_flow_cannot_connect(
@@ -465,7 +466,8 @@ async def test_validate_credentials_unexpected_error(
 
     assert permit_id is None
     assert errors["base"] == "unknown"
-    assert "hacvp=1.2.3, pycvp=4.5.6" in caplog.text
+    assert "hacvp" in caplog.text
+    assert "1.2.3" in caplog.text
 
 
 async def test_validate_credentials_no_permits(
@@ -551,7 +553,7 @@ def _extract_option_values(selector: dict[str, object] | _SelectorConfig) -> lis
         if isinstance(option, dict):
             values.append(option["value"])
         else:
-            values.append(option.value)
+            values.append(option.value)  # type: ignore[attr-defined]
     return values
 
 
@@ -567,7 +569,7 @@ def _extract_option_labels(selector: dict[str, object] | _SelectorConfig) -> lis
         if isinstance(option, dict):
             labels.append(option["label"])
         else:
-            labels.append(option.label)
+            labels.append(option.label)  # type: ignore[attr-defined]
     return labels
 
 

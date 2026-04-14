@@ -5,6 +5,7 @@
     "charliermarsh.ruff",
     "ms-python.debugpy",
     "github.vscode-github-actions",
-    "anthropic.claude-code"
+    "anthropic.claude-code",
+    "tamasfe.even-better-toml"
   ]
 }

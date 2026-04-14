@@ -1,11 +1,29 @@
+# Builds and uploads the integration zip to a GitHub Release when one is
+# published. Also handles testing pre-releases by injecting the correct
+# pyCityVisitorParking commit SHA from the release body.
+#
+# Flow:
+#   1. Verify that the Validate workflow passed on the release commit.
+#   2. Detect whether custom_components/ changed since the previous release.
+#   3. Build the frontend, assemble the zip, and upload it to the release.
 name: Release
 
 on:
   release:
     types:
       - published
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to process (e.g. v1.0.0-testing.1)"
+        required: true
+        type: string
 
 permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.release.tag_name || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   validate:
@@ -17,13 +35,16 @@ jobs:
     outputs:
       release_sha: ${{ steps.resolve_tag.outputs.sha }}
       should_release: ${{ steps.component_changes.outputs.should_release }}
+      tag: ${{ steps.resolve_tag.outputs.tag }}
     steps:
       - name: Resolve release tag to commit
         id: resolve_tag
+        env:
+          RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.event.release.tag_name }}
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
         with:
           script: |
-            const tag = context.payload.release.tag_name;
+            const tag = process.env.RELEASE_TAG;
             const { data: ref } = await github.rest.git.getRef({
               owner: context.repo.owner,
               repo: context.repo.repo,
@@ -39,12 +60,13 @@ jobs:
               sha = tagObject.object.sha;
             }
             core.setOutput("sha", sha);
+            core.setOutput("tag", tag);
 
       - name: Detect custom_components changes since previous release
         id: component_changes
         env:
           RELEASE_SHA: ${{ steps.resolve_tag.outputs.sha }}
-          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          RELEASE_TAG: ${{ steps.resolve_tag.outputs.tag }}
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
         with:
           script: |
@@ -73,7 +95,7 @@ jobs:
             const { data: releases } = await github.rest.repos.listReleases({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              per_page: 20,
+              per_page: 100,
             });
 
             const previousRelease = releases.find(
@@ -152,7 +174,7 @@ jobs:
     outputs:
       version: ${{ steps.version.outputs.version }}
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd #6.0.2
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
           ref: ${{ needs.validate.outputs.release_sha }}
@@ -172,41 +194,64 @@ jobs:
       - name: Normalize release version
         id: version
         env:
-          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          RELEASE_TAG: ${{ needs.validate.outputs.tag }}
         run: |
           version="${RELEASE_TAG,,}"
           version="${version#v}"
           echo "version=$version" >> "$GITHUB_OUTPUT"
+      - name: Fetch release body
+        id: release_body
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.validate.outputs.tag }}
+        run: |
+          body=$(gh release view "$RELEASE_TAG" --json body --jq '.body')
+          {
+            echo "body<<RELEASE_BODY_EOF"
+            echo "$body"
+            echo "RELEASE_BODY_EOF"
+          } >> "$GITHUB_OUTPUT"
+      - name: Extract pyCityVisitorParking commit from release body
+        if: contains(needs.validate.outputs.tag, '-testing.')
+        id: pycvp
+        env:
+          RELEASE_BODY: ${{ steps.release_body.outputs.body }}
+        run: |
+          COMMIT=$(echo "$RELEASE_BODY" | grep -oE '\*\*Commit:\*\* `?([a-f0-9]{40})`?' | grep -oE '[a-f0-9]{40}')
+          if [ -z "$COMMIT" ]; then
+            echo "::error::No pyCityVisitorParking commit found in release body. Fill in the 'Commit' field in the release draft."
+            exit 1
+          fi
+          echo "commit=$COMMIT" >> "$GITHUB_OUTPUT"
+          echo "Found pyCityVisitorParking commit: $COMMIT"
+
       - name: Build release asset
         env:
           VERSION: ${{ steps.version.outputs.version }}
+          PYCVP_COMMIT: ${{ steps.pycvp.outputs.commit }}
         run: |
           mkdir /tmp/release-build
           git -C custom_components/city_visitor_parking archive --format=tar \
             --worktree-attributes HEAD | tar -x -C /tmp/release-build
-          python3 - <<PYEOF
-          import json, pathlib
+          python3 - <<'PYEOF'
+          import json, os, pathlib, re
           p = pathlib.Path("/tmp/release-build/manifest.json")
           data = json.loads(p.read_text())
-          data["version"] = "$VERSION"
+          data["version"] = os.environ["VERSION"]
+          pycvp_commit = os.environ.get("PYCVP_COMMIT", "")
+          if pycvp_commit:
+              new_reqs = [re.sub(r'[a-f0-9]{40}$', pycvp_commit, r) for r in data["requirements"]]
+              if new_reqs == data["requirements"]:
+                  raise ValueError("No pyCityVisitorParking SHA found in requirements to replace")
+              data["requirements"] = new_reqs
           p.write_text(json.dumps(data, indent=2) + "\n")
           PYEOF
           cd /tmp/release-build && zip -r "$GITHUB_WORKSPACE/city_visitor_parking.zip" .
       - name: Upload release asset
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          RELEASE_TAG: ${{ needs.validate.outputs.tag }}
         run: gh release upload "$RELEASE_TAG" city_visitor_parking.zip --clobber
-      - name: Publish release
-        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
-        with:
-          script: |
-            await github.rest.repos.updateRelease({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              release_id: context.payload.release.id,
-              draft: false,
-            });
 
   skip-release:
     needs: [validate]

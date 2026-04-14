@@ -1,3 +1,10 @@
+# Marks inactive issues and pull requests as stale and closes them after a
+# grace period. Three separate passes run per hour:
+#   - PRs:                    stale after 60 days, closed after 7 more days
+#   - Issues:                 stale after 90 days, closed after 7 more days
+#   - needs-more-information: stale after 53 days, closed after 7 more days
+#
+# Items with the "no-stale" or "help-wanted" label are exempt from closing.
 name: Stale
 
 on:
@@ -16,8 +23,8 @@ jobs:
     name: Mark stale issues and PRs
     runs-on: ubuntu-latest
     permissions:
-      issues: write
-      pull-requests: write
+      issues: write # Required to mark issues stale and close them when they remain inactive.
+      pull-requests: write # Required to mark pull requests stale and close them when they remain inactive.
     steps:
       - name: Mark stale PRs (60 days)
         uses: actions/stale@b5d41d4e1d5dceea10e7104786b73624c18a190f # v10.2.0
@@ -53,12 +60,12 @@ jobs:
             been automatically marked as stale and will be closed if no
             further activity occurs within 7 days.
 
-      - name: Mark needs-more-information issues (14 days)
+      - name: Mark needs-more-information issues (53 days)
         uses: actions/stale@b5d41d4e1d5dceea10e7104786b73624c18a190f # v10.2.0
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
           only-labels: "needs-more-information"
-          days-before-stale: 14
+          days-before-stale: 53
           days-before-close: 7
           days-before-pr-stale: -1
           days-before-pr-close: -1

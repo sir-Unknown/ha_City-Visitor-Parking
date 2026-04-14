@@ -37,7 +37,7 @@ from .const import (
 )
 from .helpers import normalize_plate
 from .payloads import build_status_payload, normalize_favorites, reservation_payload
-from .version import async_get_versions, format_log_metadata
+from .version import async_get_versions, build_log_block
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -151,10 +151,10 @@ def _raise_reservation_error(
     """Raise a translated Home Assistant error for reservation failures."""
     detail = _error_detail(err)
     _LOGGER.debug(
-        "Reservation request failed: %s: %s %s",
-        type(err).__name__,
-        err,
-        format_log_metadata(
+        "%s",
+        build_log_block(
+            "reservation request failed",
+            {"error-type": type(err).__name__, "error": str(err)},
             provider=provider,
             city=city,
             ha_cvp_version=ha_cvp_version,
@@ -179,10 +179,10 @@ def _raise_favorite_error(
     """Raise a translated Home Assistant error for favorite failures."""
     if not isinstance(err, PyCityVisitorParkingError):
         _LOGGER.debug(
-            "Favorite request failed: %s: %s %s",
-            type(err).__name__,
-            err,
-            format_log_metadata(
+            "%s",
+            build_log_block(
+                "favorite request failed",
+                {"error-type": type(err).__name__, "error": str(err)},
                 provider=provider,
                 city=city,
                 ha_cvp_version=ha_cvp_version,
@@ -195,10 +195,10 @@ def _raise_favorite_error(
         ) from err
     detail = _error_detail(err)
     _LOGGER.debug(
-        "Favorite request failed: %s: %s %s",
-        type(err).__name__,
-        err,
-        format_log_metadata(
+        "%s",
+        build_log_block(
+            "favorite request failed",
+            {"error-type": type(err).__name__, "error": str(err)},
             provider=provider,
             city=city,
             ha_cvp_version=ha_cvp_version,
