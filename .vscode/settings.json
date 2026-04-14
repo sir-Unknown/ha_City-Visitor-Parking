@@ -1,5 +1,6 @@
 {
-  "ruff.path": ["/home/vscode/.local/bin/ruff"],
+  "python.defaultInterpreterPath": "${workspaceFolder}/.venv/bin/python",
+  "ruff.path": ["${workspaceFolder}/.venv/bin/ruff"],
   "python.testing.pytestEnabled": true,
   "python.testing.pytestArgs": ["tests"],
 
