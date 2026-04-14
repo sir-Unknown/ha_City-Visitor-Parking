@@ -723,18 +723,6 @@ var applyZoneStatus = (context, status) => {
   });
 };
 var resetZoneStatusThrottle = (context) => context._zoneStatusTsByEntryId.clear();
-var openDateTimePickerForField = (field) => {
-  if (!field) return;
-  const input = field instanceof HTMLInputElement ? field : field.shadowRoot?.querySelector(
-    "input"
-  );
-  if (!input) return;
-  if (typeof input.showPicker === "function") {
-    input.showPicker();
-    return;
-  }
-  input.focus();
-};
 var DOMAIN = "city_visitor_parking";
 var RESERVATION_STARTED_EVENT = "city-visitor-parking-reservation-started";
 var createStatusState = () => ({
@@ -742,6 +730,18 @@ var createStatusState = () => ({
   type: "info",
   clearHandle: null
 });
+var triggerProgressButtonFeedback = async (host, selector, outcome) => {
+  await host.updateComplete;
+  const button = host.renderRoot.querySelector(
+    selector
+  );
+  if (!button) return;
+  if (outcome === "success") {
+    button.actionSuccess?.();
+    return;
+  }
+  button.actionError?.();
+};
 var setStatusState = (state, message, type, requestRender, clearAfterMs) => {
   if (state.clearHandle !== null) {
     window.clearTimeout(state.clearHandle);
@@ -775,13 +775,30 @@ var BASE_CARD_STYLES = i`
   ha-card {
     position: relative;
   }
-  .row {
-    margin: 0;
-  }
   .card-content {
     display: flex;
     flex-direction: column;
-    gap: var(--entities-card-row-gap, var(--card-row-gap, var(--ha-space-2)));
+  }
+  .row > ha-input,
+  .row > ha-textfield,
+  .row > ha-select,
+  .row > ha-selector,
+  .row > ha-alert {
+    margin: 0;
+  }
+  .card-content > .row + .row {
+    margin-top: var(--ha-space-2);
+  }
+  .card-content > .row.datetime-row {
+    margin-top: var(--ha-space-1);
+  }
+  .datetime-fields {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+    gap: var(--ha-space-2);
+  }
+  .datetime-fields > .datetime-row {
+    margin-top: 0;
   }
   .card-header {
     display: flex;
@@ -798,25 +815,9 @@ var BASE_CARD_STYLES = i`
   ha-alert {
     margin: 0;
   }
-  .spinner {
-    display: flex;
-    align-items: center;
-    gap: var(--ha-space-2);
-    color: var(--secondary-text-color);
-    font-size: 0.85rem;
-  }
-  .datetime-row {
-    position: relative;
-  }
+  .datetime-row ha-input,
   .datetime-row ha-textfield {
     width: 100%;
-  }
-  .datetime-picker-button {
-    position: absolute;
-    inset-inline-end: var(--ha-space-1);
-    top: 50%;
-    transform: translateY(-50%);
-    z-index: 1;
   }
 `;
 var buildPermitOptions = (entries) => entries.map((entry) => ({
@@ -984,27 +985,29 @@ var renderFavoriteActionRow = (params) => b2`
               ` : A : A}
     </div>
     ${params.startButtonSuccess ? b2`
-          <ha-button
+          <ha-progress-button
             id="startReservation"
             class="start-button success"
             variant="success"
             appearance="filled"
+            .progress=${params.startInFlight}
             ?disabled=${params.startDisabled}
             aria-label=${params.localize("action.start_reservation")}
             title=${params.localize("action.start_reservation")}
           >
             ${params.localize("action.start_reservation")}
-          </ha-button>
+          </ha-progress-button>
         ` : b2`
-          <ha-button
+          <ha-progress-button
             id="startReservation"
             class="start-button"
+            .progress=${params.startInFlight}
             ?disabled=${params.startDisabled}
             aria-label=${params.localize("action.start_reservation")}
             title=${params.localize("action.start_reservation")}
           >
             ${params.localize("action.start_reservation")}
-          </ha-button>
+          </ha-progress-button>
         `}
   </div>
 `;
@@ -1030,7 +1033,6 @@ var renderLoadingCard = (hass) => {
     </ha-card>
   `;
 };
-var renderStatusAlert = (state) => state.message ? b2`<ha-alert alert-type=${state.type}>${state.message}</ha-alert>` : A;
 var formatOptionalDateTimeLocal = (value) => {
   const date = parseDateTimeValue(value);
   return date ? formatDateTimeLocal(date) : "";
@@ -1393,12 +1395,22 @@ var getActiveCardConfigForm = createConfigFormGetter(
       this._statusVisibilityHandler = null;
       this._translationsReady = false;
       this._translationsLanguage = null;
+      this._licensePlateFocused = false;
       this._onClick = (event) => this._handleClick(event);
       this._onInput = (event) => this._handleInput(event);
       this._onChange = (event) => this._handleChange(event);
+      this._onLicensePlateFocusIn = () => {
+        if (this._licensePlateFocused) return;
+        this._licensePlateFocused = true;
+        this._requestRender();
+      };
+      this._onLicensePlateFocusOut = () => {
+        if (!this._licensePlateFocused) return;
+        this._licensePlateFocused = false;
+        this._requestRender();
+      };
       this._onPermitSelectChange = (event) => this._handlePermitSelectChange(event);
       this._onFavoriteSelectChange = (event) => this._handleFavoriteSelectChange(event);
-      this._onDateTimePickerClick = (event) => this._handleDateTimePickerClick(event);
     }
     static async getConfigForm(hass) {
       return getCardConfigForm(hass);
@@ -1473,6 +1485,14 @@ var getActiveCardConfigForm = createConfigFormGetter(
     }
     getCardSize() {
       return 4;
+    }
+    getGridOptions() {
+      return {
+        columns: 12,
+        rows: 4,
+        min_columns: 4,
+        min_rows: 2
+      };
     }
     async _ensureDeviceId() {
       if (!this._hass) return;
@@ -1729,59 +1749,49 @@ var getActiveCardConfigForm = createConfigFormGetter(
         wrapSelect: (content) => i6(activeEntryId ?? "", content)
       })}
             <div class="row">
-              <ha-textfield
+              <ha-input
                 id="licensePlate"
+                appearance="material"
+                with-clear
                 .label=${localizeFn("field.license_plate")}
-                placeholder=${localizeFn("placeholder.license_plate")}
+                placeholder=${this._licensePlateFocused ? localizeFn("placeholder.license_plate") : ""}
                 .value=${priorLicense}
-              ></ha-textfield>
+                @focusin=${this._onLicensePlateFocusIn}
+                @focusout=${this._onLicensePlateFocusOut}
+              ></ha-input>
             </div>
-            ${showStart ? b2`
-                  <div class="row datetime-row">
-                    <ha-textfield
-                      type="datetime-local"
-                      id="startDateTime"
-                      .label=${localizeFn("field.start_time")}
-                      .value=${priorStartDateTime}
-                      .min=${minDateTime}
-                      ?disabled=${controlsDisabled}
-                      @input=${this._onInput}
-                      @change=${this._onChange}
-                    ></ha-textfield>
-                    <ha-icon-button
-                      class="datetime-picker-button"
-                      data-picker-field="startDateTime"
-                      aria-label=${localizeFn("field.start_time")}
-                      title=${localizeFn("field.start_time")}
-                      ?disabled=${controlsDisabled}
-                      @click=${this._onDateTimePickerClick}
-                    >
-                      <ha-icon icon="mdi:calendar-month-outline"></ha-icon>
-                    </ha-icon-button>
-                  </div>
-                ` : A}
-            ${showEnd ? b2`
-                  <div class="row datetime-row">
-                    <ha-textfield
-                      type="datetime-local"
-                      id="endDateTime"
-                      .label=${localizeFn("field.end_time")}
-                      .value=${priorEndDateTime}
-                      .min=${minDateTime}
-                      ?disabled=${controlsDisabled}
-                      @input=${this._onInput}
-                      @change=${this._onChange}
-                    ></ha-textfield>
-                    <ha-icon-button
-                      class="datetime-picker-button"
-                      data-picker-field="endDateTime"
-                      aria-label=${localizeFn("field.end_time")}
-                      title=${localizeFn("field.end_time")}
-                      ?disabled=${controlsDisabled}
-                      @click=${this._onDateTimePickerClick}
-                    >
-                      <ha-icon icon="mdi:calendar-month-outline"></ha-icon>
-                    </ha-icon-button>
+            ${showStart || showEnd ? b2`
+                  <div class="row datetime-fields">
+                    ${showStart ? b2`
+                          <div class="datetime-row">
+                            <ha-input
+                              appearance="material"
+                              type="datetime-local"
+                              id="startDateTime"
+                              .label=${localizeFn("field.start_time")}
+                              .value=${priorStartDateTime}
+                              .min=${minDateTime}
+                              ?disabled=${controlsDisabled}
+                              @input=${this._onInput}
+                              @change=${this._onChange}
+                            ></ha-input>
+                          </div>
+                        ` : A}
+                    ${showEnd ? b2`
+                          <div class="datetime-row">
+                            <ha-input
+                              appearance="material"
+                              type="datetime-local"
+                              id="endDateTime"
+                              .label=${localizeFn("field.end_time")}
+                              .value=${priorEndDateTime}
+                              .min=${minDateTime}
+                              ?disabled=${controlsDisabled}
+                              @input=${this._onInput}
+                              @change=${this._onChange}
+                            ></ha-input>
+                          </div>
+                        ` : A}
                   </div>
                 ` : A}
             ${renderFavoriteActionRow({
@@ -1791,6 +1801,7 @@ var getActiveCardConfigForm = createConfigFormGetter(
         selectedFavoriteId: removeFavorite?.id || removeFavorite?.license_plate || "",
         favoriteRemoveDisabled,
         addFavoriteChecked: this._addFavoriteChecked,
+        startInFlight: this._startInFlight,
         startButtonSuccess: this._startButtonSuccess,
         startDisabled,
         localize: localizeFn
@@ -1870,14 +1881,6 @@ var getActiveCardConfigForm = createConfigFormGetter(
         this._syncEndWithStart();
       }
     }
-    _handleDateTimePickerClick(event) {
-      if (this._isInEditor()) return;
-      event.stopPropagation();
-      const target = event.currentTarget;
-      const fieldId = target?.dataset.pickerField;
-      if (!fieldId) return;
-      openDateTimePickerForField(this.renderRoot.querySelector(`#${fieldId}`));
-    }
     _handlePermitSelectChange(event) {
       if (this._isInEditor()) return;
       const detail = event.detail;
@@ -1935,7 +1938,7 @@ var getActiveCardConfigForm = createConfigFormGetter(
         setPendingPermitDefaults(this, null);
         this._clearStatusRefresh();
         this._resetDeviceState();
-        this._clearFormValues();
+        this._clearPermitScopedFormValues();
         this._setInputValue("licensePlate", "");
         this._clearStatus();
         return;
@@ -1949,6 +1952,7 @@ var getActiveCardConfigForm = createConfigFormGetter(
       this._suppressFavoriteClear = false;
       this._setInputValue("favorite", "");
       applyZoneStatus(this, this._zoneStatusByEntryId.get(value) ?? null);
+      this._applyStatusDefaultsToForm(true);
       this._clearStatus();
       this._ensureDeviceId();
       this._maybeLoadFavorites();
@@ -1976,12 +1980,21 @@ var getActiveCardConfigForm = createConfigFormGetter(
       clearFavoriteTransientState(this);
       if (hadValues || hadAddFavoriteChecked) this._requestRender();
     }
+    _clearPermitScopedFormValues() {
+      const hadValues = Boolean(this._formValues.licensePlate) || Boolean(this._formValues.favorite);
+      const hadAddFavoriteChecked = this._addFavoriteChecked;
+      delete this._formValues.licensePlate;
+      delete this._formValues.favorite;
+      clearFavoriteTransientState(this);
+      if (hadValues || hadAddFavoriteChecked) this._requestRender();
+    }
     _syncEntryState(forceSetupRefresh) {
       const entryId = this._getActiveEntryId();
       applyZoneStatus(
         this,
         entryId ? this._zoneStatusByEntryId.get(entryId) ?? null : null
       );
+      this._applyStatusDefaultsToForm(false);
       if (getConfigEntryId(this._config) && entryId) {
         setPendingPermitDefaults(this, entryId);
       }
@@ -2132,6 +2145,7 @@ var getActiveCardConfigForm = createConfigFormGetter(
         this._setStatus(this._localize(validationError), "warning");
         this._startInFlight = false;
         this._requestRender();
+        await triggerProgressButtonFeedback(this, "#startReservation", "error");
         return;
       }
       const name = this._getInputValue("favorite").trim();
@@ -2155,6 +2169,7 @@ var getActiveCardConfigForm = createConfigFormGetter(
         this._setStatus(message, "warning");
         this._startInFlight = false;
         this._requestRender();
+        await triggerProgressButtonFeedback(this, "#startReservation", "error");
         return;
       }
       this._setStatus(
@@ -2165,6 +2180,7 @@ var getActiveCardConfigForm = createConfigFormGetter(
       this._setStartButtonSuccess();
       this._startInFlight = false;
       this._requestRender();
+      await triggerProgressButtonFeedback(this, "#startReservation", "success");
       window.dispatchEvent(
         new CustomEvent(RESERVATION_STARTED_EVENT, {
           detail: {
@@ -2240,19 +2256,23 @@ var getActiveCardConfigForm = createConfigFormGetter(
       if (!startValue) return;
       const start = parseDateTimeValue(startValue);
       if (!start) return;
-      const end = this._resolveDefaultEnd(start, 60 * 1e3);
-      this._setInputValue("endDateTime", formatDateTimeLocal(end));
+      this._setInputValue(
+        "endDateTime",
+        formatDateTimeLocal(this._resolveDefaultEnd(start))
+      );
     }
     _getStatusDefaultTimes(now) {
-      const startDefault = new Date(now.getTime() + 6e4);
-      const endDefault = new Date(now);
-      endDefault.setHours(23, 59, 0, 0);
-      const w2 = this._getRelevantWindowTimes();
-      if (!w2) return { start: startDefault, end: endDefault };
-      return {
-        start: this._zoneState === "free" ? w2.start : startDefault,
-        end: w2.end
-      };
+      const window2 = this._getRelevantWindowTimes();
+      if (window2) {
+        return {
+          start: this._resolveDefaultStart(window2.start, now),
+          end: this._normalizeEndOfDayDisplay(window2.end)
+        };
+      }
+      const start = new Date(now);
+      const end = new Date(now);
+      end.setHours(23, 59, 0, 0);
+      return { start, end };
     }
     _getRelevantWindowTimes() {
       const validKind = this._zoneState === "chargeable" && this._windowKind === "current" || this._zoneState === "free" && this._windowKind === "next";
@@ -2262,10 +2282,21 @@ var getActiveCardConfigForm = createConfigFormGetter(
       if (!start || !end || end <= start) return null;
       return { start, end };
     }
-    _resolveDefaultEnd(start, offsetMs) {
+    _normalizeEndOfDayDisplay(end) {
+      if (end.getHours() !== 0 || end.getMinutes() !== 0) return end;
+      const normalized = new Date(end);
+      normalized.setMinutes(normalized.getMinutes() - 1);
+      return normalized;
+    }
+    _resolveDefaultStart(start, now) {
+      return start > now ? start : new Date(now.getTime());
+    }
+    _resolveDefaultEnd(start) {
       const window2 = this._getRelevantWindowTimes();
-      if (window2 && window2.end > start) return window2.end;
-      const fallback = new Date(start.getTime() + offsetMs);
+      if (window2 && window2.end > start) {
+        return this._normalizeEndOfDayDisplay(window2.end);
+      }
+      const fallback = new Date(start.getTime() + 60 * 1e3);
       if (!window2) {
         const dayEnd = new Date(start);
         dayEnd.setHours(23, 59, 0, 0);
@@ -2287,7 +2318,7 @@ var getActiveCardConfigForm = createConfigFormGetter(
         } else if (current <= now) {
           this._setInputValue(
             "startDateTime",
-            formatDateTimeLocal(new Date(now.getTime() + 6e4))
+            formatDateTimeLocal(this._resolveDefaultStart(current, now))
           );
         }
       }
@@ -2313,6 +2344,7 @@ var getActiveCardConfigForm = createConfigFormGetter(
   CityVisitorParkingNewReservationCard.styles = [
     BASE_CARD_STYLES,
     i`
+        ha-input,
         ha-textfield,
         ha-select,
         ha-selector {
@@ -2320,14 +2352,12 @@ var getActiveCardConfigForm = createConfigFormGetter(
         }
         .actions {
           display: flex;
-          gap: var(--ha-space-2);
           align-items: center;
           justify-content: space-between;
         }
         .favorite-actions {
           display: flex;
           align-items: center;
-          gap: var(--ha-space-2);
         }
         .leading {
           width: 48px;
@@ -2384,7 +2414,6 @@ var getActiveCardConfigForm = createConfigFormGetter(
       this._onActionClick = (event) => this._handleActionClick(event);
       this._onReservationInput = (event) => this._handleReservationInput(event);
       this._onReservationChange = (event) => this._handleReservationChange(event);
-      this._onReservationPickerClick = (event) => this._handleReservationPickerClick(event);
     }
     connectedCallback() {
       super.connectedCallback();
@@ -2454,6 +2483,14 @@ var getActiveCardConfigForm = createConfigFormGetter(
     }
     getCardSize() {
       return 3;
+    }
+    getGridOptions() {
+      return {
+        columns: 12,
+        rows: 4,
+        min_columns: 4,
+        min_rows: 1
+      };
     }
     async _maybeLoadActiveReservations(force = false) {
       if (!this._hass || !this._config) return;
@@ -2567,7 +2604,6 @@ var getActiveCardConfigForm = createConfigFormGetter(
           ${renderCardHeader(title, icon)}
           <div class="card-content">
             ${this._renderActiveReservations(controlsDisabled)}
-            ${renderStatusAlert(this._statusState)}
           </div>
         </ha-card>
       `;
@@ -2626,7 +2662,8 @@ var getActiveCardConfigForm = createConfigFormGetter(
           </div>
           <div class="active-reservation-times">
             <div class="datetime-row">
-              <ha-textfield
+              <ha-input
+                appearance="material"
                 type="datetime-local"
                 data-reservation-id=${reservation.reservation_id}
                 data-field="start"
@@ -2636,21 +2673,11 @@ var getActiveCardConfigForm = createConfigFormGetter(
                 ?disabled=${controlsDisabled || !allowStart || isBusy}
                 @input=${this._onReservationInput}
                 @change=${this._onReservationChange}
-              ></ha-textfield>
-              <ha-icon-button
-                class="datetime-picker-button"
-                data-picker-reservation-id=${reservation.reservation_id}
-                data-picker-field="start"
-                aria-label=${this._localize("field.start_time")}
-                title=${this._localize("field.start_time")}
-                ?disabled=${controlsDisabled || !allowStart || isBusy}
-                @click=${this._onReservationPickerClick}
-              >
-                <ha-icon icon="mdi:calendar-month-outline"></ha-icon>
-              </ha-icon-button>
+              ></ha-input>
             </div>
             <div class="datetime-row">
-              <ha-textfield
+              <ha-input
+                appearance="material"
                 type="datetime-local"
                 data-reservation-id=${reservation.reservation_id}
                 data-field="end"
@@ -2660,39 +2687,30 @@ var getActiveCardConfigForm = createConfigFormGetter(
                 ?disabled=${controlsDisabled || !allowEnd || isBusy}
                 @input=${this._onReservationInput}
                 @change=${this._onReservationChange}
-              ></ha-textfield>
-              <ha-icon-button
-                class="datetime-picker-button"
-                data-picker-reservation-id=${reservation.reservation_id}
-                data-picker-field="end"
-                aria-label=${this._localize("field.end_time")}
-                title=${this._localize("field.end_time")}
-                ?disabled=${controlsDisabled || !allowEnd || isBusy}
-                @click=${this._onReservationPickerClick}
-              >
-                <ha-icon icon="mdi:calendar-month-outline"></ha-icon>
-              </ha-icon-button>
+              ></ha-input>
             </div>
           </div>
           <div class="active-reservation-actions">
             ${endButtonSuccess ? b2`
-                  <ha-button
+                  <ha-progress-button
                     class="active-reservation-end success"
                     data-reservation-id=${reservation.reservation_id}
                     variant="success"
                     appearance="filled"
+                    .progress=${isBusy}
                     ?disabled=${controlsDisabled || isBusy}
                   >
                     ${this._localize("button.end_reservation")}
-                  </ha-button>
+                  </ha-progress-button>
                 ` : b2`
-                  <ha-button
+                  <ha-progress-button
                     class="active-reservation-end"
                     data-reservation-id=${reservation.reservation_id}
+                    .progress=${isBusy}
                     ?disabled=${controlsDisabled || isBusy}
                   >
                     ${this._localize("button.end_reservation")}
-                  </ha-button>
+                  </ha-progress-button>
                 `}
           </div>
         </div>
@@ -2702,29 +2720,13 @@ var getActiveCardConfigForm = createConfigFormGetter(
       const target = event.target;
       if (!target) return;
       const endButton = target.closest(
-        "ha-button.active-reservation-end"
+        "ha-progress-button.active-reservation-end"
       );
       if (endButton) {
         const reservationId = endButton.dataset.reservationId ?? "";
         if (this._endButtonSuccessByReservationId.has(reservationId)) return;
         void this._handleActiveReservationEnd(reservationId);
       }
-    }
-    _handleReservationPickerClick(event) {
-      if (this._isInEditor()) return;
-      event.stopPropagation();
-      const target = event.currentTarget;
-      const reservationId = target?.dataset.pickerReservationId;
-      const field = target?.dataset.pickerField;
-      if (!reservationId || field !== "start" && field !== "end") return;
-      const pickerField = Array.from(
-        this.renderRoot.querySelectorAll(
-          "ha-textfield[data-reservation-id][data-field]"
-        )
-      ).find(
-        (element) => element.dataset.reservationId === reservationId && element.dataset.field === field
-      );
-      openDateTimePickerForField(pickerField ?? null);
     }
     _handleReservationInput(event, resolved) {
       const reservationField = resolved ?? this._getReservationField(event);
@@ -2932,6 +2934,11 @@ var getActiveCardConfigForm = createConfigFormGetter(
           "warning"
         );
         this._endReservationAction(reservationId);
+        await triggerProgressButtonFeedback(
+          this,
+          `ha-progress-button.active-reservation-end[data-reservation-id="${reservationId}"]`,
+          "error"
+        );
         return;
       }
       this._completeReservationActionSuccess(
@@ -2940,6 +2947,11 @@ var getActiveCardConfigForm = createConfigFormGetter(
         false
       );
       await this._setEndButtonSuccess(reservationId);
+      await triggerProgressButtonFeedback(
+        this,
+        `ha-progress-button.active-reservation-end[data-reservation-id="${reservationId}"]`,
+        "success"
+      );
       this._activeReservationsLoadedFor = null;
       await this._maybeLoadActiveReservations(true);
     }
@@ -3000,6 +3012,7 @@ var getActiveCardConfigForm = createConfigFormGetter(
           grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
           gap: var(--ha-space-2);
         }
+        .active-reservation-times ha-input,
         .active-reservation-times ha-textfield {
           width: 100%;
         }
