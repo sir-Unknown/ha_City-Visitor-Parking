@@ -12,7 +12,7 @@
     "ghcr.io/devcontainers/features/node:1": {
       "version": "lts"
     },
-    "ghcr.io/astral-sh/uv:latest": {}
+    "ghcr.io/devcontainer-community/devcontainer-features/astral.sh-uv:1": {}
   },
 
   "remoteEnv": {
