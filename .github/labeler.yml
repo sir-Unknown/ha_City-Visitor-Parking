@@ -4,6 +4,11 @@ documentation:
           - "**/*.md"
           - "docs/**"
 
+python:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "custom_components/**"
+
 enhancement:
   - changed-files:
       - any-glob-to-any-file:
