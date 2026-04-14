@@ -31,21 +31,21 @@ jobs:
       contents: read
       pull-requests: write # Required because `comment-summary-in-pr: on-failure` posts a PR comment.
     steps:
+      - name: "Checkout repository"
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
       - name: "Check for dependency file changes"
         id: filter
+        if: github.event_name == 'pull_request'
         uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3.0.2
         with:
           filters: |
             deps:
               - "pyproject.toml"
               - "uv.lock"
-      - name: "Checkout repository"
-        if: steps.filter.outputs.deps == 'true'
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        with:
-          persist-credentials: false
       - name: "Dependency Review"
-        if: steps.filter.outputs.deps == 'true'
+        if: github.event_name == 'workflow_dispatch' || steps.filter.outputs.deps == 'true'
         uses: actions/dependency-review-action@2031cfc080254a8a887f58cffee85186f0e49e48 # v4.9.0
         with:
           base-ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || 'refs/heads/main' }}
