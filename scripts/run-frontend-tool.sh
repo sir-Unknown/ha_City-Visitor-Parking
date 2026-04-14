@@ -12,22 +12,21 @@ if [[ -z "$FRONTEND_CMD" ]]; then
 fi
 shift
 
-if ! command -v yarn >/dev/null 2>&1; then
-  if command -v corepack >/dev/null 2>&1; then
-    corepack enable >/dev/null 2>&1 || true
-  fi
-fi
-
-if ! command -v yarn >/dev/null 2>&1; then
-  echo "yarn is not available. Install Node.js/Corepack first." >&2
+if ! command -v corepack >/dev/null 2>&1; then
+  echo "corepack is not available. Install Node.js first." >&2
   exit 127
 fi
 
+# cd into the frontend directory so corepack dispatches to the yarn version
+# declared in packageManager (yarn@4.12.0) instead of any globally-installed
+# classic yarn (e.g. from nvm).
+cd "$FRONTEND_DIR"
+
 # Bootstrap or reinstall when node_modules is missing or lockfile/manifest changed.
-if [[ ! -d "$FRONTEND_DIR/node_modules" ]] \
-   || [[ "$FRONTEND_DIR/yarn.lock" -nt "$FRONTEND_DIR/node_modules" ]] \
-   || [[ "$FRONTEND_DIR/package.json" -nt "$FRONTEND_DIR/node_modules" ]]; then
-  yarn --cwd "$FRONTEND_DIR" install --immutable
+if [[ ! -d "node_modules" ]] \
+   || [[ "yarn.lock" -nt "node_modules" ]] \
+   || [[ "package.json" -nt "node_modules" ]]; then
+  corepack yarn install --immutable
 fi
 
-exec yarn --cwd "$FRONTEND_DIR" "$FRONTEND_CMD" "$@"
+exec corepack yarn "$FRONTEND_CMD" "$@"
