@@ -61,14 +61,14 @@
     "step": {
       "init": {
         "title": "Opties",
-        "description": "Pas betaalvensters en automatisch beëindigen aan. Voer tijden in zoals 09:00-13:00, 14:00-17:30.",
+        "description": "Pas het parkeergedrag aan voor deze vergunning: stel aangepaste betaaltijden in per dag, configureer gratis parkeerdagen en beheer het automatisch beëindigen van reserveringen.",
         "data": {
           "auto_end_reservation_when_free": "Reservaties automatisch beëindigen wanneer parkeren gratis is"
         },
         "sections": {
           "operating_times": {
-            "name": "Betaalvensters",
-            "description": "Voer per dag de betaalvensters in. Gebruik 24-uurs tijd en scheid meerdere vensters met komma's.",
+            "name": "Aangepaste betaalvensters",
+            "description": "Overschrijf de standaard betaaltijden per dag. Laat een dag leeg om de standaardinstelling te behouden.",
             "data": {
               "monday_chargeable_windows": "Maandag",
               "tuesday_chargeable_windows": "Dinsdag",
@@ -79,13 +79,23 @@
               "sunday_chargeable_windows": "Zondag"
             },
             "data_description": {
-              "monday_chargeable_windows": "Voer betaalvensters in, bijvoorbeeld 09:00-13:00, 14:00-17:30.",
-              "tuesday_chargeable_windows": "Voer betaalvensters in, bijvoorbeeld 09:00-13:00, 14:00-17:30.",
-              "wednesday_chargeable_windows": "Voer betaalvensters in, bijvoorbeeld 09:00-13:00, 14:00-17:30.",
-              "thursday_chargeable_windows": "Voer betaalvensters in, bijvoorbeeld 09:00-13:00, 14:00-17:30.",
-              "friday_chargeable_windows": "Voer betaalvensters in, bijvoorbeeld 09:00-13:00, 14:00-17:30.",
-              "saturday_chargeable_windows": "Voer betaalvensters in, bijvoorbeeld 09:00-13:00, 14:00-17:30.",
-              "sunday_chargeable_windows": "Voer betaalvensters in, bijvoorbeeld 09:00-13:00, 14:00-17:30."
+              "monday_chargeable_windows": "Betaaltijden voor maandag, bijvoorbeeld 09:00-13:00, 14:00-17:30. Laat leeg om de standaard betaaltijden van de provider te gebruiken.",
+              "tuesday_chargeable_windows": "Betaaltijden voor dinsdag, bijvoorbeeld 09:00-13:00, 14:00-17:30. Laat leeg om de standaard betaaltijden van de provider te gebruiken.",
+              "wednesday_chargeable_windows": "Betaaltijden voor woensdag, bijvoorbeeld 09:00-13:00, 14:00-17:30. Laat leeg om de standaard betaaltijden van de provider te gebruiken.",
+              "thursday_chargeable_windows": "Betaaltijden voor donderdag, bijvoorbeeld 09:00-13:00, 14:00-17:30. Laat leeg om de standaard betaaltijden van de provider te gebruiken.",
+              "friday_chargeable_windows": "Betaaltijden voor vrijdag, bijvoorbeeld 09:00-13:00, 14:00-17:30. Laat leeg om de standaard betaaltijden van de provider te gebruiken.",
+              "saturday_chargeable_windows": "Betaaltijden voor zaterdag, bijvoorbeeld 09:00-13:00, 14:00-17:30. Laat leeg om de standaard betaaltijden van de provider te gebruiken.",
+              "sunday_chargeable_windows": "Betaaltijden voor zondag, bijvoorbeeld 09:00-13:00, 14:00-17:30. Laat leeg om de standaard betaaltijden van de provider te gebruiken."
+            }
+          },
+          "free_parking_dates": {
+            "name": "Gratis parkeerdagen",
+            "description": "Voer kommagescheiden datums in waarop parkeren gratis is. Jaarlijks terugkerende datums als DD-MM (bijv. 25-12, 01-01, 27-04), eenmalige datums als DD-MM-YYYY (bijv. 18-04-2025, 05-05-2025). Combinatie mogelijk: 25-12, 01-01, 18-04-2025.",
+            "data": {
+              "free_dates": "Gratis parkeerdagen"
+            },
+            "data_description": {
+              "free_dates": "Laat leeg als er geen vaste gratis parkeerdagen zijn."
             }
           }
         }
@@ -93,7 +103,8 @@
     },
     "error": {
       "invalid_time_range": "De eindtijd moet na de starttijd liggen.",
-      "invalid_override_format": "Voer tijdvakken in als HH:MM-HH:MM, gescheiden door komma's."
+      "invalid_override_format": "Voer tijdvakken in als HH:MM-HH:MM, gescheiden door komma's.",
+      "invalid_free_date_format": "Voer datums in als DD-MM (bijv. 25-12) of DD-MM-YYYY (bijv. 18-04-2025), gescheiden door komma's."
     }
   },
   "services": {

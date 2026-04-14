@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import logging
+import re
 from collections.abc import Mapping
-from datetime import time
+from datetime import date, time
 from importlib import resources
 from typing import Final, cast
 
@@ -30,6 +31,7 @@ from .const import (
     CONF_API_URL,
     CONF_AUTO_END,
     CONF_BASE_URL,
+    CONF_FREE_DATES,
     CONF_GUI_URL,
     CONF_MUNICIPALITY,
     CONF_OPERATING_TIME_OVERRIDES,
@@ -38,11 +40,12 @@ from .const import (
     DOMAIN,
     WEEKDAY_KEYS,
 )
-from .helpers import get_attr, normalize_override_windows
+from .helpers import get_attr, normalize_override_windows, parse_comma_separated
 from .models import ProviderConfig
 from .version import async_get_versions, build_log_block
 
 SECTION_OPERATING_TIMES: Final[str] = "operating_times"
+SECTION_FREE_DATES: Final[str] = "free_parking_dates"
 
 _AUTH_SCHEMA: Final[vol.Schema] = vol.Schema(
     {
@@ -448,6 +451,13 @@ class CityVisitorParkingOptionsFlow(config_entries.OptionsFlow):
                 cast("Mapping[str, object]", section_input),
                 errors,
             )
+            free_dates_section = user_input.get(SECTION_FREE_DATES)
+            if not isinstance(free_dates_section, Mapping):
+                free_dates_section = {}
+            raw_free_dates = cast("Mapping[str, object]", free_dates_section).get(
+                CONF_FREE_DATES, ""
+            )
+            free_dates = _normalize_free_dates(cast("str", raw_free_dates), errors)
             if errors:
                 return self._show_form(user_input, errors)
 
@@ -455,6 +465,7 @@ class CityVisitorParkingOptionsFlow(config_entries.OptionsFlow):
                 title="",
                 data={
                     CONF_AUTO_END: cast("bool", user_input[CONF_AUTO_END]),
+                    CONF_FREE_DATES: free_dates,
                     CONF_OPERATING_TIME_OVERRIDES: overrides,
                 },
             )
@@ -475,16 +486,35 @@ class CityVisitorParkingOptionsFlow(config_entries.OptionsFlow):
             if isinstance(raw_auto_end, bool):
                 defaults[CONF_AUTO_END] = raw_auto_end
 
-        expanded = _should_expand_overrides(overrides, user_input)
+        free_dates_default = str(self._config_entry.options.get(CONF_FREE_DATES, ""))
+        if user_input is not None:
+            free_dates_section = user_input.get(SECTION_FREE_DATES, {})
+            if isinstance(free_dates_section, Mapping):
+                raw = cast("Mapping[str, object]", free_dates_section).get(
+                    CONF_FREE_DATES
+                )
+                if isinstance(raw, str):
+                    free_dates_default = raw
+
+        expanded_times = _should_expand_overrides(overrides, user_input)
+        expanded_free = bool(free_dates_default.strip())
 
         schema: dict[object, object] = {
             vol.Required(CONF_AUTO_END, default=defaults[CONF_AUTO_END]): cv.boolean,
         }
 
         day_schema = _build_day_schema(overrides, user_input)
-
         schema[vol.Required(SECTION_OPERATING_TIMES)] = section(
-            vol.Schema(day_schema), {"collapsed": not expanded}
+            vol.Schema(day_schema), {"collapsed": not expanded_times}
+        )
+
+        free_dates_schema = {
+            vol.Optional(CONF_FREE_DATES, default=free_dates_default): (
+                selector.TextSelector(selector.TextSelectorConfig())
+            ),
+        }
+        schema[vol.Required(SECTION_FREE_DATES)] = section(
+            vol.Schema(free_dates_schema), {"collapsed": not expanded_free}
         )
 
         return self.async_show_form(
@@ -641,7 +671,8 @@ def _should_expand_overrides(
 
 
 def _build_day_schema(
-    overrides: Mapping[str, object], user_input: dict[str, object] | None
+    overrides: Mapping[str, object],
+    user_input: dict[str, object] | None,
 ) -> dict[object, object]:
     """Build the schema for weekday override inputs."""
     day_schema: dict[object, object] = {}
@@ -662,6 +693,44 @@ def _build_day_schema(
             selector.TextSelector(selector.TextSelectorConfig())
         )
     return day_schema
+
+
+_FREE_DATE_ANNUAL_RE = re.compile(r"^(\d{2})-(\d{2})$")
+_FREE_DATE_ONCE_RE = re.compile(r"^(\d{2})-(\d{2})-(\d{4})$")
+
+
+def _is_valid_free_date(entry: str) -> bool:
+    """Return True if entry is a valid DD-MM or DD-MM-YYYY date string."""
+    m = _FREE_DATE_ANNUAL_RE.match(entry)
+    if m:
+        day, month = int(m.group(1)), int(m.group(2))
+        try:
+            date(dt_util.now().year, month, day)
+            return True
+        except ValueError:
+            return False
+    m = _FREE_DATE_ONCE_RE.match(entry)
+    if m:
+        day, month, year = int(m.group(1)), int(m.group(2)), int(m.group(3))
+        try:
+            date(year, month, day)
+            return True
+        except ValueError:
+            return False
+    return False
+
+
+def _normalize_free_dates(value: str, errors: dict[str, str]) -> str:
+    """Normalize and validate a comma-separated free-dates string.
+
+    Invalid entries set errors['base'] and cause an empty string to be returned.
+    """
+    entries = parse_comma_separated(value)
+    for entry in entries:
+        if not _is_valid_free_date(entry):
+            errors["base"] = "invalid_free_date_format"
+            return ""
+    return ", ".join(entries)
 
 
 def _normalize_optional_text(value: object) -> str | None:

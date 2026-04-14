@@ -33,6 +33,7 @@ from .client import async_create_client
 from .const import (
     CONF_API_URL,
     CONF_BASE_URL,
+    CONF_FREE_DATES,
     CONF_GUI_URL,
     CONF_MUNICIPALITY,
     CONF_OPERATING_TIME_OVERRIDES,
@@ -154,6 +155,15 @@ async def async_setup_entry(
         await provider.login(
             username=entry.data[CONF_USERNAME],
             password=entry.data[CONF_PASSWORD],
+            # Passes the stored permit_id as product_id (2park) to prevent
+            # _detect_product() from picking the wrong product when multiple
+            # config entries share the same provider.
+            # TODO: also persist and pass `location` (2park) so _detect_product()
+            # is skipped entirely instead of just filtered.
+            product_id=entry.data.get(CONF_PERMIT_ID),
+            # TODO: pass permit_media_type_id=entry.data.get(CONF_PERMIT_ID) to
+            # avoid the extra _fetch_permit_media_type_id() API call on every
+            # restart for dvsportal/the_hague providers.
         )
     except AuthError as err:
         raise ConfigEntryAuthFailed from err
@@ -194,6 +204,7 @@ async def async_setup_entry(
         permit_id=entry.data[CONF_PERMIT_ID],
         auto_end_state=auto_end_state,
         operating_time_overrides=_normalize_operating_time_overrides(entry.options),
+        free_dates=str(entry.options.get(CONF_FREE_DATES, "")),
     )
 
     entry.async_on_unload(entry.add_update_listener(_async_update_listener))
@@ -279,7 +290,10 @@ async def _async_update_listener(
     """Handle config entry updates."""
     runtime: CityVisitorParkingRuntimeData = entry.runtime_data
     overrides = _normalize_operating_time_overrides(entry.options)
-    if overrides != runtime.operating_time_overrides:
+    free_dates = str(entry.options.get(CONF_FREE_DATES, ""))
+    overrides_changed = overrides != runtime.operating_time_overrides
+    free_dates_changed = free_dates != runtime.free_dates
+    if overrides_changed or free_dates_changed:
         # Reload so the coordinator recomputes availability with new windows.
         await hass.config_entries.async_reload(entry.entry_id)
 
