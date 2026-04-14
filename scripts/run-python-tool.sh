@@ -8,15 +8,18 @@ GIT_COMMON_DIR="$(git rev-parse --path-format=absolute --git-common-dir)"
 MAIN_REPO_ROOT="$(dirname "$GIT_COMMON_DIR")"
 HA_CORE_DIR="${HA_CORE_DIR:-$MAIN_REPO_ROOT/../homeassistant-core}"
 HA_VENV_PY="${HA_VENV_PY:-$HA_CORE_DIR/venv/bin/python}"
+REPO_VENV_PY="${REPO_VENV_PY:-$REPO_ROOT/.venv/bin/python}"
 
 select_python_bin() {
-  local candidate
+  local candidate candidate_path
   local bin
 
-  if [[ -x "$HA_VENV_PY" ]] && "$HA_VENV_PY" -c "import sys; sys.exit(0)" >/dev/null 2>&1; then
-    echo "$HA_VENV_PY"
-    return 0
-  fi
+  for candidate_path in "$REPO_VENV_PY" "$HA_VENV_PY"; do
+    if [[ -x "$candidate_path" ]] && "$candidate_path" -c "import sys; sys.exit(0)" >/dev/null 2>&1; then
+      echo "$candidate_path"
+      return 0
+    fi
+  done
 
   for candidate in python python3; do
     if ! command -v "$candidate" >/dev/null 2>&1; then
