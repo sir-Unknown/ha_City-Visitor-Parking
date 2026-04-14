@@ -935,6 +935,7 @@ async def test_service_list_reservations_response(
     data = CoordinatorData(
         permit_id="permit1",
         permit_remaining_minutes=0,
+        permit_balance_unit=None,
         zone_validity=(),
         reservations=(active_reservation, future_reservation, past_reservation),
         favorites=(Favorite(favorite_id="fav1", license_plate="AB1234", name="Ada"),),
@@ -986,6 +987,7 @@ async def test_service_list_reservations_stale(hass: HomeAssistant) -> None:
     data = CoordinatorData(
         permit_id="permit1",
         permit_remaining_minutes=0,
+        permit_balance_unit=None,
         zone_validity=(),
         reservations=(
             Reservation(
@@ -1043,6 +1045,7 @@ async def test_service_get_status_response(hass: HomeAssistant) -> None:
     entry.runtime_data.coordinator.data = CoordinatorData(
         permit_id="permit1",
         permit_remaining_minutes=90,
+        permit_balance_unit=None,
         zone_validity=(provider_range,),
         reservations=(),
         favorites=(),
@@ -1099,6 +1102,7 @@ async def test_service_get_status_stale(hass: HomeAssistant) -> None:
     entry.runtime_data.coordinator.data = CoordinatorData(
         permit_id="permit1",
         permit_remaining_minutes=30,
+        permit_balance_unit=None,
         zone_validity=(window,),
         reservations=(),
         favorites=(),
@@ -1154,6 +1158,7 @@ async def test_service_get_status_stale_recomputes_consistent_windows(
     entry.runtime_data.coordinator.data = CoordinatorData(
         permit_id="permit1",
         permit_remaining_minutes=45,
+        permit_balance_unit=None,
         zone_validity=(provider_range,),
         reservations=(),
         favorites=(),

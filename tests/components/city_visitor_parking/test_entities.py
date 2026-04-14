@@ -118,6 +118,7 @@ async def test_zone_availability_uses_overrides() -> None:
         data = CoordinatorData(
             permit_id="permit",
             permit_remaining_minutes=0,
+            permit_balance_unit=None,
             zone_validity=tuple(zone_validity),
             reservations=(),
             favorites=(),
@@ -173,6 +174,7 @@ async def test_next_chargeable_window_uses_overrides() -> None:
         data = CoordinatorData(
             permit_id="permit",
             permit_remaining_minutes=0,
+            permit_balance_unit=None,
             zone_validity=tuple(zone_validity),
             reservations=(),
             favorites=(),
@@ -237,6 +239,7 @@ async def test_sensors_handle_coordinator_update(
     data = CoordinatorData(
         permit_id="permit",
         permit_remaining_minutes=120,
+        permit_balance_unit=None,
         zone_validity=(zone_window,),
         reservations=(
             Reservation(
@@ -309,6 +312,7 @@ def _sample_data(zone_availability: ZoneAvailability | None = None) -> Coordinat
     return CoordinatorData(
         permit_id="permit",
         permit_remaining_minutes=90,
+        permit_balance_unit=None,
         zone_validity=(),
         reservations=(
             Reservation(
@@ -350,6 +354,7 @@ def test_sensor_helpers() -> None:
     data_no_active = CoordinatorData(
         permit_id=data.permit_id,
         permit_remaining_minutes=data.permit_remaining_minutes,
+        permit_balance_unit=None,
         zone_validity=data.zone_validity,
         reservations=data.reservations,
         favorites=data.favorites,
@@ -359,6 +364,7 @@ def test_sensor_helpers() -> None:
     data_with_active = CoordinatorData(
         permit_id=data.permit_id,
         permit_remaining_minutes=data.permit_remaining_minutes,
+        permit_balance_unit=None,
         zone_validity=data.zone_validity,
         reservations=data.reservations,
         favorites=data.favorites,

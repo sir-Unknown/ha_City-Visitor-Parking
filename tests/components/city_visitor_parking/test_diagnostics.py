@@ -71,6 +71,7 @@ async def test_diagnostics_redacts_sensitive_data(hass: HomeAssistant) -> None:
     data = CoordinatorData(
         permit_id="permit",
         permit_remaining_minutes=30,
+        permit_balance_unit=None,
         zone_validity=(
             TimeRange(
                 start=datetime(2025, 1, 1, 8, 0, tzinfo=UTC),

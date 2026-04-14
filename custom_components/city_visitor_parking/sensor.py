@@ -82,7 +82,7 @@ class RemainingTimeSensor(CityVisitorParkingEntity):
 
     _entity_key = "remaining_time"
     _attr_translation_key: str | None = "remaining_time"
-    _attr_device_class: SensorDeviceClass | None = SensorDeviceClass.DURATION
+    _attr_device_class: SensorDeviceClass | None = None
     _attr_native_unit_of_measurement: str | None = UnitOfTime.HOURS
     _attr_suggested_display_precision: int | None = 2
 
@@ -92,7 +92,7 @@ class RemainingTimeSensor(CityVisitorParkingEntity):
         remaining_minutes = _remaining_balance_minutes(self.coordinator.data)
         next_end_time = _next_end_time(self.coordinator.data)
         active_count = len(self.coordinator.data.active_reservations)
-        attributes = dict(self._attr_extra_state_attributes or {})
+        attributes: dict[str, object] = dict(self._attr_extra_state_attributes or {})  # type: ignore[has-type]
         attributes.update(
             {
                 "active_reservations": active_count,
@@ -101,13 +101,13 @@ class RemainingTimeSensor(CityVisitorParkingEntity):
             }
         )
 
-        if balance_unit is not None and balance_unit != "TIMES":
+        if balance_unit is not None and balance_unit not in {"TIMES", "MINUTE"}:
             self._attr_device_class = SensorDeviceClass.MONETARY
             self._attr_native_unit_of_measurement = balance_unit
             self._attr_suggested_display_precision = 2
-            self._attr_native_value = remaining_minutes
+            self._attr_native_value = float(remaining_minutes)
         else:
-            self._attr_device_class = SensorDeviceClass.DURATION
+            self._attr_device_class = None
             self._attr_native_unit_of_measurement = UnitOfTime.HOURS
             self._attr_suggested_display_precision = 2
             attributes["remaining_minutes"] = remaining_minutes
@@ -140,7 +140,7 @@ class PermitZoneAvailabilitySensor(CityVisitorParkingEntity):
             self.coordinator.data.zone_validity,
             now,
         )
-        attributes = dict(self._attr_extra_state_attributes or {})
+        attributes: dict[str, object] = dict(self._attr_extra_state_attributes or {})  # type: ignore[has-type]
         attributes.update(
             {
                 "is_chargeable_now": availability.is_chargeable_now,

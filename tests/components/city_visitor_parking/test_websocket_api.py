@@ -164,6 +164,7 @@ async def test_ws_get_status_current_window(hass: HomeAssistant) -> None:
     data = CoordinatorData(
         permit_id="permit",
         permit_remaining_minutes=0,
+        permit_balance_unit=None,
         zone_validity=(window,),
         reservations=(),
         favorites=(),
@@ -207,6 +208,7 @@ async def test_ws_get_status_next_window_override(hass: HomeAssistant) -> None:
     data = CoordinatorData(
         permit_id="permit",
         permit_remaining_minutes=0,
+        permit_balance_unit=None,
         zone_validity=(),
         reservations=(),
         favorites=(),

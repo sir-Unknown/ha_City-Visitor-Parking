@@ -362,6 +362,7 @@ async def test_auto_end_skips_when_chargeable(hass: HomeAssistant) -> None:
     data = CoordinatorData(
         permit_id="permit",
         permit_remaining_minutes=0,
+        permit_balance_unit=None,
         zone_validity=(),
         reservations=(),
         favorites=(),
@@ -400,6 +401,7 @@ async def test_auto_end_skips_without_reservations(hass: HomeAssistant) -> None:
     data = CoordinatorData(
         permit_id="permit",
         permit_remaining_minutes=0,
+        permit_balance_unit=None,
         zone_validity=(),
         reservations=(),
         favorites=(),
