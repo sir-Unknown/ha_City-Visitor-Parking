@@ -155,6 +155,15 @@ async def async_setup_entry(
         await provider.login(
             username=entry.data[CONF_USERNAME],
             password=entry.data[CONF_PASSWORD],
+            # Passes the stored permit_id as product_id (2park) to prevent
+            # _detect_product() from picking the wrong product when multiple
+            # config entries share the same provider.
+            # TODO: also persist and pass `location` (2park) so _detect_product()
+            # is skipped entirely instead of just filtered.
+            product_id=entry.data.get(CONF_PERMIT_ID),
+            # TODO: pass permit_media_type_id=entry.data.get(CONF_PERMIT_ID) to
+            # avoid the extra _fetch_permit_media_type_id() API call on every
+            # restart for dvsportal/the_hague providers.
         )
     except AuthError as err:
         raise ConfigEntryAuthFailed from err
