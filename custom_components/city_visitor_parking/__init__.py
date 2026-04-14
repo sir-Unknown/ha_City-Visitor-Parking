@@ -282,7 +282,9 @@ async def _async_update_listener(
     runtime: CityVisitorParkingRuntimeData = entry.runtime_data
     overrides = _normalize_operating_time_overrides(entry.options)
     free_dates = str(entry.options.get(CONF_FREE_DATES, ""))
-    if overrides != runtime.operating_time_overrides or free_dates != runtime.free_dates:
+    overrides_changed = overrides != runtime.operating_time_overrides
+    free_dates_changed = free_dates != runtime.free_dates
+    if overrides_changed or free_dates_changed:
         # Reload so the coordinator recomputes availability with new windows.
         await hass.config_entries.async_reload(entry.entry_id)
 

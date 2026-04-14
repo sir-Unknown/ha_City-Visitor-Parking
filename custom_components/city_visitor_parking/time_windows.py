@@ -31,17 +31,25 @@ def current_or_next_window_with_overrides(
 ) -> TimeRange | None:
     """Return the current or next chargeable window, honoring overrides."""
     overrides = options.get(CONF_OPERATING_TIME_OVERRIDES)
-    if not isinstance(overrides, Mapping) or not overrides:
+    free_dates_raw = options.get(CONF_FREE_DATES)
+    has_free_dates = isinstance(free_dates_raw, str) and bool(free_dates_raw.strip())
+    has_overrides = isinstance(overrides, Mapping) and bool(overrides)
+
+    if not has_free_dates and not has_overrides:
         return current_or_next_window(zone_validity, now)
 
     windows: list[TimeRange] = []
-    # Look ahead one week to apply weekday overrides for upcoming windows.
+    # Look ahead one week to apply weekday overrides and free dates.
     for offset in range(7):
         windows.extend(
             windows_for_today(zone_validity, options, now + timedelta(days=offset))
         )
 
     if not windows:
+        # When free_dates are configured an empty result may be intentional —
+        # do not fall back to unfiltered provider windows in that case.
+        if has_free_dates:
+            return None
         return current_or_next_window(zone_validity, now)
 
     return current_or_next_window(windows, now)

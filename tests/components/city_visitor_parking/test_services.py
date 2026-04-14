@@ -1301,6 +1301,7 @@ def _create_entry_with_device(
         permit_id=permit_id,
         auto_end_state=AutoEndState(),
         operating_time_overrides={},
+        free_dates="",
     )
     entry.runtime_data = runtime
 

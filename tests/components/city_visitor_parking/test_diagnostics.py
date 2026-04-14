@@ -110,6 +110,7 @@ async def test_diagnostics_redacts_sensitive_data(hass: HomeAssistant) -> None:
         permit_id="permit",
         auto_end_state=AutoEndState(),
         operating_time_overrides={},
+        free_dates="",
     )
 
     diagnostics = await async_get_config_entry_diagnostics(hass, entry)

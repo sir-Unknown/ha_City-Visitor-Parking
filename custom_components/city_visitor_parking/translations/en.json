@@ -61,14 +61,14 @@
     "step": {
       "init": {
         "title": "Options",
-        "description": "Adjust chargeable windows and auto-end behavior. Enter times like 09:00-13:00, 14:00-17:30.",
+        "description": "Customize parking behavior for this permit: configure custom chargeable hours per day, set free parking days, and manage automatic reservation ending.",
         "data": {
           "auto_end_reservation_when_free": "Automatically end reservations when parking is free"
         },
         "sections": {
           "operating_times": {
-            "name": "Chargeable windows",
-            "description": "Enter the chargeable windows for each day. Use 24-hour time and separate multiple windows with commas.",
+            "name": "Custom chargeable windows",
+            "description": "Override the default chargeable hours per day. Leave a day empty to keep the default.",
             "data": {
               "monday_chargeable_windows": "Monday",
               "tuesday_chargeable_windows": "Tuesday",
@@ -76,18 +76,26 @@
               "thursday_chargeable_windows": "Thursday",
               "friday_chargeable_windows": "Friday",
               "saturday_chargeable_windows": "Saturday",
-              "sunday_chargeable_windows": "Sunday",
-              "free_dates": "Free dates"
+              "sunday_chargeable_windows": "Sunday"
             },
             "data_description": {
-              "monday_chargeable_windows": "Enter chargeable windows, for example 09:00-13:00, 14:00-17:30.",
-              "tuesday_chargeable_windows": "Enter chargeable windows, for example 09:00-13:00, 14:00-17:30.",
-              "wednesday_chargeable_windows": "Enter chargeable windows, for example 09:00-13:00, 14:00-17:30.",
-              "thursday_chargeable_windows": "Enter chargeable windows, for example 09:00-13:00, 14:00-17:30.",
-              "friday_chargeable_windows": "Enter chargeable windows, for example 09:00-13:00, 14:00-17:30.",
-              "saturday_chargeable_windows": "Enter chargeable windows, for example 09:00-13:00, 14:00-17:30.",
-              "sunday_chargeable_windows": "Enter chargeable windows, for example 09:00-13:00, 14:00-17:30.",
-              "free_dates": "Comma-separated dates when parking is free. Use DD-MM for annual dates (e.g. 25-12, 01-01) or DD-MM-YYYY for one-off dates (e.g. 18-04-2025)."
+              "monday_chargeable_windows": "Enter chargeable windows, for example 09:00-13:00, 14:00-17:30. Leave empty to use the provider's default hours.",
+              "tuesday_chargeable_windows": "Enter chargeable windows, for example 09:00-13:00, 14:00-17:30. Leave empty to use the provider's default hours.",
+              "wednesday_chargeable_windows": "Enter chargeable windows, for example 09:00-13:00, 14:00-17:30. Leave empty to use the provider's default hours.",
+              "thursday_chargeable_windows": "Enter chargeable windows, for example 09:00-13:00, 14:00-17:30. Leave empty to use the provider's default hours.",
+              "friday_chargeable_windows": "Enter chargeable windows, for example 09:00-13:00, 14:00-17:30. Leave empty to use the provider's default hours.",
+              "saturday_chargeable_windows": "Enter chargeable windows, for example 09:00-13:00, 14:00-17:30. Leave empty to use the provider's default hours.",
+              "sunday_chargeable_windows": "Enter chargeable windows, for example 09:00-13:00, 14:00-17:30. Leave empty to use the provider's default hours."
+            }
+          },
+          "free_parking_dates": {
+            "name": "Free parking days",
+            "description": "Enter comma-separated dates when parking is free. Use DD-MM for annually recurring dates (e.g. 25-12, 01-01, 27-04) and DD-MM-YYYY for one-off dates (e.g. 18-04-2025, 05-05-2025). Both formats can be mixed: 25-12, 01-01, 18-04-2025.",
+            "data": {
+              "free_dates": "Free parking days"
+            },
+            "data_description": {
+              "free_dates": "Leave empty if there are no fixed free parking days."
             }
           }
         }
@@ -95,7 +103,8 @@
     },
     "error": {
       "invalid_time_range": "End time must be after start time.",
-      "invalid_override_format": "Enter time windows in the format HH:MM-HH:MM, separated by commas."
+      "invalid_override_format": "Enter time windows in the format HH:MM-HH:MM, separated by commas.",
+      "invalid_free_date_format": "Enter dates as DD-MM (e.g. 25-12) or DD-MM-YYYY (e.g. 18-04-2025), separated by commas."
     }
   },
   "services": {
