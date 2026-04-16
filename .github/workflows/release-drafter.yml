@@ -71,7 +71,14 @@ jobs:
           if [ -n "${INPUT_VERSION}" ]; then
             BASE="${INPUT_VERSION}"
           else
-            BASE=$(jq -r '.version' custom_components/city_visitor_parking/manifest.json | sed 's/-.*//')
+            MANIFEST_VERSION=$(jq -r '.version' custom_components/city_visitor_parking/manifest.json | sed 's/-.*//')
+            if [ "${MANIFEST_VERSION}" = "0.0.0" ]; then
+              BASE=$(gh release list --limit 1000 --json tagName,isPrerelease \
+                --jq '[.[] | select(.isPrerelease == false) | .tagName] | first' \
+                | sed 's/^v//')
+            else
+              BASE="${MANIFEST_VERSION}"
+            fi
           fi
           LAST=$(gh release list --limit 1000 --json tagName --jq '.[].tagName' \
             | grep -E "^v${BASE}-beta\.[0-9]+(\+.*)?$" \
@@ -106,7 +113,14 @@ jobs:
           if [ -n "${INPUT_VERSION}" ]; then
             BASE="${INPUT_VERSION}"
           else
-            BASE=$(jq -r '.version' custom_components/city_visitor_parking/manifest.json | sed 's/-.*//')
+            MANIFEST_VERSION=$(jq -r '.version' custom_components/city_visitor_parking/manifest.json | sed 's/-.*//')
+            if [ "${MANIFEST_VERSION}" = "0.0.0" ]; then
+              BASE=$(gh release list --limit 1000 --json tagName,isPrerelease \
+                --jq '[.[] | select(.isPrerelease == false) | .tagName] | first' \
+                | sed 's/^v//')
+            else
+              BASE="${MANIFEST_VERSION}"
+            fi
           fi
           LAST=$(gh release list --limit 1000 --json tagName --jq '.[].tagName' \
             | grep -E "^v${BASE}-testing\.[0-9]+(\+.*)?$" \

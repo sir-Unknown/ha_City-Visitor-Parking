@@ -408,7 +408,6 @@ const isPermitEntryDisabled = (entry: PermitEntry): boolean =>
 
 const buildPermitOptions = (entries: PermitEntry[]): PermitOption[] =>
   entries
-    .filter((entry) => !entry.disabled_by)
     .map((entry) => ({
       id: entry.entry_id,
       label: (entry.title || entry.entry_id || "").trim() || entry.entry_id,
@@ -2578,6 +2577,12 @@ const getActiveCardConfigForm = createConfigFormGetter(
 
     connectedCallback(): void {
       super.connectedCallback();
+      if (this._reservationStartedHandler) {
+        window.removeEventListener(
+          RESERVATION_STARTED_EVENT,
+          this._reservationStartedHandler,
+        );
+      }
       this._reservationStartedHandler = (event: Event) => {
         const detail = (
           event as CustomEvent<{
@@ -2755,8 +2760,10 @@ const getActiveCardConfigForm = createConfigFormGetter(
         this._reservationUpdateFlagsByDevice = reservationUpdateFlagsByDevice;
         this._activeReservations = collected;
         this._activeReservationsById = collectedById;
-        // Mark as loaded even when some devices failed; remaining devices are shown correctly.
-        this._activeReservationsLoadedFor = target;
+        // Only mark as loaded when all devices succeeded; failed devices will be retried on the next update.
+        if (!failedDevices.length) {
+          this._activeReservationsLoadedFor = target;
+        }
         for (const reservationId of this._reservationInputValues.keys()) {
           if (!collectedById.has(reservationId)) {
             this._reservationInputValues.delete(reservationId);

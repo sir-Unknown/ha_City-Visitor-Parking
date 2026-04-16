@@ -820,7 +820,7 @@ var BASE_CARD_STYLES = i`
   }
 `;
 var isPermitEntryDisabled = (entry) => Boolean(entry.disabled_by) || entry.state != null && entry.state !== "loaded" && entry.state !== "setup_in_progress";
-var buildPermitOptions = (entries) => entries.filter((entry) => !entry.disabled_by).map((entry) => ({
+var buildPermitOptions = (entries) => entries.map((entry) => ({
   id: entry.entry_id,
   label: (entry.title || entry.entry_id || "").trim() || entry.entry_id,
   disabled: isPermitEntryDisabled(entry)
@@ -2456,6 +2456,12 @@ var getActiveCardConfigForm = createConfigFormGetter(
     }
     connectedCallback() {
       super.connectedCallback();
+      if (this._reservationStartedHandler) {
+        window.removeEventListener(
+          RESERVATION_STARTED_EVENT,
+          this._reservationStartedHandler
+        );
+      }
       this._reservationStartedHandler = (event) => {
         const detail = event.detail;
         const deviceId = (detail?.device_id ?? "").trim();
@@ -2599,7 +2605,9 @@ var getActiveCardConfigForm = createConfigFormGetter(
         this._reservationUpdateFlagsByDevice = reservationUpdateFlagsByDevice;
         this._activeReservations = collected;
         this._activeReservationsById = collectedById;
-        this._activeReservationsLoadedFor = target;
+        if (!failedDevices.length) {
+          this._activeReservationsLoadedFor = target;
+        }
         for (const reservationId of this._reservationInputValues.keys()) {
           if (!collectedById.has(reservationId)) {
             this._reservationInputValues.delete(reservationId);

@@ -323,7 +323,7 @@ class CityVisitorParkingCoordinator(DataUpdateCoordinator[CoordinatorData]):
             # 4. Transition is known but not imminent — schedule precisely.
             #    Arrive TRANSITION_BUFFER before the change, but cap at the
             #    idle interval so we never sleep longer than that.
-            precise_interval = time_until_change - TRANSITION_BUFFER
+            precise_interval = max(time_until_change - TRANSITION_BUFFER, timedelta(0))
             return min(precise_interval, IDLE_UPDATE_INTERVAL)
 
         # 5. No known upcoming change — idle polling.
