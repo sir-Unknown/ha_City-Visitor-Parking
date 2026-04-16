@@ -15,6 +15,15 @@ on:
       - custom_components/**
   workflow_dispatch:
     inputs:
+      prerelease:
+        description: "Pre-release type (beta or testing). Leave empty for a stable draft."
+        required: false
+        default: ""
+        type: choice
+        options:
+          - ""
+          - beta
+          - testing
       version:
         description: "Version override (e.g. 0.1.35). Leave empty to auto-resolve from manifest.json."
         required: false
@@ -44,10 +53,52 @@ jobs:
           persist-credentials: false
 
       - name: Run Release Drafter (stable)
-        if: github.ref_name == 'main'
+        if: github.ref_name == 'main' && inputs.prerelease == ''
         uses: release-drafter/release-drafter@139054aeaa9adc52ab36ddf67437541f039b88e2 # v7.1.1
         with:
           version: ${{ inputs.version }}
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+
+      - name: Get next beta version
+        if: github.ref_name == 'main' && inputs.prerelease == 'beta'
+        id: next_beta_version
+        env:
+          GH_TOKEN: ${{ github.token }}
+          INPUT_VERSION: ${{ inputs.version }}
+          INPUT_SUFFIX: ${{ inputs.suffix }}
+        run: |
+          if [ -n "${INPUT_VERSION}" ]; then
+            BASE="${INPUT_VERSION}"
+          else
+            MANIFEST_VERSION=$(jq -r '.version' custom_components/city_visitor_parking/manifest.json | sed 's/-.*//')
+            if [ "${MANIFEST_VERSION}" = "0.0.0" ]; then
+              BASE=$(gh release list --limit 1000 --json tagName,isPrerelease \
+                --jq '[.[] | select(.isPrerelease == false) | .tagName] | first' \
+                | sed 's/^v//')
+            else
+              BASE="${MANIFEST_VERSION}"
+            fi
+          fi
+          LAST=$(gh release list --limit 1000 --json tagName --jq '.[].tagName' \
+            | grep -E "^v${BASE}-beta\.[0-9]+(\+.*)?$" \
+            | grep -oE "beta\.[0-9]+" \
+            | grep -oE "[0-9]+$" \
+            | sort -n | tail -1)
+          NEXT=$((${LAST:-0} + 1))
+          if [ -n "${INPUT_SUFFIX}" ]; then
+            echo "version=${BASE}-beta.${NEXT}+${INPUT_SUFFIX}" >> "$GITHUB_OUTPUT"
+          else
+            echo "version=${BASE}-beta.${NEXT}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Run Release Drafter (beta pre-release)
+        if: github.ref_name == 'main' && inputs.prerelease == 'beta'
+        uses: release-drafter/release-drafter@139054aeaa9adc52ab36ddf67437541f039b88e2 # v7.1.1
+        with:
+          config-name: release-drafter-beta.yml
+          prerelease: true
+          version: ${{ steps.next_beta_version.outputs.version }}
         env:
           GITHUB_TOKEN: ${{ github.token }}
 
@@ -62,7 +113,14 @@ jobs:
           if [ -n "${INPUT_VERSION}" ]; then
             BASE="${INPUT_VERSION}"
           else
-            BASE=$(jq -r '.version' custom_components/city_visitor_parking/manifest.json | sed 's/-.*//')
+            MANIFEST_VERSION=$(jq -r '.version' custom_components/city_visitor_parking/manifest.json | sed 's/-.*//')
+            if [ "${MANIFEST_VERSION}" = "0.0.0" ]; then
+              BASE=$(gh release list --limit 1000 --json tagName,isPrerelease \
+                --jq '[.[] | select(.isPrerelease == false) | .tagName] | first' \
+                | sed 's/^v//')
+            else
+              BASE="${MANIFEST_VERSION}"
+            fi
           fi
           LAST=$(gh release list --limit 1000 --json tagName --jq '.[].tagName' \
             | grep -E "^v${BASE}-testing\.[0-9]+(\+.*)?$" \

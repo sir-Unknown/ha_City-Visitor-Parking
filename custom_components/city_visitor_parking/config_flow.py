@@ -165,7 +165,11 @@ class CityVisitorParkingConfigFlow(config_entries.ConfigFlow):
                     ): cv.string,
                 }
             )
-            return self.async_show_form(step_id="reconfigure", data_schema=schema)
+            return self.async_show_form(
+                step_id="reconfigure",
+                data_schema=schema,
+                description_placeholders={"name": entry.title},
+            )
 
         base_url = _normalize_optional_text(user_input.get(CONF_BASE_URL))
         api_url = _normalize_optional_text(user_input.get(CONF_API_URL))

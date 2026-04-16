@@ -211,24 +211,52 @@ jobs:
             echo "$body"
             echo "RELEASE_BODY_EOF"
           } >> "$GITHUB_OUTPUT"
-      - name: Extract pyCityVisitorParking commit from release body
-        if: contains(needs.validate.outputs.tag, '-testing.')
+      - name: Extract pyCityVisitorParking ref from release body
+        if: contains(needs.validate.outputs.tag, '-testing.') || contains(needs.validate.outputs.tag, '-beta.')
         id: pycvp
         env:
           RELEASE_BODY: ${{ steps.release_body.outputs.body }}
+          RELEASE_TAG: ${{ needs.validate.outputs.tag }}
         run: |
-          COMMIT=$(echo "$RELEASE_BODY" | grep -oE '\*\*Commit:\*\* `?([a-f0-9]{40})`?' | grep -oE '[a-f0-9]{40}')
-          if [ -z "$COMMIT" ]; then
-            echo "::error::No pyCityVisitorParking commit found in release body. Fill in the 'Commit' field in the release draft."
-            exit 1
+          IS_BETA=false
+          if echo "$RELEASE_TAG" | grep -q '\-beta\.'; then
+            IS_BETA=true
           fi
+
+          COMMIT=$(echo "$RELEASE_BODY" | grep -oE '\*\*Commit:\*\* `?([a-f0-9]{40})`?' | grep -oE '[a-f0-9]{40}')
+          PYPI=$(echo "$RELEASE_BODY" | grep -oE '\*\*PyPI:\*\* `?([^` \n]+)`?' | sed 's/\*\*PyPI:\*\* //; s/`//g')
+
+          # Ignore placeholder values
+          echo "$COMMIT" | grep -qiE '^(FILL_IN|$)' && COMMIT=""
+          echo "$PYPI"   | grep -qiE '^(FILL_IN|$)' && PYPI=""
+
+          if [ "$IS_BETA" = "true" ]; then
+            if [ -n "$PYPI" ] && [ -n "$COMMIT" ]; then
+              echo "::error::Fill in either PyPI version or Commit SHA, not both."
+              exit 1
+            fi
+            if [ -z "$PYPI" ] && [ -z "$COMMIT" ]; then
+              echo "::error::Fill in either 'PyPI' or 'Commit' in the beta release draft."
+              exit 1
+            fi
+          else
+            # testing: commit is required
+            if [ -z "$COMMIT" ]; then
+              echo "::error::No pyCityVisitorParking commit found in release body. Fill in the 'Commit' field in the release draft."
+              exit 1
+            fi
+          fi
+
           echo "commit=$COMMIT" >> "$GITHUB_OUTPUT"
-          echo "Found pyCityVisitorParking commit: $COMMIT"
+          echo "pypi=$PYPI" >> "$GITHUB_OUTPUT"
+          [ -n "$COMMIT" ] && echo "Found pyCityVisitorParking commit: $COMMIT"
+          [ -n "$PYPI" ]   && echo "Found pyCityVisitorParking PyPI version: $PYPI"
 
       - name: Build release asset
         env:
           VERSION: ${{ steps.version.outputs.version }}
           PYCVP_COMMIT: ${{ steps.pycvp.outputs.commit }}
+          PYCVP_PYPI: ${{ steps.pycvp.outputs.pypi }}
         run: |
           mkdir /tmp/release-build
           git -C custom_components/city_visitor_parking archive --format=tar \
@@ -239,10 +267,16 @@ jobs:
           data = json.loads(p.read_text())
           data["version"] = os.environ["VERSION"]
           pycvp_commit = os.environ.get("PYCVP_COMMIT", "")
+          pycvp_pypi = os.environ.get("PYCVP_PYPI", "")
           if pycvp_commit:
               new_reqs = [re.sub(r'[a-f0-9]{40}$', pycvp_commit, r) for r in data["requirements"]]
               if new_reqs == data["requirements"]:
                   raise ValueError("No pyCityVisitorParking SHA found in requirements to replace")
+              data["requirements"] = new_reqs
+          elif pycvp_pypi:
+              new_reqs = [re.sub(r'pycityvisitorparking==\S+', f'pycityvisitorparking=={pycvp_pypi}', r) for r in data["requirements"]]
+              if new_reqs == data["requirements"]:
+                  raise ValueError("No pycityvisitorparking==... requirement found to replace")
               data["requirements"] = new_reqs
           p.write_text(json.dumps(data, indent=2) + "\n")
           PYEOF

@@ -456,9 +456,7 @@ async def _setup_entry(
     entry.mock_state(hass, config_entries.ConfigEntryState.SETUP_IN_PROGRESS)
 
     provider = AsyncMock()
-    provider.get_permit.return_value = {"id": "permit", "zone_validity": []}
-    provider.list_reservations.return_value = []
-    provider.list_favorites.return_value = []
+    provider.fetch_all.return_value = ({"id": "permit", "zone_validity": []}, [], [])
 
     client = AsyncMock()
     client.get_provider.return_value = provider
