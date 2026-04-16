@@ -61,9 +61,9 @@ den_haag:
   gui_url: "https://parkerendenhaag.denhaag.nl/"
   api_url: "api"
 
-den_haag_demo:
-  municipality_name: Den Haag Demo
-  provider_id: demo
+# den_haag_demo:
+#   municipality_name: Den Haag Demo
+#   provider_id: demo
 
 s_hertogenbosch:
   municipality_name: "'s-Hertogenbosch"
@@ -93,9 +93,9 @@ eindhoven:
   gui_url: "https://mijn.2park.nl/"
   api_url: "/gsmpark-app-www/json"
 
-eindhoven_demo:
-  municipality_name: Eindhoven Demo
-  provider_id: demo
+# eindhoven_demo:
+#   municipality_name: Eindhoven Demo
+#   provider_id: demo
 
 emmen:
   municipality_name: Emmen
@@ -125,9 +125,9 @@ groningen:
   gui_url: "https://aanvraagparkeren.groningen.nl/DVSPortal/"
   api_url: "/DVSPortal/api"
 
-groningen_demo:
-  municipality_name: Groningen Demo
-  provider_id: demo
+# groningen_demo:
+#   municipality_name: Groningen Demo
+#   provider_id: demo
 
 haarlem:
   municipality_name: Haarlem
