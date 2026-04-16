@@ -722,7 +722,6 @@ var applyZoneStatus = (context, status) => {
     _windowEndIso: status?.end ?? null
   });
 };
-var resetZoneStatusThrottle = (context) => context._zoneStatusTsByEntryId.clear();
 var DOMAIN = "city_visitor_parking";
 var RESERVATION_STARTED_EVENT = "city-visitor-parking-reservation-started";
 var createStatusState = () => ({
@@ -738,9 +737,9 @@ var triggerProgressButtonFeedback = async (host, selector, outcome) => {
   if (!button) return;
   if (outcome === "success") {
     button.actionSuccess?.();
-    return;
+  } else {
+    button.actionError?.();
   }
-  button.actionError?.();
 };
 var setStatusState = (state, message, type, requestRender, clearAfterMs) => {
   if (state.clearHandle !== null) {
@@ -820,9 +819,11 @@ var BASE_CARD_STYLES = i`
     width: 100%;
   }
 `;
-var buildPermitOptions = (entries) => entries.map((entry) => ({
+var isPermitEntryDisabled = (entry) => Boolean(entry.disabled_by) || entry.state != null && entry.state !== "loaded" && entry.state !== "setup_in_progress";
+var buildPermitOptions = (entries) => entries.filter((entry) => !entry.disabled_by).map((entry) => ({
   id: entry.entry_id,
-  label: (entry.title || entry.entry_id || "").trim() || entry.entry_id
+  label: (entry.title || entry.entry_id || "").trim() || entry.entry_id,
+  disabled: isPermitEntryDisabled(entry)
 })).sort((first, second) => first.label.localeCompare(second.label));
 var buildPermitTitleMap = (entries) => new Map(
   entries.map((entry) => [entry.entry_id, entry.title || entry.entry_id])
@@ -860,9 +861,9 @@ var getCardText = (key) => {
   return value === key ? null : value;
 };
 var getConfigEntryId = (config) => config?.config_entry_id ?? null;
-var filterDomainDevices = (devices, domain = DOMAIN) => devices.filter(
+var filterDomainDevices = (devices) => devices.filter(
   (device) => (device.identifiers ?? []).some(
-    (identifier) => identifier[0] === domain
+    (identifier) => identifier[0] === DOMAIN
   )
 );
 var getHassLanguage = (hass) => {
@@ -915,25 +916,18 @@ var renderPermitSelect = (params) => {
 };
 var renderFavoriteSelect = (params) => {
   if (!params.showName) return A;
-  const selectOptions = [];
-  const favoriteItems = [];
   const seenValues = /* @__PURE__ */ new Set();
+  const selectOptions = [];
   for (const favorite of params.favoritesOptions) {
-    const name = favorite.name?.trim();
-    const value = name || "";
-    const valueKey = normalizeMatchValue(value);
+    const name = favorite.name?.trim() || "";
+    const valueKey = normalizeMatchValue(name);
     if (!valueKey || seenValues.has(valueKey)) continue;
     seenValues.add(valueKey);
-    const label = name || "";
-    favoriteItems.push({
-      value,
-      label
-    });
+    selectOptions.push({ value: name, label: name });
   }
-  favoriteItems.sort(
+  selectOptions.sort(
     (first, second) => first.label.localeCompare(second.label) || first.value.localeCompare(second.value)
   );
-  selectOptions.push(...favoriteItems);
   const inputValue = params.favoriteValue;
   if (params.preview) {
     return b2`
@@ -1020,33 +1014,39 @@ var renderFavoriteActionRow = (params) => b2`
                 </ha-formfield>
               ` : A : A}
     </div>
-    ${params.startButtonSuccess ? b2`
-          <ha-progress-button
-            id="startReservation"
-            class="start-button success"
-            variant="success"
-            appearance="filled"
-            .progress=${params.startInFlight}
-            ?disabled=${params.startDisabled}
-            aria-label=${params.localize("action.start_reservation")}
-            title=${params.localize("action.start_reservation")}
-          >
-            ${params.localize("action.start_reservation")}
-          </ha-progress-button>
-        ` : b2`
-          <ha-progress-button
-            id="startReservation"
-            class="start-button"
-            .progress=${params.startInFlight}
-            ?disabled=${params.startDisabled}
-            aria-label=${params.localize("action.start_reservation")}
-            title=${params.localize("action.start_reservation")}
-          >
-            ${params.localize("action.start_reservation")}
-          </ha-progress-button>
-        `}
+    ${(() => {
+  const isSuccess = params.startButtonSuccess;
+  const isWarning = params.startButtonWarning;
+  const buttonClass = `start-button${isSuccess ? " success" : isWarning ? " warning" : ""}`;
+  const label = isWarning ? params.localize("action.permit_unavailable") : params.localize("action.start_reservation");
+  return b2`
+        <ha-progress-button
+          id="startReservation"
+          class=${buttonClass}
+          variant=${isSuccess ? "success" : isWarning ? "danger" : A}
+          appearance=${isSuccess || isWarning ? "filled" : A}
+          .progress=${params.startInFlight}
+          ?disabled=${params.startDisabled}
+          aria-label=${label}
+          title=${label}
+        >
+          ${label}
+        </ha-progress-button>
+      `;
+})()}
   </div>
 `;
+var makeDedupedLoader = (getPromise, setPromise, factory) => {
+  const existing = getPromise();
+  if (existing) return existing;
+  const promise = factory().finally(() => setPromise(null));
+  setPromise(promise);
+  return promise;
+};
+var extractEventValue = (event, fallbackElement) => {
+  const detail = event.detail;
+  return detail != null && "value" in detail ? detail.value ?? "" : fallbackElement?.value ?? "";
+};
 var createLocalize = (getHass) => (key, ..._args) => localize(getHass(), key);
 var createErrorMessage = (getHass) => (err, fallbackKey) => errorMessage(err, fallbackKey, (key) => localize(getHass(), key));
 var getLoadingMessage = (hass) => {
@@ -1217,18 +1217,15 @@ var buildFormHelpers = (localizeTarget, prefix) => {
   };
 };
 var buildCardTypeOptions = (localizeTarget, prefix) => {
-  const newKey = `${prefix}.value.card_type.new`;
-  const activeKey = `${prefix}.value.card_type.active`;
-  const newLabel = localize(localizeTarget, newKey);
-  const activeLabel = localize(localizeTarget, activeKey);
+  const t4 = (key) => {
+    const result = localize(localizeTarget, `${prefix}.value.card_type.${key}`);
+    return result === `${prefix}.value.card_type.${key}` ? "" : result;
+  };
   return [
-    [
-      "custom:city-visitor-parking-card",
-      newLabel === newKey ? "New reservation card" : newLabel
-    ],
+    ["custom:city-visitor-parking-card", t4("new") || "New reservation card"],
     [
       "custom:city-visitor-parking-active-card",
-      activeLabel === activeKey ? "Active reservations card" : activeLabel
+      t4("active") || "Active reservations card"
     ]
   ];
 };
@@ -1388,8 +1385,8 @@ var getActiveCardConfigForm = createConfigFormGetter(
   const CARD_TYPE = "city-visitor-parking-card";
   const WS_LIST_FAVORITES = "city_visitor_parking/favorites";
   const WS_GET_STATUS = "city_visitor_parking/status";
-  const STATUS_THROTTLE_MS = 15e3;
-  const STATUS_REFRESH_MS = 6e4;
+  const STATUS_THROTTLE_MS = 6e4;
+  const STATUS_REFRESH_MS = 3e5;
   const INPUT_VALUE_IDS = /* @__PURE__ */ new Set([
     "licensePlate",
     "favorite",
@@ -1516,7 +1513,7 @@ var getActiveCardConfigForm = createConfigFormGetter(
       const prev = this._prevHaState;
       this._prevHaState = hass.config?.state;
       this._hass = hass;
-      const nextLanguage = this._getTranslationLanguage(hass);
+      const nextLanguage = getHassLanguage(hass) || navigator.language || "en";
       if (nextLanguage !== this._translationsLanguage || !this._translationsReady) {
         this._translationsReady = false;
         void ensureTranslations(this._hass).then(() => {
@@ -1527,7 +1524,7 @@ var getActiveCardConfigForm = createConfigFormGetter(
       }
       if (prev !== "RUNNING" && hass.config?.state === "RUNNING") {
         invalidateFavoritesCache(this, { resetRetryAfter: true });
-        resetZoneStatusThrottle(this);
+        this._zoneStatusTsByEntryId.clear();
       }
       this._syncEntryState(false);
     }
@@ -1623,6 +1620,8 @@ var getActiveCardConfigForm = createConfigFormGetter(
       if (!isHassRunning(this._hass)) return;
       const entryId = this._getActiveEntryId();
       if (!entryId) return;
+      if (this._permitOptions.some((o5) => o5.id === entryId && o5.disabled))
+        return;
       if (Date.now() < this._favoritesRetryAfter) return;
       if (this._favoritesLoading) return;
       if (this._favoritesLoadedFor === entryId) return;
@@ -1767,10 +1766,13 @@ var getActiveCardConfigForm = createConfigFormGetter(
       const localizeFn = this._localize;
       const permitSelectValue = activeEntryId ?? "";
       const permitSelectDisabled = controlsDisabled || this._permitOptionsLoading;
+      const selectedPermitDisabled = Boolean(
+        activeEntryId && this._permitOptions.find((o5) => o5.id === activeEntryId)?.disabled
+      );
       const { showAddFavorite, showRemoveFavorite, removeFavorite } = this._getFavoriteActionState();
       const favoriteRemoveDisabled = controlsDisabled || this._favoriteRemoveInFlight;
       const favoritesOptions = this._favorites;
-      const favoriteSelectDisabled = controlsDisabled || this._favoritesLoading;
+      const favoriteSelectDisabled = controlsDisabled || this._favoritesLoading || selectedPermitDisabled;
       const startDisabled = controlsDisabled || !hasDevice || !hasTarget || !hasLicense || this._startInFlight;
       const todayStart = /* @__PURE__ */ new Date();
       todayStart.setHours(0, 0, 0, 0);
@@ -1812,7 +1814,7 @@ var getActiveCardConfigForm = createConfigFormGetter(
                 .label=${localizeFn("field.license_plate")}
                 placeholder=${this._licensePlateFocused ? localizeFn("placeholder.license_plate") : ""}
                 .value=${priorLicense}
-                ?disabled=${controlsDisabled}
+                ?disabled=${controlsDisabled || selectedPermitDisabled}
                 @focusin=${this._onLicensePlateFocusIn}
                 @focusout=${this._onLicensePlateFocusOut}
               ></ha-input>
@@ -1828,7 +1830,7 @@ var getActiveCardConfigForm = createConfigFormGetter(
                               .label=${localizeFn("field.start_time")}
                               .value=${priorStartDateTime}
                               .min=${minDateTime}
-                              ?disabled=${controlsDisabled}
+                              ?disabled=${controlsDisabled || selectedPermitDisabled}
                               @input=${this._onInput}
                               @change=${this._onChange}
                             ></ha-input>
@@ -1843,7 +1845,7 @@ var getActiveCardConfigForm = createConfigFormGetter(
                               .label=${localizeFn("field.end_time")}
                               .value=${priorEndDateTime}
                               .min=${minDateTime}
-                              ?disabled=${controlsDisabled}
+                              ?disabled=${controlsDisabled || selectedPermitDisabled}
                               @input=${this._onInput}
                               @change=${this._onChange}
                             ></ha-input>
@@ -1860,6 +1862,7 @@ var getActiveCardConfigForm = createConfigFormGetter(
         addFavoriteChecked: this._addFavoriteChecked,
         startInFlight: this._startInFlight,
         startButtonSuccess: this._startButtonSuccess,
+        startButtonWarning: selectedPermitDisabled,
         startDisabled,
         localize: localizeFn
       })}
@@ -1940,25 +1943,18 @@ var getActiveCardConfigForm = createConfigFormGetter(
     }
     _handlePermitSelectChange(event) {
       if (this._isInEditor()) return;
-      const detail = event.detail;
       const target = event.currentTarget;
-      const hasDetailValue = detail != null && Object.prototype.hasOwnProperty.call(detail, "value");
-      const value = hasDetailValue ? detail.value ?? "" : target?.value ?? "";
-      const nextValue = value ?? "";
-      this._handlePermitChange(nextValue);
+      this._handlePermitChange(extractEventValue(event, target));
     }
     _handleFavoriteSelectChange(event) {
       if (!this._config?.show_favorites || !this._config?.show_name || this._isInEditor())
         return;
-      const detail = event.detail;
       const select = event.currentTarget;
       const path = event.composedPath();
       const pathValueElement = path.find(
         (node) => node instanceof HTMLElement && (node.id === "favorite" || node.getAttribute("id") === "favorite")
       );
-      const hasDetailValue = detail != null && Object.prototype.hasOwnProperty.call(detail, "value");
-      const selectedValue = hasDetailValue ? detail.value ?? "" : select?.value ?? pathValueElement?.value ?? "";
-      const nextValue = selectedValue;
+      const nextValue = extractEventValue(event, select ?? pathValueElement);
       if (this._suppressFavoriteClear) {
         this._suppressFavoriteClear = false;
         if (!nextValue) {
@@ -2030,16 +2026,6 @@ var getActiveCardConfigForm = createConfigFormGetter(
       this._deviceEntryId = null;
       applyZoneStatus(this, null);
       this._resetFavoritesState();
-    }
-    _clearFormValues() {
-      const hadValues = Object.keys(this._formValues).length > 0;
-      const hadAddFavoriteChecked = this._addFavoriteChecked;
-      this._formValues = {};
-      if (this._config?.default_license_plate) {
-        this._formValues["licensePlate"] = this._config.default_license_plate;
-      }
-      clearFavoriteTransientState(this);
-      if (hadValues || hadAddFavoriteChecked) this._requestRender();
     }
     _clearPermitScopedFormValues() {
       const hadValues = Boolean(this._formValues.licensePlate) || Boolean(this._formValues.favorite);
@@ -2267,16 +2253,11 @@ var getActiveCardConfigForm = createConfigFormGetter(
     _resolveTimes() {
       const now = /* @__PURE__ */ new Date();
       if (!this._config) return { start: null, end: null };
-      const showStart = this._config.show_start_time;
-      const showEnd = this._config.show_end_time;
       const fallbackStart = new Date(now.getTime() + 60 * 1e3);
-      const startValue = showStart ? this._getInputValue("startDateTime") : "";
-      const endValue = showEnd ? this._getInputValue("endDateTime") : "";
+      const startValue = this._config.show_start_time ? this._getInputValue("startDateTime") : "";
       const start = parseDateTimeValue(startValue) ?? fallbackStart;
-      const fallbackEnd = new Date(start.getTime() + 60 * 60 * 1e3);
-      const end = parseDateTimeValue(endValue) ?? fallbackEnd;
-      if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()))
-        return { start: null, end: null };
+      const endValue = this._config.show_end_time ? this._getInputValue("endDateTime") : "";
+      const end = parseDateTimeValue(endValue) ?? new Date(start.getTime() + 60 * 60 * 1e3);
       return { start, end };
     }
     _getInputValue(id) {
@@ -2350,7 +2331,7 @@ var getActiveCardConfigForm = createConfigFormGetter(
       return normalized;
     }
     _resolveDefaultStart(start, now) {
-      return start > now ? start : new Date(now.getTime());
+      return start > now ? start : new Date(now);
     }
     _resolveDefaultEnd(start) {
       const window2 = this._getRelevantWindowTimes();
@@ -2397,9 +2378,6 @@ var getActiveCardConfigForm = createConfigFormGetter(
     }
     _getActiveEntryId() {
       return getConfigEntryId(this._config) || this._selectedEntryId;
-    }
-    _getTranslationLanguage(hass) {
-      return getHassLanguage(hass) || navigator.language || "en";
     }
   }
   CityVisitorParkingNewReservationCard.styles = [
@@ -2478,40 +2456,31 @@ var getActiveCardConfigForm = createConfigFormGetter(
     }
     connectedCallback() {
       super.connectedCallback();
-      if (!this._reservationStartedHandler) {
-        this._reservationStartedHandler = (event) => {
-          const detail = event.detail;
-          const deviceId = (detail?.device_id ?? "").trim();
-          const licensePlate = (detail?.license_plate ?? "").trim();
-          const name = (detail?.name ?? "").trim();
-          if (deviceId && licensePlate && name) {
-            this._setPendingReservationName(deviceId, licensePlate, name);
-          }
-          void this._maybeLoadActiveReservations(true);
-        };
-      }
+      this._reservationStartedHandler = (event) => {
+        const detail = event.detail;
+        const deviceId = (detail?.device_id ?? "").trim();
+        const licensePlate = (detail?.license_plate ?? "").trim();
+        const name = (detail?.name ?? "").trim();
+        if (deviceId && licensePlate && name) {
+          this._setPendingReservationName(deviceId, licensePlate, name);
+        }
+        void this._maybeLoadActiveReservations(true);
+      };
       window.addEventListener(
         RESERVATION_STARTED_EVENT,
         this._reservationStartedHandler
       );
     }
     disconnectedCallback() {
-      for (const timeoutHandle of this._endButtonSuccessTimeoutByReservationId.values()) {
-        window.clearTimeout(timeoutHandle);
+      for (const reservationId of [...this._endButtonSuccessByReservationId]) {
+        this._clearEndButtonState(reservationId);
       }
-      this._endButtonSuccessTimeoutByReservationId.clear();
-      for (const resolve of this._endButtonSuccessResolverByReservationId.values()) {
-        resolve();
-      }
-      this._endButtonSuccessResolverByReservationId.clear();
-      this._endButtonSuccessByReservationId.clear();
       this._pendingReservationNameByKey.clear();
-      if (this._reservationStartedHandler) {
+      if (this._reservationStartedHandler)
         window.removeEventListener(
           RESERVATION_STARTED_EVENT,
           this._reservationStartedHandler
         );
-      }
       super.disconnectedCallback();
     }
     static async getConfigForm(hass) {
@@ -2582,7 +2551,7 @@ var getActiveCardConfigForm = createConfigFormGetter(
           devices,
           entryTitles
         );
-        const results = await Promise.all(
+        const results = await Promise.allSettled(
           devices.map(
             (device) => this._hass.callWS({
               type: "call_service",
@@ -2596,8 +2565,14 @@ var getActiveCardConfigForm = createConfigFormGetter(
         const collected = [];
         const collectedById = /* @__PURE__ */ new Map();
         const reservationUpdateFlagsByDevice = /* @__PURE__ */ new Map();
-        for (const [index, result] of results.entries()) {
+        const failedDevices = [];
+        for (const [index, settled] of results.entries()) {
           const device = devices[index];
+          if (settled.status === "rejected") {
+            failedDevices.push(device.name ?? device.id);
+            continue;
+          }
+          const result = settled.value;
           const response = result?.response ?? result;
           const activeReservations = response?.reservations;
           const updateFields = response?.reservation_update_fields;
@@ -2616,6 +2591,11 @@ var getActiveCardConfigForm = createConfigFormGetter(
             }
           }
         }
+        if (failedDevices.length) {
+          console.warn(
+            `[city-visitor-parking] Could not load reservations for ${failedDevices.length} device(s): ${failedDevices.join(", ")}`
+          );
+        }
         this._reservationUpdateFlagsByDevice = reservationUpdateFlagsByDevice;
         this._activeReservations = collected;
         this._activeReservationsById = collectedById;
@@ -2626,16 +2606,12 @@ var getActiveCardConfigForm = createConfigFormGetter(
           }
         }
         this._prunePendingReservationNames();
-        for (const reservationId of this._endButtonSuccessByReservationId) {
-          if (collectedById.has(reservationId)) continue;
-          const timeoutHandle = this._endButtonSuccessTimeoutByReservationId.get(reservationId);
-          if (timeoutHandle !== void 0) {
-            window.clearTimeout(timeoutHandle);
-            this._endButtonSuccessTimeoutByReservationId.delete(reservationId);
+        for (const reservationId of [
+          ...this._endButtonSuccessByReservationId
+        ]) {
+          if (!collectedById.has(reservationId)) {
+            this._clearEndButtonState(reservationId);
           }
-          this._endButtonSuccessResolverByReservationId.get(reservationId)?.();
-          this._endButtonSuccessResolverByReservationId.delete(reservationId);
-          this._endButtonSuccessByReservationId.delete(reservationId);
         }
       } catch (err) {
         this._activeReservations = [];
@@ -2656,12 +2632,10 @@ var getActiveCardConfigForm = createConfigFormGetter(
       if (!isHassRunning(this._hass)) {
         return renderLoadingCard(this._hass ?? getGlobalHass());
       }
-      const title = this._config.title || "";
-      const icon = this._config.icon;
       const controlsDisabled = this._isInEditor();
       return b2`
         <ha-card @click=${this._onActionClick}>
-          ${renderCardHeader(title, icon)}
+          ${renderCardHeader(this._config.title || "", this._config.icon)}
           <div class="card-content">
             ${this._renderActiveReservations(controlsDisabled)}
           </div>
@@ -2669,8 +2643,7 @@ var getActiveCardConfigForm = createConfigFormGetter(
       `;
     }
     _renderActiveReservations(controlsDisabled) {
-      const hasReservations = this._activeReservations.length > 0;
-      const showEmpty = !this._activeReservationsLoading && !this._activeReservationsError && !hasReservations;
+      const showEmpty = !this._activeReservationsLoading && !this._activeReservationsError && this._activeReservations.length === 0;
       return b2`
         <div class="row active-reservations">
           ${this._activeReservationsError ? b2`
@@ -2751,27 +2724,16 @@ var getActiveCardConfigForm = createConfigFormGetter(
             </div>
           </div>
           <div class="active-reservation-actions">
-            ${endButtonSuccess ? b2`
-                  <ha-progress-button
-                    class="active-reservation-end success"
-                    data-reservation-id=${reservation.reservation_id}
-                    variant="success"
-                    appearance="filled"
-                    .progress=${isBusy}
-                    ?disabled=${controlsDisabled || isBusy}
-                  >
-                    ${this._localize("button.end_reservation")}
-                  </ha-progress-button>
-                ` : b2`
-                  <ha-progress-button
-                    class="active-reservation-end"
-                    data-reservation-id=${reservation.reservation_id}
-                    .progress=${isBusy}
-                    ?disabled=${controlsDisabled || isBusy}
-                  >
-                    ${this._localize("button.end_reservation")}
-                  </ha-progress-button>
-                `}
+            <ha-progress-button
+              class=${endButtonSuccess ? "active-reservation-end success" : "active-reservation-end"}
+              data-reservation-id=${reservation.reservation_id}
+              variant=${endButtonSuccess ? "success" : A}
+              appearance=${endButtonSuccess ? "filled" : A}
+              .progress=${isBusy}
+              ?disabled=${controlsDisabled || isBusy}
+            >
+              ${this._localize("button.end_reservation")}
+            </ha-progress-button>
           </div>
         </div>
       `;
@@ -2797,10 +2759,7 @@ var getActiveCardConfigForm = createConfigFormGetter(
         current[fieldKey] = value;
         return;
       }
-      const nextValue = {
-        [fieldKey]: value
-      };
-      this._reservationInputValues.set(reservationId, nextValue);
+      this._reservationInputValues.set(reservationId, { [fieldKey]: value });
     }
     _handleReservationChange(event) {
       if (this._isInEditor()) return;
@@ -2831,11 +2790,10 @@ var getActiveCardConfigForm = createConfigFormGetter(
       }
       if (!fieldElement) return null;
       const reservationId = fieldElement.dataset.reservationId ?? "";
-      const field = fieldElement.dataset.field;
-      if (!reservationId || field !== "start" && field !== "end") return null;
+      if (!reservationId) return null;
       return {
         reservationId,
-        fieldKey: field,
+        fieldKey: fieldElement.dataset.field,
         value: detailValue ?? inputElement?.value ?? fieldElement.value ?? ""
       };
     }
@@ -2900,13 +2858,18 @@ var getActiveCardConfigForm = createConfigFormGetter(
       this._endReservationAction(reservationId);
       if (invalidateLoadedFor) this._activeReservationsLoadedFor = null;
     }
-    _setEndButtonSuccess(reservationId) {
-      const existingTimeout = this._endButtonSuccessTimeoutByReservationId.get(reservationId);
-      if (existingTimeout !== void 0) {
-        window.clearTimeout(existingTimeout);
-        this._endButtonSuccessResolverByReservationId.get(reservationId)?.();
-        this._endButtonSuccessResolverByReservationId.delete(reservationId);
+    _clearEndButtonState(reservationId) {
+      const timeoutHandle = this._endButtonSuccessTimeoutByReservationId.get(reservationId);
+      if (timeoutHandle !== void 0) {
+        window.clearTimeout(timeoutHandle);
+        this._endButtonSuccessTimeoutByReservationId.delete(reservationId);
       }
+      this._endButtonSuccessResolverByReservationId.get(reservationId)?.();
+      this._endButtonSuccessResolverByReservationId.delete(reservationId);
+      this._endButtonSuccessByReservationId.delete(reservationId);
+    }
+    _setEndButtonSuccess(reservationId) {
+      this._clearEndButtonState(reservationId);
       this._endButtonSuccessByReservationId.add(reservationId);
       this._requestRender();
       return new Promise((resolve) => {
@@ -2915,9 +2878,7 @@ var getActiveCardConfigForm = createConfigFormGetter(
           resolve
         );
         const timeoutHandle = window.setTimeout(() => {
-          this._endButtonSuccessTimeoutByReservationId.delete(reservationId);
-          this._endButtonSuccessResolverByReservationId.delete(reservationId);
-          this._endButtonSuccessByReservationId.delete(reservationId);
+          this._clearEndButtonState(reservationId);
           this._requestRender();
           resolve();
         }, 1e3);
@@ -3017,21 +2978,25 @@ var getActiveCardConfigForm = createConfigFormGetter(
     }
     async _getConfigEntryTitles() {
       if (!this._hass) return /* @__PURE__ */ new Map();
-      if (this._configEntriesPromise) return this._configEntriesPromise;
-      const promise = fetchPermitEntries(this._hass).then(buildPermitTitleMap).catch(() => /* @__PURE__ */ new Map()).finally(() => {
-        this._configEntriesPromise = null;
-      });
-      this._configEntriesPromise = promise;
-      return promise;
+      const hass = this._hass;
+      return makeDedupedLoader(
+        () => this._configEntriesPromise,
+        (p4) => {
+          this._configEntriesPromise = p4;
+        },
+        () => fetchPermitEntries(hass).then(buildPermitTitleMap).catch(() => /* @__PURE__ */ new Map())
+      );
     }
     async _getDomainDevices() {
       if (!this._hass) return [];
-      if (this._devicesPromise) return this._devicesPromise;
-      const devicesPromise = this._hass.callWS({ type: "config/device_registry/list" }).then((devices) => filterDomainDevices(devices)).finally(() => {
-        this._devicesPromise = null;
-      });
-      this._devicesPromise = devicesPromise;
-      return devicesPromise;
+      const hass = this._hass;
+      return makeDedupedLoader(
+        () => this._devicesPromise,
+        (p4) => {
+          this._devicesPromise = p4;
+        },
+        () => hass.callWS({ type: "config/device_registry/list" }).then(filterDomainDevices)
+      );
     }
     _getActiveEntryId() {
       return getConfigEntryId(this._config);

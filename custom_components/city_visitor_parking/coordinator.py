@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
-import asyncio
 import logging
 import time
 from datetime import UTC, datetime, timedelta
-from typing import TYPE_CHECKING, Protocol, TypeVar, cast
+from typing import TYPE_CHECKING, Protocol, cast
 
 from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
@@ -14,7 +13,14 @@ from homeassistant.util import dt as dt_util
 from pycityvisitorparking import AuthError, NetworkError
 from pycityvisitorparking.exceptions import PyCityVisitorParkingError
 
-from .const import AUTO_END_COOLDOWN, CONF_AUTO_END, DEFAULT_UPDATE_INTERVAL
+from .const import (
+    AUTO_END_COOLDOWN,
+    CONF_AUTO_END,
+    DEFAULT_UPDATE_INTERVAL,
+    IDLE_UPDATE_INTERVAL,
+    TRANSITION_BUFFER,
+    TRANSITION_LOOKAHEAD,
+)
 from .helpers import get_attr
 from .models import (
     AutoEndState,
@@ -28,7 +34,7 @@ from .time_windows import windows_for_today
 from .version import async_get_versions, build_log_block
 
 if TYPE_CHECKING:
-    from collections.abc import Awaitable, Iterable, Mapping
+    from collections.abc import Iterable, Mapping
 
     from homeassistant.config_entries import ConfigEntry
     from homeassistant.core import HomeAssistant
@@ -41,16 +47,8 @@ else:
     class ProviderProtocol(Protocol):
         """Protocol for runtime provider behavior."""
 
-        async def get_permit(self) -> object:
-            """Return permit details."""
-            raise NotImplementedError
-
-        async def list_reservations(self) -> list[object]:
-            """Return current reservations."""
-            raise NotImplementedError
-
-        async def list_favorites(self) -> list[object]:
-            """Return favorite vehicles."""
+        async def fetch_all(self) -> tuple[object, list[object], list[object]]:
+            """Return permit, reservations, and favorites in one batch."""
             raise NotImplementedError
 
         async def end_reservation(
@@ -66,7 +64,6 @@ else:
     ProviderReservation = object
 
 _LOGGER = logging.getLogger(__name__)
-_T = TypeVar("_T")
 
 
 class CityVisitorParkingCoordinator(DataUpdateCoordinator[CoordinatorData]):
@@ -105,27 +102,12 @@ class CityVisitorParkingCoordinator(DataUpdateCoordinator[CoordinatorData]):
                 self._permit_id,
             )
 
-            async def _timed(label: str, coro: Awaitable[_T]) -> _T:
-                started = time.perf_counter()
-                try:
-                    return await coro
-                finally:
-                    _LOGGER.debug(
-                        "Provider %s %s duration: %.3fs",
-                        self._entry_title,
-                        label,
-                        time.perf_counter() - started,
-                    )
-
-            permit, reservations, favorites = await asyncio.gather(
-                _timed("get_permit", self._provider.get_permit()),
-                _timed("list_reservations", self._provider.list_reservations()),
-                _timed("list_favorites", self._provider.list_favorites()),
-            )
+            started = time.perf_counter()
+            permit, reservations, favorites = await self._provider.fetch_all()
             _LOGGER.debug(
-                "Fetched data for %s (permit %s): reservations=%s favorites=%s",
+                "Provider %s fetch_all duration: %.3fs — reservations=%s favorites=%s",
                 self._entry_title,
-                self._permit_id,
+                time.perf_counter() - started,
                 len(reservations or []),
                 len(favorites or []),
             )
@@ -216,6 +198,18 @@ class CityVisitorParkingCoordinator(DataUpdateCoordinator[CoordinatorData]):
             zone_availability=zone_availability,
             active_reservations=tuple(active_reservations),
         )
+
+        next_interval = self._compute_next_interval(data, now)
+        current_interval: timedelta | None = self.update_interval  # type: ignore[has-type]
+        if next_interval != current_interval:
+            _LOGGER.debug(
+                "Adaptive interval for %s: %s → %s",
+                self._entry_title,
+                current_interval,
+                next_interval,
+            )
+            self.update_interval = next_interval  # type: ignore[has-type]
+
         await self._async_maybe_auto_end(data)
         return data
 
@@ -272,6 +266,68 @@ class CityVisitorParkingCoordinator(DataUpdateCoordinator[CoordinatorData]):
             return
         _LOGGER.info("Visitor parking data is unavailable")
         self._unavailable_logged = True
+
+    def _compute_next_interval(self, data: CoordinatorData, now: datetime) -> timedelta:
+        """Return the polling interval to use after the current update.
+
+        The interval adapts to the current state so that the coordinator polls
+        frequently when there is something time-sensitive to track, and falls
+        back to a longer idle interval when nothing is expected to change soon.
+        This reduces API calls significantly during quiet periods without
+        sacrificing responsiveness when it matters.
+
+        Decision tree (first match wins):
+
+        1. **Active reservation present** → ``DEFAULT_UPDATE_INTERVAL``
+           An active reservation must be tracked closely: balance may change,
+           the auto-end feature needs to fire on time, and the user expects
+           timely sensor updates.
+
+        2. **Zone currently chargeable** → ``DEFAULT_UPDATE_INTERVAL``
+           Even without a current reservation the zone is "open for business";
+           a reservation could be started at any moment and should appear in HA
+           promptly.
+
+        3. **Zone transition imminent** (within ``TRANSITION_LOOKAHEAD``) →
+           ``DEFAULT_UPDATE_INTERVAL``
+           Polling at full speed ensures the zone-state sensor flips as soon as
+           the paid-parking window opens or closes.
+
+        4. **Zone transition known, not imminent** → precise interval
+           Schedule the next update to arrive ``TRANSITION_BUFFER`` before the
+           upcoming transition, capped at ``IDLE_UPDATE_INTERVAL``.  This
+           combines two goals: the coordinator wakes up just in time to catch
+           the transition (precise scheduling), but never goes completely silent
+           for more than ``IDLE_UPDATE_INTERVAL``.
+
+        5. **No upcoming transition known** → ``IDLE_UPDATE_INTERVAL``
+           Nothing is expected to change; poll at the minimum rate to keep data
+           reasonably fresh while minimising API traffic.
+        """
+        # 1. Active reservation — track closely.
+        if data.active_reservations:
+            return DEFAULT_UPDATE_INTERVAL
+
+        # 2. Zone is chargeable right now — stay responsive.
+        if data.zone_availability.is_chargeable_now:
+            return DEFAULT_UPDATE_INTERVAL
+
+        next_change = data.zone_availability.next_change_time
+        if next_change is not None:
+            time_until_change = next_change - now
+
+            # 3. Transition is imminent — switch to fast polling.
+            if time_until_change <= TRANSITION_LOOKAHEAD:
+                return DEFAULT_UPDATE_INTERVAL
+
+            # 4. Transition is known but not imminent — schedule precisely.
+            #    Arrive TRANSITION_BUFFER before the change, but cap at the
+            #    idle interval so we never sleep longer than that.
+            precise_interval = time_until_change - TRANSITION_BUFFER
+            return min(precise_interval, IDLE_UPDATE_INTERVAL)
+
+        # 5. No known upcoming change — idle polling.
+        return IDLE_UPDATE_INTERVAL
 
 
 def _parse_time_range(item: object) -> TimeRange | None:

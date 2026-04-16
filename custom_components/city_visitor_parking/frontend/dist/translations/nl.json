@@ -44,6 +44,7 @@
   "action.add_favorite": "Favoriet toevoegen",
   "action.remove_favorite": "Favoriet verwijderen",
   "action.start_reservation": "Reservering starten",
+  "action.permit_unavailable": "Vergunning niet beschikbaar",
   "button.update_reservation": "Reservering bijwerken",
   "button.end_reservation": "Reservering beëindigen",
   "section.active_reservations": "Actieve reserveringen",

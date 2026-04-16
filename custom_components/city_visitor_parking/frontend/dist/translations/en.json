@@ -44,6 +44,7 @@
   "action.add_favorite": "Add favorite",
   "action.remove_favorite": "Remove favorite",
   "action.start_reservation": "Start reservation",
+  "action.permit_unavailable": "Permit unavailable",
   "button.update_reservation": "Update reservation",
   "button.end_reservation": "End reservation",
   "section.active_reservations": "Active reservations",

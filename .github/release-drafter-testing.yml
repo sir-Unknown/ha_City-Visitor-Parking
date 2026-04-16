@@ -42,7 +42,6 @@ autolabeler:
   - label: "documentation"
     files:
       - "**/*.md"
-      - "docs/**"
   - label: "tests"
     files:
       - "tests/**"

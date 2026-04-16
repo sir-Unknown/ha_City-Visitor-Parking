@@ -18,7 +18,11 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 from custom_components.city_visitor_parking.const import (
     CONF_AUTO_END,
     CONF_OPERATING_TIME_OVERRIDES,
+    DEFAULT_UPDATE_INTERVAL,
     DOMAIN,
+    IDLE_UPDATE_INTERVAL,
+    TRANSITION_BUFFER,
+    TRANSITION_LOOKAHEAD,
 )
 from custom_components.city_visitor_parking.coordinator import (
     CityVisitorParkingCoordinator,
@@ -73,9 +77,7 @@ async def test_auto_end_reservation_once(hass: HomeAssistant) -> None:
     }
 
     provider = AsyncMock()
-    provider.get_permit.return_value = {"zone_validity": []}
-    provider.list_reservations.return_value = [reservation]
-    provider.list_favorites.return_value = []
+    provider.fetch_all.return_value = ({"zone_validity": []}, [reservation], [])
 
     coordinator = CityVisitorParkingCoordinator(
         hass,
@@ -103,7 +105,7 @@ async def test_auth_failure_triggers_reauth(
     entry.add_to_hass(hass)
 
     provider = AsyncMock()
-    provider.get_permit.side_effect = pv_library.AuthError
+    provider.fetch_all.side_effect = pv_library.AuthError
     monkeypatch.setattr(
         "custom_components.city_visitor_parking.coordinator.async_get_versions",
         AsyncMock(return_value=("1.2.3", "4.5.6")),
@@ -137,7 +139,7 @@ async def test_network_failure_raises_updatefailed(
     entry.add_to_hass(hass)
 
     provider = AsyncMock()
-    provider.get_permit.side_effect = pv_library.NetworkError
+    provider.fetch_all.side_effect = pv_library.NetworkError
     monkeypatch.setattr(
         "custom_components.city_visitor_parking.coordinator.async_get_versions",
         AsyncMock(return_value=("1.2.3", "4.5.6")),
@@ -166,7 +168,7 @@ async def test_unexpected_failure_raises_updatefailed(hass: HomeAssistant) -> No
     entry.add_to_hass(hass)
 
     provider = AsyncMock()
-    provider.get_permit.side_effect = RuntimeError("boom")
+    provider.fetch_all.side_effect = RuntimeError("boom")
 
     coordinator = CityVisitorParkingCoordinator(
         hass,
@@ -187,9 +189,7 @@ async def test_coordinator_logs_recovery(hass: HomeAssistant) -> None:
     entry.add_to_hass(hass)
 
     provider = AsyncMock()
-    provider.get_permit.return_value = {"zone_validity": []}
-    provider.list_reservations.return_value = []
-    provider.list_favorites.return_value = []
+    provider.fetch_all.return_value = ({"zone_validity": []}, [], [])
 
     coordinator = CityVisitorParkingCoordinator(
         hass,
@@ -220,9 +220,7 @@ async def test_auto_end_handles_provider_failure(
     }
 
     provider = AsyncMock()
-    provider.get_permit.return_value = {"zone_validity": []}
-    provider.list_reservations.return_value = [reservation]
-    provider.list_favorites.return_value = []
+    provider.fetch_all.return_value = ({"zone_validity": []}, [reservation], [])
     provider.end_reservation.side_effect = pv_library.ProviderError
 
     coordinator = CityVisitorParkingCoordinator(
@@ -243,11 +241,7 @@ async def test_provider_protocol_raises() -> None:
     """Provider protocol defaults should raise when called."""
     protocol = cast("Any", ProviderProtocol)
     with pytest.raises(NotImplementedError):
-        await protocol.get_permit(object())
-    with pytest.raises(NotImplementedError):
-        await protocol.list_reservations(object())
-    with pytest.raises(NotImplementedError):
-        await protocol.list_favorites(object())
+        await protocol.fetch_all(object())
     with pytest.raises(NotImplementedError):
         await protocol.end_reservation(object(), "res", datetime.now(UTC))
 
@@ -520,6 +514,219 @@ def test_windows_for_today_invalid_overrides() -> None:
         [window], {CONF_OPERATING_TIME_OVERRIDES: overrides}, now
     )
     assert windows
+
+
+def test_compute_next_interval_active_reservation(hass: HomeAssistant) -> None:
+    """Active reservation → always poll at the default (fast) interval."""
+    entry = _create_entry(auto_end=False)
+    entry.add_to_hass(hass)
+    coordinator = CityVisitorParkingCoordinator(
+        hass,
+        provider=AsyncMock(),
+        config_entry=entry,
+        permit_id="permit",
+        auto_end_state=AutoEndState(),
+    )
+
+    now = datetime(2025, 1, 6, 9, 0, tzinfo=UTC)
+    data = _idle_data(
+        active_reservations=(
+            Reservation(
+                reservation_id="res1",
+                start_time=now - timedelta(hours=1),
+                end_time=now + timedelta(hours=1),
+            ),
+        ),
+    )
+
+    assert coordinator._compute_next_interval(data, now) == DEFAULT_UPDATE_INTERVAL
+
+
+def test_compute_next_interval_zone_chargeable(hass: HomeAssistant) -> None:
+    """Zone chargeable but no active reservation → still poll at default interval."""
+    entry = _create_entry(auto_end=False)
+    entry.add_to_hass(hass)
+    coordinator = CityVisitorParkingCoordinator(
+        hass,
+        provider=AsyncMock(),
+        config_entry=entry,
+        permit_id="permit",
+        auto_end_state=AutoEndState(),
+    )
+
+    now = datetime(2025, 1, 6, 9, 0, tzinfo=UTC)
+    data = _idle_data(
+        zone_availability=ZoneAvailability(
+            is_chargeable_now=True,
+            next_change_time=now + timedelta(hours=2),
+            windows_today=(),
+        ),
+    )
+
+    assert coordinator._compute_next_interval(data, now) == DEFAULT_UPDATE_INTERVAL
+
+
+def test_compute_next_interval_transition_imminent(hass: HomeAssistant) -> None:
+    """Zone transition within TRANSITION_LOOKAHEAD → default interval."""
+    entry = _create_entry(auto_end=False)
+    entry.add_to_hass(hass)
+    coordinator = CityVisitorParkingCoordinator(
+        hass,
+        provider=AsyncMock(),
+        config_entry=entry,
+        permit_id="permit",
+        auto_end_state=AutoEndState(),
+    )
+
+    now = datetime(2025, 1, 6, 9, 0, tzinfo=UTC)
+    # Transition is exactly at the edge of the lookahead window.
+    data = _idle_data(
+        zone_availability=ZoneAvailability(
+            is_chargeable_now=False,
+            next_change_time=now + TRANSITION_LOOKAHEAD,
+            windows_today=(),
+        ),
+    )
+
+    assert coordinator._compute_next_interval(data, now) == DEFAULT_UPDATE_INTERVAL
+
+
+def test_compute_next_interval_precise_scheduling(hass: HomeAssistant) -> None:
+    """Known transition beyond lookahead -> precise interval capped at IDLE."""
+    entry = _create_entry(auto_end=False)
+    entry.add_to_hass(hass)
+    coordinator = CityVisitorParkingCoordinator(
+        hass,
+        provider=AsyncMock(),
+        config_entry=entry,
+        permit_id="permit",
+        auto_end_state=AutoEndState(),
+    )
+
+    now = datetime(2025, 1, 6, 9, 0, tzinfo=UTC)
+
+    # Transition in 45 minutes -- beyond TRANSITION_LOOKAHEAD (30 min).
+    # Expected: 45 min - TRANSITION_BUFFER (2 min) = 43 min, which is > IDLE (30 min),
+    # so the result is capped at IDLE_UPDATE_INTERVAL.
+    transition_in_45 = now + timedelta(minutes=45)
+    data_45 = _idle_data(
+        zone_availability=ZoneAvailability(
+            is_chargeable_now=False,
+            next_change_time=transition_in_45,
+            windows_today=(),
+        ),
+    )
+    assert coordinator._compute_next_interval(data_45, now) == IDLE_UPDATE_INTERVAL
+
+    # Transition in 32 minutes -- just beyond TRANSITION_LOOKAHEAD (30 min).
+    # Expected: 32 min - 2 min buffer = 30 min, equal to IDLE_UPDATE_INTERVAL.
+    transition_in_32 = now + timedelta(minutes=32)
+    data_32 = _idle_data(
+        zone_availability=ZoneAvailability(
+            is_chargeable_now=False,
+            next_change_time=transition_in_32,
+            windows_today=(),
+        ),
+    )
+    precise = timedelta(minutes=32) - TRANSITION_BUFFER
+    assert coordinator._compute_next_interval(data_32, now) == min(
+        precise, IDLE_UPDATE_INTERVAL
+    )
+
+
+def test_compute_next_interval_idle(hass: HomeAssistant) -> None:
+    """No active reservation, free zone, no next transition → idle interval."""
+    entry = _create_entry(auto_end=False)
+    entry.add_to_hass(hass)
+    coordinator = CityVisitorParkingCoordinator(
+        hass,
+        provider=AsyncMock(),
+        config_entry=entry,
+        permit_id="permit",
+        auto_end_state=AutoEndState(),
+    )
+
+    now = datetime(2025, 1, 6, 9, 0, tzinfo=UTC)
+    data = _idle_data()
+
+    assert coordinator._compute_next_interval(data, now) == IDLE_UPDATE_INTERVAL
+
+
+async def test_adaptive_interval_applied_after_update(hass: HomeAssistant) -> None:
+    """Coordinator should apply the computed interval after a successful update."""
+    entry = _create_entry(auto_end=False)
+    entry.add_to_hass(hass)
+
+    now = datetime(2025, 1, 6, 9, 0, tzinfo=UTC)
+    provider = AsyncMock()
+    # No active reservation, free zone, no next change → idle interval expected.
+    provider.fetch_all.return_value = ({"zone_validity": []}, [], [])
+
+    coordinator = CityVisitorParkingCoordinator(
+        hass,
+        provider=provider,
+        config_entry=entry,
+        permit_id="permit",
+        auto_end_state=AutoEndState(),
+    )
+
+    with freeze_time(now):
+        await coordinator.async_refresh()
+
+    assert coordinator.update_interval == IDLE_UPDATE_INTERVAL
+
+
+async def test_adaptive_interval_fast_when_reservation_active(
+    hass: HomeAssistant,
+) -> None:
+    """Coordinator should use default interval when a reservation is active."""
+    entry = _create_entry(auto_end=False)
+    entry.add_to_hass(hass)
+
+    now = datetime(2025, 1, 6, 9, 0, tzinfo=UTC)
+    reservation = {
+        "id": "res1",
+        "start_time": (now - timedelta(hours=1)).isoformat(),
+        "end_time": (now + timedelta(hours=1)).isoformat(),
+    }
+    provider = AsyncMock()
+    provider.fetch_all.return_value = ({"zone_validity": []}, [reservation], [])
+
+    coordinator = CityVisitorParkingCoordinator(
+        hass,
+        provider=provider,
+        config_entry=entry,
+        permit_id="permit",
+        auto_end_state=AutoEndState(),
+    )
+
+    with freeze_time(now):
+        await coordinator.async_refresh()
+
+    assert coordinator.update_interval == DEFAULT_UPDATE_INTERVAL
+
+
+def _idle_data(
+    *,
+    active_reservations: tuple[Reservation, ...] = (),
+    zone_availability: ZoneAvailability | None = None,
+) -> CoordinatorData:
+    """Return a CoordinatorData instance representing a quiet, idle state."""
+    return CoordinatorData(
+        permit_id="permit",
+        permit_remaining_minutes=0,
+        permit_balance_unit=None,
+        zone_validity=(),
+        reservations=(),
+        favorites=(),
+        zone_availability=zone_availability
+        or ZoneAvailability(
+            is_chargeable_now=False,
+            next_change_time=None,
+            windows_today=(),
+        ),
+        active_reservations=active_reservations,
+    )
 
 
 def _create_entry(auto_end: bool) -> MockConfigEntry:

@@ -34,6 +34,37 @@ STATE_CHARGEABLE: Final = "chargeable"
 STATE_FREE: Final = "free"
 
 DEFAULT_UPDATE_INTERVAL: Final = timedelta(minutes=5)
+"""Polling interval used when a reservation is active or a zone transition is imminent.
+
+This keeps HA responsive for the most time-sensitive situations: tracking an active
+reservation, reacting to auto-end logic, and reflecting a zone state change promptly
+after it occurs.
+"""
+
+IDLE_UPDATE_INTERVAL: Final = timedelta(minutes=30)
+"""Polling interval used when there is nothing urgent to track.
+
+Applied when no reservation is active, the zone is currently free, and no transition
+is expected within TRANSITION_LOOKAHEAD. Reduces API calls by up to ~83 % compared
+to polling at DEFAULT_UPDATE_INTERVAL continuously.
+"""
+
+TRANSITION_LOOKAHEAD: Final = timedelta(minutes=30)
+"""How far ahead of a known zone transition to switch back to DEFAULT_UPDATE_INTERVAL.
+
+When a transition is this close, the coordinator starts polling at the default (fast)
+rate so that the zone state change is reflected in HA shortly after it occurs.
+"""
+
+TRANSITION_BUFFER: Final = timedelta(minutes=2)
+"""Lead time subtracted when scheduling a precise update before a zone transition.
+
+When the next zone change is known and further away than TRANSITION_LOOKAHEAD, the
+coordinator schedules the next update to arrive this much *before* the transition
+rather than landing exactly on it.  A small buffer compensates for scheduling jitter
+and ensures the poll happens before — not after — the transition moment.
+"""
+
 AUTO_END_COOLDOWN: Final = timedelta(minutes=10)
 
 WEEKDAY_KEYS: Final[list[str]] = [
