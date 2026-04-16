@@ -269,9 +269,19 @@ jobs:
           pycvp_commit = os.environ.get("PYCVP_COMMIT", "")
           pycvp_pypi = os.environ.get("PYCVP_PYPI", "")
           if pycvp_commit:
-              new_reqs = [re.sub(r'[a-f0-9]{40}$', pycvp_commit, r) for r in data["requirements"]]
-              if new_reqs == data["requirements"]:
-                  raise ValueError("No pyCityVisitorParking SHA found in requirements to replace")
+              new_reqs = []
+              replaced = False
+              for r in data["requirements"]:
+                  if re.search(r'pycityvisitorparking', r, re.IGNORECASE):
+                      # Replace existing git SHA or PyPI version with the given commit
+                      if re.search(r'[a-f0-9]{40}', r):
+                          r = re.sub(r'[a-f0-9]{40}', pycvp_commit, r)
+                      else:
+                          r = re.sub(r'pycityvisitorparking==\S+', f'pycityvisitorparking @ git+https://github.com/sir-Unknown/pyCityVisitorParking@{pycvp_commit}', r, flags=re.IGNORECASE)
+                      replaced = True
+                  new_reqs.append(r)
+              if not replaced:
+                  raise ValueError("No pycityvisitorparking requirement found to replace")
               data["requirements"] = new_reqs
           elif pycvp_pypi:
               new_reqs = [re.sub(r'pycityvisitorparking==\S+', f'pycityvisitorparking=={pycvp_pypi}', r) for r in data["requirements"]]
