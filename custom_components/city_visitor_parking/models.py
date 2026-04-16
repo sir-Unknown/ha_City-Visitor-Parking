@@ -61,8 +61,6 @@ class CoordinatorData:
     """Coordinator data for entities and services."""
 
     permit_id: str
-    # TODO: rename to permit_remaining_balance — the value is not always
-    # minutes; it can also be a count (TIMES) or a monetary amount (EURO).
     permit_remaining_minutes: float
     permit_balance_unit: str | None
     zone_validity: tuple[TimeRange, ...]
