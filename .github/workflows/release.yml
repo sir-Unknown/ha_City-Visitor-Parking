@@ -289,10 +289,21 @@ jobs:
               if new_reqs == data["requirements"]:
                   raise ValueError("No pycityvisitorparking==... requirement found to replace")
               data["requirements"] = new_reqs
-          # Write the final requirement back to GITHUB_OUTPUT
+          # Derive a human-readable version label for the release notes
           pycvp_req = next((r for r in data["requirements"] if re.search(r'pycityvisitorparking', r, re.IGNORECASE)), "")
+          sha_match = re.search(r'[a-f0-9]{40}', pycvp_req)
+          pypi_match = re.search(r'pycityvisitorparking==(\S+)', pycvp_req, re.IGNORECASE)
+          repo = "https://github.com/sir-Unknown/pyCityVisitorParking"
+          if sha_match:
+              sha = sha_match.group(0)
+              pycvp_version = f"[{sha[:7]}]({repo}/commit/{sha})"
+          elif pypi_match:
+              ver = pypi_match.group(1)
+              pycvp_version = f"[{ver}]({repo}/releases/tag/{ver})"
+          else:
+              pycvp_version = pycvp_req
           with open(os.environ["GITHUB_OUTPUT"], "a") as f:
-              f.write(f"pycvp_req={pycvp_req}\n")
+              f.write(f"pycvp_version={pycvp_version}\n")
           p.write_text(json.dumps(data, indent=2) + "\n")
           PYEOF
           cd /tmp/release-build && zip -r "$GITHUB_WORKSPACE/city_visitor_parking.zip" .
@@ -305,10 +316,10 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ needs.validate.outputs.tag }}
-          PYCVP_REQ: ${{ steps.build.outputs.pycvp_req }}
+          PYCVP_VERSION: ${{ steps.build.outputs.pycvp_version }}
         run: |
           body=$(gh release view "$RELEASE_TAG" --json body --jq '.body')
-          updated=$(echo "$body" | sed "s|PYCVP_VERSION_PLACEHOLDER|${PYCVP_REQ}|g")
+          updated=$(echo "$body" | sed "s|PYCVP_VERSION_PLACEHOLDER|${PYCVP_VERSION}|g")
           gh release edit "$RELEASE_TAG" --notes "$updated"
 
   skip-release:
