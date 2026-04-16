@@ -634,6 +634,32 @@ def test_compute_next_interval_precise_scheduling(hass: HomeAssistant) -> None:
     )
 
 
+def test_compute_next_interval_stale_next_change(hass: HomeAssistant) -> None:
+    """Stale next_change_time in the past must not produce a negative interval."""
+    entry = _create_entry(auto_end=False)
+    entry.add_to_hass(hass)
+    coordinator = CityVisitorParkingCoordinator(
+        hass,
+        provider=AsyncMock(),
+        config_entry=entry,
+        permit_id="permit",
+        auto_end_state=AutoEndState(),
+    )
+
+    now = datetime(2025, 1, 6, 9, 0, tzinfo=UTC)
+    # next_change_time is 10 minutes in the past → time_until_change is negative.
+    data = _idle_data(
+        zone_availability=ZoneAvailability(
+            is_chargeable_now=False,
+            next_change_time=now - timedelta(minutes=10),
+            windows_today=(),
+        ),
+    )
+
+    result = coordinator._compute_next_interval(data, now)
+    assert result >= timedelta(0), f"Expected non-negative interval, got {result}"
+
+
 def test_compute_next_interval_idle(hass: HomeAssistant) -> None:
     """No active reservation, free zone, no next transition → idle interval."""
     entry = _create_entry(auto_end=False)
