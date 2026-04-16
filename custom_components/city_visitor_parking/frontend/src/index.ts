@@ -2620,8 +2620,13 @@ const getActiveCardConfigForm = createConfigFormGetter(
             }
           }
         }
-        this._activeReservationsByPlate = byPlate;
+        // Only apply result if the entry hasn't changed while awaiting (P1).
+        if (this._activeReservationsLoadedFor === entryId) {
+          this._activeReservationsByPlate = byPlate;
+        }
       } catch {
+        // Reset loaded marker so a future call can retry (P2).
+        this._activeReservationsLoadedFor = null;
         this._activeReservationsByPlate = new Map();
       }
       this._requestRender();

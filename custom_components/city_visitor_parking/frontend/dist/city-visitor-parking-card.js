@@ -2500,8 +2500,11 @@ var getActiveCardConfigForm = createConfigFormGetter(
             }
           }
         }
-        this._activeReservationsByPlate = byPlate;
+        if (this._activeReservationsLoadedFor === entryId) {
+          this._activeReservationsByPlate = byPlate;
+        }
       } catch {
+        this._activeReservationsLoadedFor = null;
         this._activeReservationsByPlate = /* @__PURE__ */ new Map();
       }
       this._requestRender();
