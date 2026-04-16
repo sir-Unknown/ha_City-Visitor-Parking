@@ -249,8 +249,8 @@ jobs:
 
           echo "commit=$COMMIT" >> "$GITHUB_OUTPUT"
           echo "pypi=$PYPI" >> "$GITHUB_OUTPUT"
-          [ -n "$COMMIT" ] && echo "Found pyCityVisitorParking commit: $COMMIT"
-          [ -n "$PYPI" ]   && echo "Found pyCityVisitorParking PyPI version: $PYPI"
+          [ -n "$COMMIT" ] && echo "Found pyCityVisitorParking commit: $COMMIT" || true
+          [ -n "$PYPI" ]   && echo "Found pyCityVisitorParking PyPI version: $PYPI" || true
 
       - name: Build release asset
         env:
