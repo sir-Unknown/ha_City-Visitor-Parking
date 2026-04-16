@@ -66,6 +66,10 @@ template: |
 
   $CHANGES
 
+  ## 🔗 pyCityVisitorParking
+
+  **Version:** `PYCVP_VERSION_PLACEHOLDER`
+
   ## 📦 Installation
 
   [![Open in HACS](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=sir-Unknown&repository=ha_City-Visitor-Parking&category=integration)
