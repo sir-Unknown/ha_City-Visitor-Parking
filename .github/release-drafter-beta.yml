@@ -9,7 +9,7 @@ exclude-labels:
   - "invalid"
 sort-direction: ascending
 include-paths:
-  - "custom_components/**"
+  - "custom_components/"
 categories:
   - title: "🚨 Breaking changes"
     labels:
