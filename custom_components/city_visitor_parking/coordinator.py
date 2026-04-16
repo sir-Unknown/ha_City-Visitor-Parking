@@ -355,18 +355,18 @@ def _normalize_zone_validity(permit: Permit) -> list[TimeRange]:
     ]
 
 
-def _normalize_remaining_minutes(permit: Permit) -> int:
-    """Normalize remaining time balance to minutes."""
+def _normalize_remaining_minutes(permit: Permit) -> float:
+    """Normalize remaining balance (minutes, times, or monetary amount)."""
     raw = get_attr(permit, "remaining_balance")
     if raw is None:
-        return 0
+        return 0.0
     try:
         if not isinstance(raw, int | float | str):
-            return 0
-        value = int(raw)
+            return 0.0
+        value = float(raw)
     except TypeError, ValueError:
-        return 0
-    return max(0, value)
+        return 0.0
+    return max(0.0, value)
 
 
 def _normalize_reservations(

@@ -675,7 +675,9 @@ var EMPTY_ZONE_STATUS = {
   state: null,
   kind: null,
   start: null,
-  end: null
+  end: null,
+  remainingMinutes: null,
+  balanceUnit: null
 };
 var normalizeMatchValue = (value) => String(value ?? "").trim().toLowerCase();
 var normalizePlateValue = (value) => normalizeMatchValue(value).replace(/[^a-z0-9]/g, "");
@@ -719,7 +721,9 @@ var applyZoneStatus = (context, status) => {
     _zoneState: status?.state ?? null,
     _windowKind: status?.kind ?? null,
     _windowStartIso: status?.start ?? null,
-    _windowEndIso: status?.end ?? null
+    _windowEndIso: status?.end ?? null,
+    _remainingMinutes: status?.remainingMinutes ?? null,
+    _balanceUnit: status?.balanceUnit ?? null
   });
 };
 var DOMAIN = "city_visitor_parking";
@@ -982,60 +986,100 @@ var renderFavoriteSelect = (params) => {
     </div>
   `;
 };
-var renderFavoriteActionRow = (params) => b2`
-  <div class="row actions">
-    <div class="favorite-actions">
-      ${params.showFavorites ? params.showRemoveFavorite ? b2`
-              <ha-formfield
-                id="removeFavoriteWrap"
-                .label=${params.localize("action.remove_favorite")}
-              >
-                <ha-icon-button
-                  id="removeFavorite"
-                  title=${params.localize("action.remove_favorite")}
-                  aria-label=${params.localize("action.remove_favorite")}
-                  data-favorite-id=${params.selectedFavoriteId}
-                  ?disabled=${params.favoriteRemoveDisabled}
-                >
-                  <div class="leading">
-                    <ha-icon icon="mdi:trash-can-outline"></ha-icon>
-                  </div>
-                </ha-icon-button>
-              </ha-formfield>
-            ` : params.showAddFavorite ? b2`
-                <ha-formfield
-                  id="addFavoriteWrap"
-                  .label=${params.localize("action.add_favorite")}
-                >
-                  <ha-checkbox
-                    id="addFavorite"
-                    .checked=${params.addFavoriteChecked}
-                  ></ha-checkbox>
-                </ha-formfield>
-              ` : A : A}
-    </div>
-    ${(() => {
-  const isSuccess = params.startButtonSuccess;
-  const isWarning = params.startButtonWarning;
-  const buttonClass = `start-button${isSuccess ? " success" : isWarning ? " warning" : ""}`;
-  const label = isWarning ? params.localize("action.permit_unavailable") : params.localize("action.start_reservation");
+var renderBalanceChip = (remainingMinutes, balanceUnit) => {
+  if (remainingMinutes === null) return A;
+  const isMonetary = balanceUnit !== null && balanceUnit !== "TIMES" && balanceUnit !== "MINUTE";
+  let label;
+  let icon;
+  if (isMonetary) {
+    const formatted = Number.isInteger(remainingMinutes) ? String(remainingMinutes) : remainingMinutes.toFixed(2);
+    const currencySymbols = {
+      EURO: "\u20AC",
+      EUR: "\u20AC",
+      GBP: "\xA3",
+      USD: "$"
+    };
+    const symbol = currencySymbols[balanceUnit ?? ""] ?? balanceUnit ?? "";
+    label = `${symbol}${formatted}`;
+    icon = "mdi:cash";
+  } else if (balanceUnit === "TIMES") {
+    label = String(Math.round(remainingMinutes));
+    icon = "mdi:ticket-outline";
+  } else {
+    const totalMins = Math.round(remainingMinutes);
+    const hours = Math.floor(totalMins / 60);
+    const mins = totalMins % 60;
+    label = hours > 0 ? `${hours}u ${mins}m` : `${mins}m`;
+    icon = "mdi:clock-outline";
+  }
   return b2`
-        <ha-progress-button
-          id="startReservation"
-          class=${buttonClass}
-          variant=${isSuccess ? "success" : isWarning ? "danger" : A}
-          appearance=${isSuccess || isWarning ? "filled" : A}
-          .progress=${params.startInFlight}
-          ?disabled=${params.startDisabled}
-          aria-label=${label}
-          title=${label}
-        >
-          ${label}
-        </ha-progress-button>
-      `;
-})()}
-  </div>
-`;
+    <ha-formfield class="balance-display" .label=${label}>
+      <div class="leading">
+        <ha-icon icon=${icon}></ha-icon>
+      </div>
+    </ha-formfield>
+  `;
+};
+var renderFavoriteActionRow = (params) => {
+  const showFavoriteButton = params.showFavorites && (params.showRemoveFavorite || params.showAddFavorite);
+  const showBalance = !showFavoriteButton && params.hasTarget && params.remainingMinutes !== null;
+  return b2`
+    <div class="row actions">
+      <div class="favorite-actions">
+        ${params.showFavorites ? params.showRemoveFavorite ? b2`
+                <ha-formfield
+                  id="removeFavoriteWrap"
+                  .label=${params.localize("action.remove_favorite")}
+                >
+                  <ha-icon-button
+                    id="removeFavorite"
+                    title=${params.localize("action.remove_favorite")}
+                    aria-label=${params.localize("action.remove_favorite")}
+                    data-favorite-id=${params.selectedFavoriteId}
+                    ?disabled=${params.favoriteRemoveDisabled}
+                  >
+                    <div class="leading">
+                      <ha-icon icon="mdi:trash-can-outline"></ha-icon>
+                    </div>
+                  </ha-icon-button>
+                </ha-formfield>
+              ` : params.showAddFavorite ? b2`
+                  <ha-formfield
+                    id="addFavoriteWrap"
+                    .label=${params.localize("action.add_favorite")}
+                  >
+                    <ha-checkbox
+                      id="addFavorite"
+                      .checked=${params.addFavoriteChecked}
+                    ></ha-checkbox>
+                  </ha-formfield>
+                ` : A : A}
+        ${showBalance ? renderBalanceChip(params.remainingMinutes, params.balanceUnit) : A}
+      </div>
+      ${(() => {
+    const isSuccess = params.startButtonSuccess;
+    const isWarning = params.startButtonWarning;
+    const isTimeConflict = params.startButtonTimeConflict;
+    const buttonClass = `start-button${isSuccess ? " success" : isWarning ? " warning" : ""}`;
+    const label = isWarning ? params.localize("action.permit_unavailable") : isTimeConflict ? params.localize("action.time_unavailable") : params.localize("action.start_reservation");
+    return b2`
+          <ha-progress-button
+            id="startReservation"
+            class=${buttonClass}
+            variant=${isSuccess ? "success" : isWarning ? "danger" : A}
+            appearance=${isSuccess || isWarning || isTimeConflict ? "filled" : A}
+            .progress=${params.startInFlight}
+            ?disabled=${params.startDisabled}
+            aria-label=${label}
+            title=${label}
+          >
+            ${label}
+          </ha-progress-button>
+        `;
+  })()}
+    </div>
+  `;
+};
 var makeDedupedLoader = (getPromise, setPromise, factory) => {
   const existing = getPromise();
   if (existing) return existing;
@@ -1426,6 +1470,8 @@ var getActiveCardConfigForm = createConfigFormGetter(
       this._windowKind = null;
       this._windowStartIso = null;
       this._windowEndIso = null;
+      this._remainingMinutes = null;
+      this._balanceUnit = null;
       this._zoneStatusTsByEntryId = /* @__PURE__ */ new Map();
       this._zoneStatusInFlightByEntryId = /* @__PURE__ */ new Map();
       this._zoneStatusByEntryId = /* @__PURE__ */ new Map();
@@ -1435,6 +1481,8 @@ var getActiveCardConfigForm = createConfigFormGetter(
       this._statusVisibilityHandler = null;
       this._translationsReady = false;
       this._translationsLanguage = null;
+      this._activeReservationsByPlate = /* @__PURE__ */ new Map();
+      this._activeReservationsLoadedFor = null;
       this._licensePlateFocused = false;
       this._onClick = (event) => this._handleClick(event);
       this._onInput = (event) => this._handleInput(event);
@@ -1773,7 +1821,17 @@ var getActiveCardConfigForm = createConfigFormGetter(
       const favoriteRemoveDisabled = controlsDisabled || this._favoriteRemoveInFlight;
       const favoritesOptions = this._favorites;
       const favoriteSelectDisabled = controlsDisabled || this._favoritesLoading || selectedPermitDisabled;
-      const startDisabled = controlsDisabled || !hasDevice || !hasTarget || !hasLicense || this._startInFlight;
+      const { start: resolvedStart, end: resolvedEnd } = this._resolveTimes();
+      const plateAlreadyActive = (() => {
+        if (!hasLicense || !resolvedStart || !resolvedEnd) return false;
+        const plateKey = normalizePlateValue(priorLicense);
+        const existing = this._activeReservationsByPlate.get(plateKey);
+        if (!existing) return false;
+        return existing.some(
+          (r4) => r4.start < resolvedEnd && r4.end > resolvedStart
+        );
+      })();
+      const startDisabled = controlsDisabled || !hasDevice || !hasTarget || !hasLicense || plateAlreadyActive || this._startInFlight;
       const todayStart = /* @__PURE__ */ new Date();
       todayStart.setHours(0, 0, 0, 0);
       const minDateTime = formatDateTimeLocal(todayStart);
@@ -1863,7 +1921,11 @@ var getActiveCardConfigForm = createConfigFormGetter(
         startInFlight: this._startInFlight,
         startButtonSuccess: this._startButtonSuccess,
         startButtonWarning: selectedPermitDisabled,
+        startButtonTimeConflict: plateAlreadyActive,
         startDisabled,
+        hasTarget,
+        remainingMinutes: this._remainingMinutes,
+        balanceUnit: this._balanceUnit,
         localize: localizeFn
       })}
           </div>
@@ -2011,6 +2073,7 @@ var getActiveCardConfigForm = createConfigFormGetter(
       this._ensureDeviceId();
       this._maybeLoadFavorites();
       void this._loadZoneStatusForEntry(value);
+      void this._loadActivePlates(value);
       this._setupStatusRefresh(value);
     }
     _resetFavoritesState() {
@@ -2026,6 +2089,8 @@ var getActiveCardConfigForm = createConfigFormGetter(
       this._deviceEntryId = null;
       applyZoneStatus(this, null);
       this._resetFavoritesState();
+      this._activeReservationsByPlate = /* @__PURE__ */ new Map();
+      this._activeReservationsLoadedFor = null;
     }
     _clearPermitScopedFormValues() {
       const hadValues = Boolean(this._formValues.licensePlate) || Boolean(this._formValues.favorite);
@@ -2054,6 +2119,7 @@ var getActiveCardConfigForm = createConfigFormGetter(
         this._setupStatusRefresh(entryId);
       }
       void this._maybeLoadFavorites();
+      if (entryId) void this._loadActivePlates(entryId);
     }
     _setupStatusRefresh(entryId) {
       this._clearStatusRefresh();
@@ -2118,11 +2184,14 @@ var getActiveCardConfigForm = createConfigFormGetter(
       const state = payload?.state === "chargeable" || payload?.state === "free" ? payload.state : null;
       const kind = payload?.window_kind === "current" || payload?.window_kind === "next" ? payload.window_kind : null;
       const str = (v2) => typeof v2 === "string" && v2 ? v2 : null;
+      const num = (v2) => typeof v2 === "number" && Number.isFinite(v2) ? v2 : null;
       return {
         state,
         kind,
         start: kind ? str(payload?.window_start) : null,
-        end: kind ? str(payload?.window_end) : null
+        end: kind ? str(payload?.window_end) : null,
+        remainingMinutes: num(payload?.remaining_minutes),
+        balanceUnit: str(payload?.balance_unit)
       };
     }
     _selectedFavoriteMatchesLicense(favorite, license) {
@@ -2226,6 +2295,12 @@ var getActiveCardConfigForm = createConfigFormGetter(
       );
       this._setStartButtonSuccess();
       this._startInFlight = false;
+      this._setInputValue("licensePlate", "");
+      this._setInputValue("favorite", "");
+      this._scheduleFavoriteActionsUpdate();
+      this._activeReservationsLoadedFor = null;
+      const activeEntryId = this._getActiveEntryId();
+      if (activeEntryId) void this._loadActivePlates(activeEntryId);
       this._requestRender();
       await triggerProgressButtonFeedback(this, "#startReservation", "success");
       window.dispatchEvent(
@@ -2376,6 +2451,53 @@ var getActiveCardConfigForm = createConfigFormGetter(
       await this.updateComplete;
       this._scheduleFavoriteActionsUpdate();
     }
+    async _loadActivePlates(entryId) {
+      if (!this._hass || !entryId) return;
+      if (this._activeReservationsLoadedFor === entryId) return;
+      this._activeReservationsLoadedFor = entryId;
+      try {
+        const hass = this._hass;
+        const devices = await hass.callWS({
+          type: "config/device_registry/list"
+        });
+        const domainDevices = filterDomainDevices(devices).filter(
+          (device) => (device.config_entries ?? []).includes(entryId)
+        );
+        const byPlate = /* @__PURE__ */ new Map();
+        const results = await Promise.allSettled(
+          domainDevices.map(
+            (device) => hass.callWS({
+              type: "call_service",
+              domain: DOMAIN,
+              service: "list_reservations",
+              return_response: true,
+              service_data: { device_id: device.id }
+            })
+          )
+        );
+        for (const settled of results) {
+          if (settled.status === "rejected") continue;
+          const result = settled.value;
+          const response = result?.response ?? result;
+          const reservations = response?.reservations;
+          if (Array.isArray(reservations)) {
+            for (const r4 of reservations) {
+              const plate = normalizePlateValue(r4.license_plate);
+              const start = parseDateTimeValue(r4.start_time);
+              const end = parseDateTimeValue(r4.end_time);
+              if (!plate || !start || !end) continue;
+              const existing = byPlate.get(plate) ?? [];
+              existing.push({ start, end });
+              byPlate.set(plate, existing);
+            }
+          }
+        }
+        this._activeReservationsByPlate = byPlate;
+      } catch {
+        this._activeReservationsByPlate = /* @__PURE__ */ new Map();
+      }
+      this._requestRender();
+    }
     _getActiveEntryId() {
       return getConfigEntryId(this._config) || this._selectedEntryId;
     }
@@ -2397,6 +2519,11 @@ var getActiveCardConfigForm = createConfigFormGetter(
         .favorite-actions {
           display: flex;
           align-items: center;
+          color: var(--secondary-text-color);
+          --mdc-theme-text-primary-on-background: var(--secondary-text-color);
+        }
+        .favorite-actions ha-icon-button {
+          color: var(--secondary-text-color);
         }
         .leading {
           width: 48px;
@@ -2410,10 +2537,17 @@ var getActiveCardConfigForm = createConfigFormGetter(
         .leading mwc-icon {
           width: 24px;
           height: 24px;
+        }
+        ha-icon-button .leading ha-icon,
+        ha-icon-button .leading mwc-icon {
           transform: translateY(-4px);
         }
         .start-button {
           margin-left: auto;
+        }
+        .balance-display {
+          color: var(--secondary-text-color);
+          --mdc-theme-text-primary-on-background: var(--secondary-text-color);
         }
       `
   ];

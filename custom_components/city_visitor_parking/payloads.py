@@ -147,6 +147,7 @@ def build_status_payload(
         "provider_window_end": (
             utc_iso(provider_window.end) if provider_window else None
         ),
-        "remaining_minutes": max(0, data.permit_remaining_minutes),
+        "remaining_minutes": max(0.0, data.permit_remaining_minutes),
+        "balance_unit": data.permit_balance_unit,
         "permit_id": data.permit_id,
     }

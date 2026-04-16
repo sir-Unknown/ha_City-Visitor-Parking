@@ -247,9 +247,9 @@ class FavoritesSensor(CityVisitorParkingEntity):
         self._attr_native_value = len(self.coordinator.data.favorites)
 
 
-def _remaining_balance_minutes(data: CoordinatorData) -> int:
-    """Return the remaining balance in minutes."""
-    return max(0, data.permit_remaining_minutes)
+def _remaining_balance_minutes(data: CoordinatorData) -> float:
+    """Return the remaining balance (minutes, times, or monetary amount)."""
+    return max(0.0, data.permit_remaining_minutes)
 
 
 def _next_end_time(data: CoordinatorData) -> datetime | None:
