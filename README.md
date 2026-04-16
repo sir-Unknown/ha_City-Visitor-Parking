@@ -1,9 +1,11 @@
-<h1><img src="https://raw.githubusercontent.com/sir-Unknown/ha_City-Visitor-Parking/main/custom_components/city_visitor_parking/brand/icon.png" alt="City Visitor Parking" height="40" valign="middle"> City Visitor Parking <a href="https://my.home-assistant.io/redirect/hacs_repository/?owner=sir-Unknown&repository=ha_City-Visitor-Parking&category=integration"><img src="https://my.home-assistant.io/badges/hacs_repository.svg" alt="Open in HACS" height="28" align="right"></a></h1>
+<h1><img src="custom_components/city_visitor_parking/brand/icon.png" alt="City Visitor Parking" height="40" valign="middle"> City Visitor Parking <a href="https://my.home-assistant.io/redirect/hacs_repository/?owner=sir-Unknown&repository=ha_City-Visitor-Parking&category=integration"><img src="https://my.home-assistant.io/badges/hacs_repository.svg" alt="Open in HACS" height="28" align="right"></a></h1>
 <p><em>Beheer bezoekersparkeervergunningen van Nederlandse gemeenten vanuit Home Assistant.</em></p>
 
 Manage Dutch municipality visitor parking permits directly from Home Assistant. This integration lets you start, update, and end visitor parking sessions without having to open the municipal parking portal. Keep your favorite license plates at hand, see at a glance whether parking is paid or free, and automate your visitor parking with Home Assistant automations and scripts.
 
 The integration supports a growing number of [Dutch municipalities](#supported-municipalities) and connects to their parking systems.
+
+<br>
 
 > [!IMPORTANT]
 > This integration is under active development — thank you for using it and for your patience! Features may occasionally break, and new versions can sometimes introduce regressions. It is possible that a parking session is not correctly started, updated, or ended.
@@ -12,15 +14,11 @@ The integration supports a growing number of [Dutch municipalities](#supported-m
 >
 > This integration is built almost entirely with the help of AI agents, primarily ChatGPT and Claude.
 
+<br>
+
 ## Screenshots
 
-Visitor parking card
-
-![Visitor parking card](https://raw.githubusercontent.com/wiki/sir-Unknown/ha_City-Visitor-Parking/screenshots/card-reservering-formulier-leeg.png)
-
-Active reservations overview
-
-![Active reservations card](https://raw.githubusercontent.com/wiki/sir-Unknown/ha_City-Visitor-Parking/screenshots/card-reservering-actief-een.png)
+![City Visitor Parking](https://raw.githubusercontent.com/wiki/sir-Unknown/ha_City-Visitor-Parking/screenshots/card-reservering-twee-actief.png)
 
 More screenshots: [wiki/Lovelace-Cards](https://github.com/sir-Unknown/ha_City-Visitor-Parking/wiki/Lovelace-Cards)
 
