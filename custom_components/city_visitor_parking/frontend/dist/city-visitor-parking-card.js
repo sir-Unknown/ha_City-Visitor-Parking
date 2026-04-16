@@ -986,11 +986,8 @@ var renderFavoriteSelect = (params) => {
     </div>
   `;
 };
-var renderBalanceChip = (remainingMinutes, balanceUnit) => {
-  if (remainingMinutes === null) return A;
+var formatBalanceLabel = (remainingMinutes, balanceUnit) => {
   const isMonetary = balanceUnit !== null && balanceUnit !== "TIMES" && balanceUnit !== "MINUTE";
-  let label;
-  let icon;
   if (isMonetary) {
     const formatted = Number.isInteger(remainingMinutes) ? String(remainingMinutes) : remainingMinutes.toFixed(2);
     const currencySymbols = {
@@ -1000,25 +997,21 @@ var renderBalanceChip = (remainingMinutes, balanceUnit) => {
       USD: "$"
     };
     const symbol = currencySymbols[balanceUnit ?? ""] ?? balanceUnit ?? "";
-    label = `${symbol}${formatted}`;
-    icon = "mdi:cash";
-  } else if (balanceUnit === "TIMES") {
-    label = String(Math.round(remainingMinutes));
-    icon = "mdi:ticket-outline";
-  } else {
-    const totalMins = Math.round(remainingMinutes);
-    const hours = Math.floor(totalMins / 60);
-    const mins = totalMins % 60;
-    label = hours > 0 ? `${hours}u ${mins}m` : `${mins}m`;
-    icon = "mdi:clock-outline";
+    return { text: `${symbol}${formatted}`, icon: "mdi:cash" };
   }
-  return b2`
-    <ha-formfield class="balance-display" .label=${label}>
-      <div class="leading">
-        <ha-icon icon=${icon}></ha-icon>
-      </div>
-    </ha-formfield>
-  `;
+  if (balanceUnit === "TIMES") {
+    return {
+      text: String(Math.round(remainingMinutes)),
+      icon: "mdi:ticket-outline"
+    };
+  }
+  const totalMins = Math.round(remainingMinutes);
+  const hours = Math.floor(totalMins / 60);
+  const mins = totalMins % 60;
+  return {
+    text: hours > 0 ? `${hours}u ${mins}m` : `${mins}m`,
+    icon: "mdi:clock-outline"
+  };
 };
 var renderFavoriteActionRow = (params) => {
   const showFavoriteButton = params.showFavorites && (params.showRemoveFavorite || params.showAddFavorite);
@@ -1027,34 +1020,44 @@ var renderFavoriteActionRow = (params) => {
     <div class="row actions">
       <div class="favorite-actions">
         ${params.showFavorites ? params.showRemoveFavorite ? b2`
-                <ha-formfield
-                  id="removeFavoriteWrap"
+                <ha-badge
+                  id="removeFavorite"
+                  type="button"
                   .label=${params.localize("action.remove_favorite")}
+                  data-favorite-id=${params.selectedFavoriteId}
+                  ?disabled=${params.favoriteRemoveDisabled}
+                  title=${params.localize("action.remove_favorite")}
+                  aria-label=${params.localize("action.remove_favorite")}
                 >
-                  <ha-icon-button
-                    id="removeFavorite"
-                    title=${params.localize("action.remove_favorite")}
-                    aria-label=${params.localize("action.remove_favorite")}
-                    data-favorite-id=${params.selectedFavoriteId}
-                    ?disabled=${params.favoriteRemoveDisabled}
-                  >
-                    <div class="leading">
-                      <ha-icon icon="mdi:trash-can-outline"></ha-icon>
-                    </div>
-                  </ha-icon-button>
-                </ha-formfield>
+                  <ha-icon slot="icon" icon="mdi:trash-can-outline"></ha-icon>
+                </ha-badge>
               ` : params.showAddFavorite ? b2`
-                  <ha-formfield
+                  <ha-badge
                     id="addFavoriteWrap"
+                    type="button"
                     .label=${params.localize("action.add_favorite")}
+                    class=${params.addFavoriteChecked ? "badge-checked" : ""}
+                    title=${params.localize("action.add_favorite")}
+                    aria-label=${params.localize("action.add_favorite")}
+                    aria-pressed=${params.addFavoriteChecked ? "true" : "false"}
                   >
-                    <ha-checkbox
-                      id="addFavorite"
-                      .checked=${params.addFavoriteChecked}
-                    ></ha-checkbox>
-                  </ha-formfield>
+                    <ha-icon
+                      slot="icon"
+                      icon=${params.addFavoriteChecked ? "mdi:heart" : "mdi:heart-outline"}
+                    ></ha-icon>
+                  </ha-badge>
                 ` : A : A}
-        ${showBalance ? renderBalanceChip(params.remainingMinutes, params.balanceUnit) : A}
+        ${showBalance ? (() => {
+    const { text, icon } = formatBalanceLabel(
+      params.remainingMinutes,
+      params.balanceUnit
+    );
+    return b2`
+                <ha-badge .label=${text}>
+                  <ha-icon slot="icon" icon=${icon}></ha-icon>
+                </ha-badge>
+              `;
+  })() : A}
       </div>
       ${(() => {
     const isSuccess = params.startButtonSuccess;
@@ -1966,15 +1969,20 @@ var getActiveCardConfigForm = createConfigFormGetter(
     }
     _handleClick(event) {
       if (this._isInEditor()) return;
-      const target = event.target;
-      if (!target) return;
-      const removeButton = target.closest("#removeFavorite");
+      const path = event.composedPath();
+      const findById = (id) => path.find((el) => el instanceof HTMLElement && el.id === id);
+      const removeButton = findById("removeFavorite");
       if (removeButton) {
         const id = removeButton.getAttribute("data-favorite-id") ?? "";
         void this._removeFavorite(id);
         return;
       }
-      const startButton = target.closest("#startReservation");
+      if (findById("addFavoriteWrap")) {
+        this._addFavoriteChecked = !this._addFavoriteChecked;
+        this._scheduleFavoriteActionsUpdate();
+        return;
+      }
+      const startButton = findById("startReservation");
       if (startButton) void this._handleStart();
     }
     _handleInput(event) {
@@ -2519,35 +2527,15 @@ var getActiveCardConfigForm = createConfigFormGetter(
         .favorite-actions {
           display: flex;
           align-items: center;
-          color: var(--secondary-text-color);
-          --mdc-theme-text-primary-on-background: var(--secondary-text-color);
         }
-        .favorite-actions ha-icon-button {
-          color: var(--secondary-text-color);
+        .favorite-actions ha-badge {
+          --badge-color: var(--secondary-text-color);
         }
-        .leading {
-          width: 48px;
-          min-width: 48px;
-          height: 48px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-        }
-        .leading ha-icon,
-        .leading mwc-icon {
-          width: 24px;
-          height: 24px;
-        }
-        ha-icon-button .leading ha-icon,
-        ha-icon-button .leading mwc-icon {
-          transform: translateY(-4px);
+        .favorite-actions .badge-checked {
+          --badge-color: var(--primary-color);
         }
         .start-button {
           margin-left: auto;
-        }
-        .balance-display {
-          color: var(--secondary-text-color);
-          --mdc-theme-text-primary-on-background: var(--secondary-text-color);
         }
       `
   ];
