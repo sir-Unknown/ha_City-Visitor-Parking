@@ -15,6 +15,7 @@ from homeassistant.helpers.update_coordinator import UpdateFailed
 from homeassistant.util import dt as dt_util
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
+import custom_components.city_visitor_parking.coordinator as coord_module
 from custom_components.city_visitor_parking.const import (
     CONF_AUTO_END,
     CONF_OPERATING_TIME_OVERRIDES,
@@ -634,8 +635,16 @@ def test_compute_next_interval_precise_scheduling(hass: HomeAssistant) -> None:
     )
 
 
-def test_compute_next_interval_stale_next_change(hass: HomeAssistant) -> None:
-    """Stale next_change_time in the past must not produce a negative interval."""
+def test_compute_next_interval_clamp_prevents_negative(
+    hass: HomeAssistant, monkeypatch: MonkeyPatch
+) -> None:
+    """precise_interval clamp must prevent a negative interval.
+
+    With default constants TRANSITION_BUFFER (2 min) < TRANSITION_LOOKAHEAD
+    (30 min), so precise_interval can never go negative in production. This
+    test monkeypatches TRANSITION_BUFFER to exceed TRANSITION_LOOKAHEAD,
+    reproducing the edge case that the max(..., timedelta(0)) guard covers.
+    """
     entry = _create_entry(auto_end=False)
     entry.add_to_hass(hass)
     coordinator = CityVisitorParkingCoordinator(
@@ -647,17 +656,20 @@ def test_compute_next_interval_stale_next_change(hass: HomeAssistant) -> None:
     )
 
     now = datetime(2025, 1, 6, 9, 0, tzinfo=UTC)
-    # next_change_time is 10 minutes in the past → time_until_change is negative.
+    # Transition is 35 minutes away — beyond TRANSITION_LOOKAHEAD (30 min),
+    # so we reach case 4.  With a patched TRANSITION_BUFFER of 40 min the
+    # unguarded calculation would yield -5 min; the clamp must return 0.
+    monkeypatch.setattr(coord_module, "TRANSITION_BUFFER", timedelta(minutes=40))
     data = _idle_data(
         zone_availability=ZoneAvailability(
             is_chargeable_now=False,
-            next_change_time=now - timedelta(minutes=10),
+            next_change_time=now + timedelta(minutes=35),
             windows_today=(),
         ),
     )
 
     result = coordinator._compute_next_interval(data, now)
-    assert result >= timedelta(0), f"Expected non-negative interval, got {result}"
+    assert result == timedelta(0), f"Expected timedelta(0), got {result}"
 
 
 def test_compute_next_interval_idle(hass: HomeAssistant) -> None:
