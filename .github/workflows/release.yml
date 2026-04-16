@@ -253,6 +253,7 @@ jobs:
           [ -n "$PYPI" ]   && echo "Found pyCityVisitorParking PyPI version: $PYPI" || true
 
       - name: Build release asset
+        id: build
         env:
           VERSION: ${{ steps.version.outputs.version }}
           PYCVP_COMMIT: ${{ steps.pycvp.outputs.commit }}
@@ -269,15 +270,29 @@ jobs:
           pycvp_commit = os.environ.get("PYCVP_COMMIT", "")
           pycvp_pypi = os.environ.get("PYCVP_PYPI", "")
           if pycvp_commit:
-              new_reqs = [re.sub(r'[a-f0-9]{40}$', pycvp_commit, r) for r in data["requirements"]]
-              if new_reqs == data["requirements"]:
-                  raise ValueError("No pyCityVisitorParking SHA found in requirements to replace")
+              new_reqs = []
+              replaced = False
+              for r in data["requirements"]:
+                  if re.search(r'pycityvisitorparking', r, re.IGNORECASE):
+                      # Replace existing git SHA or PyPI version with the given commit
+                      if re.search(r'[a-f0-9]{40}', r):
+                          r = re.sub(r'[a-f0-9]{40}', pycvp_commit, r)
+                      else:
+                          r = re.sub(r'pycityvisitorparking==\S+', f'pycityvisitorparking @ git+https://github.com/sir-Unknown/pyCityVisitorParking@{pycvp_commit}', r, flags=re.IGNORECASE)
+                      replaced = True
+                  new_reqs.append(r)
+              if not replaced:
+                  raise ValueError("No pycityvisitorparking requirement found to replace")
               data["requirements"] = new_reqs
           elif pycvp_pypi:
               new_reqs = [re.sub(r'pycityvisitorparking==\S+', f'pycityvisitorparking=={pycvp_pypi}', r) for r in data["requirements"]]
               if new_reqs == data["requirements"]:
                   raise ValueError("No pycityvisitorparking==... requirement found to replace")
               data["requirements"] = new_reqs
+          # Write the final requirement back to GITHUB_OUTPUT
+          pycvp_req = next((r for r in data["requirements"] if re.search(r'pycityvisitorparking', r, re.IGNORECASE)), "")
+          with open(os.environ["GITHUB_OUTPUT"], "a") as f:
+              f.write(f"pycvp_req={pycvp_req}\n")
           p.write_text(json.dumps(data, indent=2) + "\n")
           PYEOF
           cd /tmp/release-build && zip -r "$GITHUB_WORKSPACE/city_visitor_parking.zip" .
@@ -286,6 +301,15 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ needs.validate.outputs.tag }}
         run: gh release upload "$RELEASE_TAG" city_visitor_parking.zip --clobber
+      - name: Update release body with pyCityVisitorParking version
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.validate.outputs.tag }}
+          PYCVP_REQ: ${{ steps.build.outputs.pycvp_req }}
+        run: |
+          body=$(gh release view "$RELEASE_TAG" --json body --jq '.body')
+          updated=$(echo "$body" | sed "s|PYCVP_VERSION_PLACEHOLDER|${PYCVP_REQ}|g")
+          gh release edit "$RELEASE_TAG" --notes "$updated"
 
   skip-release:
     needs: [validate]

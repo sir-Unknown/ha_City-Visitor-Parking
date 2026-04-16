@@ -59,6 +59,8 @@ template: |
 
   **Commit:** `FILL_IN_COMMIT_SHA`
 
+  **Built with:** `PYCVP_VERSION_PLACEHOLDER`
+
   ## 📋 Changes
 
   $CHANGES

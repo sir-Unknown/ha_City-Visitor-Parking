@@ -49,6 +49,8 @@ template: |
   **PyPI:** `FILL_IN_PYPI_VERSION_OR_LEAVE_EMPTY`
   **Commit:** `FILL_IN_COMMIT_SHA_OR_LEAVE_EMPTY`
 
+  **Built with:** `PYCVP_VERSION_PLACEHOLDER`
+
   ## 📋 Changes
 
   $CHANGES
