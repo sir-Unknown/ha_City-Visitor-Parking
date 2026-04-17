@@ -2394,8 +2394,16 @@ var CityVisitorParkingNewReservationCard = class extends BaseLocalizedCard {
           })
         )
       );
-      for (const settled of results) {
-        if (settled.status === "rejected") continue;
+      let anyFailed = false;
+      for (const [index, settled] of results.entries()) {
+        if (settled.status === "rejected") {
+          anyFailed = true;
+          console.warn(
+            `[city-visitor-parking] Could not load active plates for device ${domainDevices[index].id}:`,
+            settled.reason
+          );
+          continue;
+        }
         const result = settled.value;
         const response = result?.response ?? result;
         const reservations = response?.reservations;
@@ -2413,6 +2421,9 @@ var CityVisitorParkingNewReservationCard = class extends BaseLocalizedCard {
       }
       if (this._activeReservationsLoadedFor === entryId) {
         this._activeReservationsByPlate = byPlate;
+        if (anyFailed) {
+          this._activeReservationsLoadedFor = null;
+        }
       }
     } catch {
       this._activeReservationsLoadedFor = null;
