@@ -8,6 +8,8 @@ from typing import TYPE_CHECKING, cast
 from unittest.mock import AsyncMock, MagicMock
 
 from freezegun import freeze_time
+from homeassistant.components.sensor import SensorDeviceClass
+from homeassistant.const import UnitOfTime
 from homeassistant.util import dt as dt_util
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
@@ -52,6 +54,10 @@ if TYPE_CHECKING:
 
 EXPECTED_REMAINING_HOURS = 2.0
 EXPECTED_REMAINING_MINUTES = 90
+EXPECTED_COUNT_BALANCE = 3
+EXPECTED_DURATION_BALANCE = 120
+EXPECTED_MONETARY_BALANCE = 12.5
+EXPECTED_EURO_BALANCE = 237.5
 
 
 async def test_entity_unique_id_and_device_info() -> None:
@@ -294,12 +300,131 @@ async def test_sensors_handle_coordinator_update(
     assert active_sensor.native_value == 1
     assert future_sensor.native_value == 1
     assert remaining_sensor.native_value == EXPECTED_REMAINING_HOURS
+    assert remaining_sensor.device_class == SensorDeviceClass.DURATION
     assert availability_sensor.native_value == STATE_CHARGEABLE
     assert provider_start.native_value == zone_window.start
     assert provider_end.native_value == zone_window.end
     assert next_start.native_value == zone_window.start
     assert next_end.native_value == zone_window.end
     assert favorites_sensor.native_value == 1
+
+
+async def test_remaining_balance_sensor_uses_count_presentation() -> None:
+    """Count balances should not be converted to hours."""
+    coordinator = _make_coordinator(
+        CoordinatorData(
+            permit_id="permit",
+            permit_remaining_balance=EXPECTED_COUNT_BALANCE,
+            permit_balance_unit="TIMES",
+            zone_validity=(),
+            reservations=(),
+            favorites=(),
+            zone_availability=ZoneAvailability(
+                is_chargeable_now=True,
+                next_change_time=None,
+                windows_today=(),
+            ),
+            active_reservations=(),
+        )
+    )
+    entry = _create_entry("provider:permit1:city")
+
+    sensor = RemainingTimeSensor(coordinator, entry)
+
+    assert sensor.native_value == EXPECTED_COUNT_BALANCE
+    assert sensor.native_unit_of_measurement == "times"
+    assert sensor.device_class is None
+    assert sensor.extra_state_attributes is not None
+    assert sensor.extra_state_attributes["remaining_balance"] == EXPECTED_COUNT_BALANCE
+
+
+async def test_remaining_balance_sensor_uses_duration_presentation() -> None:
+    """Minute balances should be presented as a duration."""
+    coordinator = _make_coordinator(
+        CoordinatorData(
+            permit_id="permit",
+            permit_remaining_balance=EXPECTED_DURATION_BALANCE,
+            permit_balance_unit="MINUTE",
+            zone_validity=(),
+            reservations=(),
+            favorites=(),
+            zone_availability=ZoneAvailability(
+                is_chargeable_now=True,
+                next_change_time=None,
+                windows_today=(),
+            ),
+            active_reservations=(),
+        )
+    )
+    entry = _create_entry("provider:permit1:city")
+
+    sensor = RemainingTimeSensor(coordinator, entry)
+
+    assert sensor.native_value == EXPECTED_REMAINING_HOURS
+    assert sensor.native_unit_of_measurement == UnitOfTime.HOURS
+    assert sensor.device_class == SensorDeviceClass.DURATION
+    assert sensor.extra_state_attributes is not None
+    assert (
+        sensor.extra_state_attributes["remaining_balance"] == EXPECTED_DURATION_BALANCE
+    )
+
+
+async def test_remaining_balance_sensor_uses_monetary_presentation() -> None:
+    """Monetary balances should keep their provider currency unit."""
+    coordinator = _make_coordinator(
+        CoordinatorData(
+            permit_id="permit",
+            permit_remaining_balance=EXPECTED_MONETARY_BALANCE,
+            permit_balance_unit="EUR",
+            zone_validity=(),
+            reservations=(),
+            favorites=(),
+            zone_availability=ZoneAvailability(
+                is_chargeable_now=True,
+                next_change_time=None,
+                windows_today=(),
+            ),
+            active_reservations=(),
+        )
+    )
+    entry = _create_entry("provider:permit1:city")
+
+    sensor = RemainingTimeSensor(coordinator, entry)
+
+    assert sensor.native_value == EXPECTED_MONETARY_BALANCE
+    assert sensor.native_unit_of_measurement == "EUR"
+    assert sensor.device_class == SensorDeviceClass.MONETARY
+    assert sensor.extra_state_attributes is not None
+    assert (
+        sensor.extra_state_attributes["remaining_balance"] == EXPECTED_MONETARY_BALANCE
+    )
+
+
+async def test_remaining_balance_sensor_normalizes_euro_currency_code() -> None:
+    """Provider EURO labels should be normalized to EUR for display."""
+    coordinator = _make_coordinator(
+        CoordinatorData(
+            permit_id="permit",
+            permit_remaining_balance=EXPECTED_EURO_BALANCE,
+            permit_balance_unit="EURO",
+            zone_validity=(),
+            reservations=(),
+            favorites=(),
+            zone_availability=ZoneAvailability(
+                is_chargeable_now=True,
+                next_change_time=None,
+                windows_today=(),
+            ),
+            active_reservations=(),
+        )
+    )
+    entry = _create_entry("provider:permit1:city")
+
+    sensor = RemainingTimeSensor(coordinator, entry)
+
+    assert sensor.native_value == EXPECTED_EURO_BALANCE
+    assert sensor.native_unit_of_measurement == "EUR"
+    assert sensor.device_class == SensorDeviceClass.MONETARY
 
 
 def _sample_data(zone_availability: ZoneAvailability | None = None) -> CoordinatorData:

@@ -78,7 +78,7 @@ class FutureReservationsSensor(CityVisitorParkingEntity):
 
 
 class RemainingTimeSensor(CityVisitorParkingEntity):
-    """Sensor for remaining balance (time or monetary)."""
+    """Sensor for remaining balance presented by balance unit."""
 
     _entity_key = "remaining_time"
     _attr_translation_key: str | None = "remaining_time"
@@ -101,13 +101,22 @@ class RemainingTimeSensor(CityVisitorParkingEntity):
             }
         )
 
-        if balance_unit is not None and balance_unit not in {"TIMES", "MINUTE"}:
+        if balance_unit == "TIMES":
+            self._attr_device_class = None
+            self._attr_native_unit_of_measurement = "times"
+            self._attr_suggested_display_precision = 0
+            attributes["remaining_balance"] = remaining_balance
+            self._attr_native_value = _as_count_value(remaining_balance)
+        elif balance_unit is not None and balance_unit != "MINUTE":
             self._attr_device_class = SensorDeviceClass.MONETARY
-            self._attr_native_unit_of_measurement = balance_unit
+            self._attr_native_unit_of_measurement = _normalize_currency_unit(
+                balance_unit
+            )
             self._attr_suggested_display_precision = 2
+            attributes["remaining_balance"] = remaining_balance
             self._attr_native_value = float(remaining_balance)
         else:
-            self._attr_device_class = None
+            self._attr_device_class = SensorDeviceClass.DURATION
             self._attr_native_unit_of_measurement = UnitOfTime.HOURS
             self._attr_suggested_display_precision = 2
             attributes["remaining_balance"] = remaining_balance
@@ -250,6 +259,20 @@ class FavoritesSensor(CityVisitorParkingEntity):
 def _remaining_balance(data: CoordinatorData) -> float:
     """Return the remaining balance (minutes, times, or monetary amount)."""
     return max(0.0, data.permit_remaining_balance)
+
+
+def _as_count_value(value: float) -> int | float:
+    """Return an integer count when the balance is a whole number."""
+    if value.is_integer():
+        return int(value)
+    return value
+
+
+def _normalize_currency_unit(unit: str) -> str:
+    """Normalize provider currency labels to Home Assistant-friendly codes."""
+    if unit == "EURO":
+        return "EUR"
+    return unit
 
 
 def _next_end_time(data: CoordinatorData) -> datetime | None:
