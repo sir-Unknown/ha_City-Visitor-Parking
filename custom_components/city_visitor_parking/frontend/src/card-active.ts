@@ -1,3 +1,4 @@
+/** Lovelace card for listing and updating active visitor parking reservations. */
 import { css, html, nothing, type TemplateResult } from "lit";
 import type { DeviceEntry, HomeAssistant, ValueElement } from "./types";
 import { ensureTranslations, getGlobalHass, localize } from "./translations";
@@ -53,6 +54,7 @@ type CardConfig = {
   config_entry_id?: string;
 };
 
+/** Interactive card that shows active reservations for the selected permit. */
 class CityVisitorParkingActiveCard extends BaseLocalizedCard<CardConfig> {
   static styles = [
     BASE_CARD_STYLES,

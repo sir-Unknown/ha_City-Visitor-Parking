@@ -1,3 +1,4 @@
+/** Lovelace card for creating visitor parking reservations and favorites. */
 import { css, html, nothing, type TemplateResult } from "lit";
 import { keyed } from "lit/directives/keyed.js";
 import type {
@@ -8,7 +9,11 @@ import type {
   ZoneStatus,
   ZoneStatusResponse,
 } from "./types";
-import { ensureTranslations, getGlobalHass } from "./translations";
+import {
+  ensureTranslations,
+  getGlobalHass,
+  getHassLanguage,
+} from "./translations";
 import {
   DOMAIN,
   RESERVATION_ENDED_EVENT,
@@ -79,6 +84,7 @@ const INPUT_VALUE_IDS = new Set([
 ]);
 const CHANGE_VALUE_IDS = new Set(["startDateTime", "endDateTime"]);
 
+/** Interactive card that starts reservations and manages favorites for one permit. */
 class CityVisitorParkingNewReservationCard extends BaseLocalizedCard<CardConfig> {
   static styles = [
     BASE_CARD_STYLES,
@@ -246,8 +252,7 @@ class CityVisitorParkingNewReservationCard extends BaseLocalizedCard<CardConfig>
     const prev = this._prevHaState;
     this._prevHaState = hass.config?.state;
     this._hass = hass;
-    const nextLanguage =
-      (hass.language as string | undefined) || navigator.language || "en";
+    const nextLanguage = getHassLanguage(hass) || navigator.language || "en";
     if (
       nextLanguage !== this._translationsLanguage ||
       !this._translationsReady

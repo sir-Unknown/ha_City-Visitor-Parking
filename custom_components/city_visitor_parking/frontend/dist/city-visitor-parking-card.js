@@ -643,19 +643,6 @@ var ensureTranslations = async (target) => {
   await loadPromise;
   translationsInFlight.delete(language);
 };
-var resolveTranslationValue = (strings, key) => {
-  const directValue = strings[key];
-  if (typeof directValue === "string") return directValue;
-  const cardStrings = strings.card;
-  if (!cardStrings || typeof cardStrings !== "object") return null;
-  const parts = key.split(".");
-  let current = cardStrings;
-  for (const part of parts) {
-    if (!current || typeof current !== "object") return null;
-    current = current[part];
-  }
-  return typeof current === "string" ? current : null;
-};
 var localize = (target, key) => {
   const language = getLanguage(target);
   const strings = translationsCache.get(language) || translationsCache.get(DEFAULT_LANGUAGE);
@@ -667,11 +654,16 @@ var localize = (target, key) => {
   }
   const cachedValue = cachedLookups.get(key);
   if (cachedValue !== void 0) return cachedValue;
-  const resolved = resolveTranslationValue(strings, key) ?? key;
+  const resolved = typeof strings[key] === "string" ? strings[key] : key;
   cachedLookups.set(key, resolved);
   return resolved;
 };
 var createLocalize = (getHass) => (key, ..._args) => localize(getHass(), key);
+var getHassLanguage = (hass) => {
+  if (typeof hass?.language === "string" && hass.language) return hass.language;
+  const loc = hass?.locale;
+  return typeof loc?.language === "string" ? loc.language : void 0;
+};
 
 // src/helpers.ts
 var DOMAIN = "city_visitor_parking";
@@ -1500,7 +1492,7 @@ var CityVisitorParkingNewReservationCard = class extends BaseLocalizedCard {
     const prev = this._prevHaState;
     this._prevHaState = hass.config?.state;
     this._hass = hass;
-    const nextLanguage = hass.language || navigator.language || "en";
+    const nextLanguage = getHassLanguage(hass) || navigator.language || "en";
     if (nextLanguage !== this._translationsLanguage || !this._translationsReady) {
       this._translationsReady = false;
       void ensureTranslations(this._hass).then(() => {
@@ -2517,6 +2509,7 @@ var CityVisitorParkingActiveCardEditor = class extends BaseCardEditor {
   render() {
     if (!this.hass) return b2``;
     const localizeTarget = this.hass;
+    void ensureTranslations(localizeTarget);
     const { computeLabel, computeHelper } = buildFormHelpers2(
       localizeTarget,
       "active_editor"

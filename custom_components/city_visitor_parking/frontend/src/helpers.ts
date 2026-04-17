@@ -1,3 +1,4 @@
+/** Shared frontend helpers for permit selection, status handling, and formatting. */
 import type {
   DeviceEntry,
   FavoriteItem,
@@ -9,11 +10,13 @@ import type {
 } from "./types";
 import { localize } from "./translations";
 
+/** Integration domain used for selectors, websocket calls, and device matching. */
 export const DOMAIN = "city_visitor_parking";
 export const RESERVATION_STARTED_EVENT =
   "city-visitor-parking-reservation-started";
 export const RESERVATION_ENDED_EVENT = "city-visitor-parking-reservation-ended";
 
+/** Empty zone state used before a status payload has been loaded. */
 export const EMPTY_ZONE_STATUS: ZoneStatus = {
   state: null,
   kind: null,
@@ -23,15 +26,17 @@ export const EMPTY_ZONE_STATUS: ZoneStatus = {
   balanceUnit: null,
 };
 
+/** Normalizes free-form text for case-insensitive matching. */
 export const normalizeMatchValue = (value: string | undefined | null): string =>
   String(value ?? "")
     .trim()
     .toLowerCase();
 
-// Strips all non-alphanumeric characters for matching purposes only (not for storage or display).
+/** Strips non-alphanumeric characters for matching only, never for storage or display. */
 export const normalizePlateValue = (value: string | undefined | null): string =>
   normalizeMatchValue(value).replace(/[^a-z0-9]/g, "");
 
+/** Builds lookup maps so favorite matching stays cheap during card interaction. */
 export const createFavoriteIndex = (favorites: FavoriteItem[]) => {
   const byPlate = new Map<string, FavoriteItem>();
   const byPlateName = new Map<string, FavoriteItem>();
@@ -49,6 +54,7 @@ export const createFavoriteIndex = (favorites: FavoriteItem[]) => {
   return { byPlate, byPlateName, byValue };
 };
 
+/** Clears transient favorite-action flags after a request or form reset. */
 export const clearFavoriteTransientState = (context: {
   _pendingRemoveFavoriteId: string | null;
   _favoriteRemoveInFlight: boolean;
@@ -63,6 +69,7 @@ export const clearFavoriteTransientState = (context: {
   });
 };
 
+/** Invalidates cached favorites and optionally resets retry/loading state. */
 export const invalidateFavoritesCache = (
   context: {
     _favoritesLoadedFor: string | null;
@@ -77,6 +84,7 @@ export const invalidateFavoritesCache = (
   if (options?.clearLoading) context._favoritesLoading = false;
 };
 
+/** Tracks whether permit defaults still need to be applied to the form. */
 export const setPendingPermitDefaults = (
   context: {
     _pendingPermitDefaultsEntryId: string | null;
@@ -91,6 +99,7 @@ export const setPendingPermitDefaults = (
   });
 };
 
+/** Copies a normalized zone status payload into card instance state fields. */
 export const applyZoneStatus = (
   context: {
     _zoneState: ZoneStatus["state"];
@@ -112,12 +121,14 @@ export const applyZoneStatus = (
   });
 };
 
+/** Returns whether a config entry should be hidden from permit selection. */
 export const isPermitEntryDisabled = (entry: PermitEntry): boolean =>
   Boolean(entry.disabled_by) ||
   (entry.state != null &&
     entry.state !== "loaded" &&
     entry.state !== "setup_in_progress");
 
+/** Converts config entries into sorted Lovelace selector options. */
 export const buildPermitOptions = (entries: PermitEntry[]): PermitOption[] =>
   entries
     .map((entry) => ({
@@ -127,6 +138,7 @@ export const buildPermitOptions = (entries: PermitEntry[]): PermitOption[] =>
     }))
     .sort((first, second) => first.label.localeCompare(second.label));
 
+/** Maps config entry ids to their display titles for device labeling. */
 export const buildPermitTitleMap = (
   entries: PermitEntry[],
 ): Map<string, string> =>
@@ -134,6 +146,7 @@ export const buildPermitTitleMap = (
     entries.map((entry) => [entry.entry_id, entry.title || entry.entry_id]),
   );
 
+/** Fetches config entries for this integration through Home Assistant websocket API. */
 export const fetchPermitEntries = async (
   hass: HomeAssistant,
 ): Promise<PermitEntry[]> =>
@@ -143,6 +156,7 @@ export const fetchPermitEntries = async (
     domain: DOMAIN,
   });
 
+/** Resolves a user-facing permit label for each device tied to a config entry. */
 export const resolvePermitLabelsByDevice = (
   devices: DeviceEntry[],
   entryTitles: Map<string, string>,
@@ -159,6 +173,7 @@ export const resolvePermitLabelsByDevice = (
   return labels;
 };
 
+/** Extracts the best available error message, falling back to a translation key. */
 export const errorMessage = (
   err: unknown,
   fallbackKey: string,
@@ -173,6 +188,7 @@ export const errorMessage = (
   return localizeFn(fallbackKey);
 };
 
+/** Creates an error formatter bound to the current Home Assistant localization context. */
 export const createErrorMessage =
   (
     getHass: () => LocalizeTarget | null | undefined,
@@ -180,15 +196,19 @@ export const createErrorMessage =
   (err: unknown, fallbackKey: string) =>
     errorMessage(err, fallbackKey, (key) => localize(getHass(), key));
 
+/** Pads a numeric value to two digits for date and time formatting. */
 export const pad = (value: number | string): string =>
   String(value).padStart(2, "0");
 
+/** Formats a `Date` as a local `YYYY-MM-DD` string. */
 export const formatDate = (date: Date): string =>
   `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
 
+/** Formats a `Date` as a local datetime string accepted by HA form inputs. */
 export const formatDateTimeLocal = (date: Date): string =>
   `${formatDate(date)}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 
+/** Formats an optional ISO-like value for datetime-local input controls. */
 export const formatOptionalDateTimeLocal = (
   value: string | undefined | null,
 ): string => {
@@ -196,6 +216,7 @@ export const formatOptionalDateTimeLocal = (
   return date ? formatDateTimeLocal(date) : "";
 };
 
+/** Parses a date-time string into a `Date`, returning `null` for invalid input. */
 export const parseDateTimeValue = (
   value: string | undefined | null,
 ): Date | null => {
@@ -204,10 +225,12 @@ export const parseDateTimeValue = (
   return Number.isNaN(date.getTime()) ? null : date;
 };
 
+/** Safely reads the selected config entry id from a card config object. */
 export const getConfigEntryId = (
   config: { config_entry_id?: string | null } | null | undefined,
 ): string | null => config?.config_entry_id ?? null;
 
+/** Filters HA devices down to those owned by this integration domain. */
 export const filterDomainDevices = (devices: DeviceEntry[]): DeviceEntry[] =>
   devices.filter((device) =>
     (device.identifiers ?? []).some(
@@ -215,6 +238,7 @@ export const filterDomainDevices = (devices: DeviceEntry[]): DeviceEntry[] =>
     ),
   );
 
+/** Reuses an in-flight async loader so duplicate requests share the same promise. */
 export const makeDedupedLoader = <T>(
   getPromise: () => Promise<T> | null,
   setPromise: (p: Promise<T> | null) => void,
@@ -227,6 +251,7 @@ export const makeDedupedLoader = <T>(
   return promise;
 };
 
+/** Reads a selector value from a Home Assistant event with an element fallback. */
 export const extractEventValue = (
   event: Event,
   fallbackElement?: (HTMLElement & { value?: string }) | null,
@@ -237,10 +262,12 @@ export const extractEventValue = (
     : (fallbackElement?.value ?? "");
 };
 
+/** Returns whether Home Assistant has finished starting up. */
 export const isHassRunning = (
   hass: { config?: { state?: string } } | null | undefined,
 ): boolean => hass?.config?.state === "RUNNING";
 
+/** Formats remaining permit balance as a badge label and matching icon. */
 export const formatBalanceLabel = (
   remainingMinutes: number,
   balanceUnit: string | null,

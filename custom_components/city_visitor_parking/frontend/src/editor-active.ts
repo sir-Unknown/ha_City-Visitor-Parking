@@ -1,3 +1,4 @@
+/** Editor schema helpers for the active-reservations Lovelace card. */
 import { html, type TemplateResult } from "lit";
 import type {
   ActiveParkingCardEditorConfig,
@@ -5,13 +6,14 @@ import type {
   LocalizeTarget,
 } from "./types";
 import { DOMAIN } from "./helpers";
-import { localize } from "./translations";
+import { ensureTranslations, localize } from "./translations";
 import { BaseCardEditor, defineElementIfMissing } from "./base";
 import { buildCardTypeOptions, createConfigFormGetter } from "./editor-parking";
 
 type LocalizeFunc = (key: string, ...args: Array<string | number>) => string;
 type FormSchema = { name: string };
 
+/** Builds localized field-label and helper-text resolvers for `ha-form`. */
 const buildFormHelpers = (
   localizeTarget: LocalizeTarget | LocalizeFunc,
   prefix: string,
@@ -60,10 +62,12 @@ const buildActiveCardEditorSchema = (
   },
 ];
 
+/** Lovelace editor element for configuring the active-reservations card. */
 export class CityVisitorParkingActiveCardEditor extends BaseCardEditor<ActiveParkingCardEditorConfig> {
   protected render(): TemplateResult {
     if (!this.hass) return html``;
     const localizeTarget = this.hass;
+    void ensureTranslations(localizeTarget);
     const { computeLabel, computeHelper } = buildFormHelpers(
       localizeTarget,
       "active_editor",
@@ -99,6 +103,7 @@ defineElementIfMissing(
   CityVisitorParkingActiveCardEditor,
 );
 
+/** Returns the config-form schema for the active-reservations card. */
 export const getActiveCardConfigForm = createConfigFormGetter(
   "active_editor",
   (cardTypeOptions, target) =>
