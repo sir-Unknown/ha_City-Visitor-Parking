@@ -11,6 +11,7 @@ DOMAIN: Final = "city_visitor_parking"
 
 PLATFORMS: Final[list[Platform]] = [Platform.SENSOR]
 
+CONF_DEMO_MODE: Final = "demo"
 CONF_PROVIDER_ID: Final = "provider_id"
 CONF_MUNICIPALITY: Final = "municipality_name"
 CONF_BASE_URL: Final = "base_url"

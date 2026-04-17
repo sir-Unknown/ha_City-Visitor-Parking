@@ -31,6 +31,7 @@ from .const import (
     CONF_API_URL,
     CONF_AUTO_END,
     CONF_BASE_URL,
+    CONF_DEMO_MODE,
     CONF_FREE_DATES,
     CONF_GUI_URL,
     CONF_MUNICIPALITY,
@@ -550,10 +551,11 @@ def _build_overrides(
 
 async def _async_load_providers(hass: HomeAssistant) -> dict[str, ProviderConfig]:
     """Load providers from the packaged YAML file."""
-    return await hass.async_add_executor_job(_load_providers_sync)
+    demo_mode: bool = hass.data.get(DOMAIN, {}).get(CONF_DEMO_MODE, False)
+    return await hass.async_add_executor_job(_load_providers_sync, demo_mode)
 
 
-def _load_providers_sync() -> dict[str, ProviderConfig]:
+def _load_providers_sync(demo_mode: bool = False) -> dict[str, ProviderConfig]:
     """Load provider definitions from disk in a worker thread."""
     with (
         resources.files(__package__)
@@ -564,8 +566,11 @@ def _load_providers_sync() -> dict[str, ProviderConfig]:
 
     providers: dict[str, ProviderConfig] = {}
     for key, config in data.items():
+        provider_id = str(config["provider_id"])
+        if provider_id == "demo" and not demo_mode:
+            continue
         providers[key] = ProviderConfig(
-            provider_id=str(config["provider_id"]),
+            provider_id=provider_id,
             municipality_name=str(config["municipality_name"]),
             base_url=_normalize_optional_text(config.get("base_url")),
             api_url=_normalize_optional_text(config.get("api_url")),
