@@ -37,7 +37,9 @@ jobs:
           CATEGORY_LABELS="breaking-change bugfix documentation enhancement refactor performance new-feature maintenance ci dependencies tests"
 
           case "$PR_TITLE" in
-            "feat!"*|feat"("*"!)"*)        LABEL="breaking-change" ;;
+            # Breaking change: any type ending with ! before the colon
+            # Matches feat!: ..., feat(scope)!: ..., fix!: ..., etc.
+            *"!:"*)                        LABEL="breaking-change" ;;
             "feat:"*|feat"("*"):"*)        LABEL="enhancement" ;;
             "fix:"*|fix"("*"):"*)          LABEL="bugfix" ;;
             "refactor:"*|refactor"("*"):"*) LABEL="refactor" ;;
