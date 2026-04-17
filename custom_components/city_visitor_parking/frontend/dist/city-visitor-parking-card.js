@@ -587,13 +587,13 @@ var i6 = e4(class extends i5 {
   }
 });
 
-// src/index.ts
-var getGlobalHass = () => window.hass;
+// src/translations.ts
 var DEFAULT_LANGUAGE = "en";
 var BASE_URL = new URL(".", import.meta.url).toString().replace(/\/$/, "");
 var translationsCache = /* @__PURE__ */ new Map();
 var translationsInFlight = /* @__PURE__ */ new Map();
 var translationLookupCache = /* @__PURE__ */ new Map();
+var getGlobalHass = () => window.hass;
 var getStoredLanguage = () => {
   try {
     return localStorage.getItem("selectedLanguage") ?? void 0;
@@ -643,34 +643,34 @@ var ensureTranslations = async (target) => {
   await loadPromise;
   translationsInFlight.delete(language);
 };
-var resolveTranslationValue = (strings, key) => {
-  const directValue = strings[key];
-  if (typeof directValue === "string") return directValue;
-  const cardStrings = strings.card;
-  if (!cardStrings || typeof cardStrings !== "object") return null;
-  const parts = key.split(".");
-  let current = cardStrings;
+var resolveTranslationValue = (obj, parts) => {
+  let current = obj;
   for (const part of parts) {
-    if (!current || typeof current !== "object") return null;
+    if (typeof current !== "object" || current === null) return void 0;
     current = current[part];
   }
-  return typeof current === "string" ? current : null;
+  return typeof current === "string" ? current : void 0;
 };
 var localize = (target, key) => {
   const language = getLanguage(target);
-  const strings = translationsCache.get(language) || translationsCache.get(DEFAULT_LANGUAGE);
-  if (!strings) return key;
-  let cachedLookups = translationLookupCache.get(language);
-  if (!cachedLookups) {
-    cachedLookups = /* @__PURE__ */ new Map();
-    translationLookupCache.set(language, cachedLookups);
+  let lookup = translationLookupCache.get(language);
+  if (!lookup) {
+    lookup = /* @__PURE__ */ new Map();
+    translationLookupCache.set(language, lookup);
   }
-  const cachedValue = cachedLookups.get(key);
-  if (cachedValue !== void 0) return cachedValue;
-  const resolved = resolveTranslationValue(strings, key) ?? key;
-  cachedLookups.set(key, resolved);
-  return resolved;
+  if (lookup.has(key)) return lookup.get(key);
+  const strings = translationsCache.get(language);
+  const parts = key.split(".");
+  const value = strings ? resolveTranslationValue(strings, parts) : void 0;
+  const result = value ?? key;
+  lookup.set(key, result);
+  return result;
 };
+var createLocalize = (getHass) => (key, ..._args) => localize(getHass(), key);
+
+// src/helpers.ts
+var DOMAIN = "city_visitor_parking";
+var RESERVATION_STARTED_EVENT = "city-visitor-parking-reservation-started";
 var EMPTY_ZONE_STATUS = {
   state: null,
   kind: null,
@@ -726,51 +726,99 @@ var applyZoneStatus = (context, status) => {
     _balanceUnit: status?.balanceUnit ?? null
   });
 };
-var DOMAIN = "city_visitor_parking";
-var RESERVATION_STARTED_EVENT = "city-visitor-parking-reservation-started";
-var createStatusState = () => ({
-  message: "",
-  type: "info",
-  clearHandle: null
+var isPermitEntryDisabled = (entry) => Boolean(entry.disabled_by) || entry.state != null && entry.state !== "loaded" && entry.state !== "setup_in_progress";
+var buildPermitOptions = (entries) => entries.map((entry) => ({
+  id: entry.entry_id,
+  label: (entry.title || entry.entry_id || "").trim() || entry.entry_id,
+  disabled: isPermitEntryDisabled(entry)
+})).sort((first, second) => first.label.localeCompare(second.label));
+var buildPermitTitleMap = (entries) => new Map(
+  entries.map((entry) => [entry.entry_id, entry.title || entry.entry_id])
+);
+var fetchPermitEntries = async (hass) => hass.callWS({
+  type: "config_entries/get",
+  type_filter: ["device", "hub", "service"],
+  domain: DOMAIN
 });
-var triggerProgressButtonFeedback = async (host, selector, outcome) => {
-  await host.updateComplete;
-  const button = host.renderRoot.querySelector(
-    selector
-  );
-  if (!button) return;
-  if (outcome === "success") {
-    button.actionSuccess?.();
-  } else {
-    button.actionError?.();
+var resolvePermitLabelsByDevice = (devices, entryTitles) => {
+  const labels = /* @__PURE__ */ new Map();
+  for (const device of devices) {
+    const entryIds = Array.isArray(device.config_entries) ? device.config_entries : [];
+    const entryId = entryIds.find((id) => entryTitles.has(id)) ?? entryIds[0];
+    if (!entryId) continue;
+    labels.set(device.id, entryTitles.get(entryId) ?? entryId);
   }
+  return labels;
 };
-var setStatusState = (state, message, type, requestRender, clearAfterMs) => {
-  if (state.clearHandle !== null) {
-    window.clearTimeout(state.clearHandle);
-    state.clearHandle = null;
+var errorMessage = (err, fallbackKey, localizeFn) => {
+  for (const msg of [
+    err?.message,
+    err?.data?.message
+  ]) {
+    if (typeof msg === "string" && msg.trim()) return msg;
   }
-  state.message = message;
-  state.type = type;
-  if (clearAfterMs) {
-    state.clearHandle = window.setTimeout(() => {
-      state.clearHandle = null;
-      state.message = "";
-      state.type = "info";
-      requestRender();
-    }, clearAfterMs);
-  }
+  return localizeFn(fallbackKey);
 };
-var clearStatusState = (state, requestRender) => {
-  if (state.clearHandle !== null) {
-    window.clearTimeout(state.clearHandle);
-    state.clearHandle = null;
-  }
-  if (!state.message && state.type === "info") return;
-  state.message = "";
-  state.type = "info";
-  requestRender();
+var createErrorMessage = (getHass) => (err, fallbackKey) => errorMessage(err, fallbackKey, (key) => localize(getHass(), key));
+var pad = (value) => String(value).padStart(2, "0");
+var formatDate = (date) => `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+var formatDateTimeLocal = (date) => `${formatDate(date)}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+var formatOptionalDateTimeLocal = (value) => {
+  const date = parseDateTimeValue(value);
+  return date ? formatDateTimeLocal(date) : "";
 };
+var parseDateTimeValue = (value) => {
+  if (!value) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+};
+var getConfigEntryId = (config) => config?.config_entry_id ?? null;
+var filterDomainDevices = (devices) => devices.filter(
+  (device) => (device.identifiers ?? []).some(
+    (identifier) => identifier[0] === DOMAIN
+  )
+);
+var makeDedupedLoader = (getPromise, setPromise, factory) => {
+  const existing = getPromise();
+  if (existing) return existing;
+  const promise = factory().finally(() => setPromise(null));
+  setPromise(promise);
+  return promise;
+};
+var extractEventValue = (event, fallbackElement) => {
+  const detail = event.detail;
+  return detail != null && "value" in detail ? detail.value ?? "" : fallbackElement?.value ?? "";
+};
+var isHassRunning = (hass) => hass?.config?.state === "RUNNING";
+var formatBalanceLabel = (remainingMinutes, balanceUnit) => {
+  const isMonetary = balanceUnit !== null && balanceUnit !== "TIMES" && balanceUnit !== "MINUTE";
+  if (isMonetary) {
+    const formatted = Number.isInteger(remainingMinutes) ? String(remainingMinutes) : remainingMinutes.toFixed(2);
+    const currencySymbols = {
+      EURO: "\u20AC",
+      EUR: "\u20AC",
+      GBP: "\xA3",
+      USD: "$"
+    };
+    const symbol = currencySymbols[balanceUnit ?? ""] ?? balanceUnit ?? "";
+    return { text: `${symbol}${formatted}`, icon: "mdi:cash" };
+  }
+  if (balanceUnit === "TIMES") {
+    return {
+      text: String(Math.round(remainingMinutes)),
+      icon: "mdi:ticket-outline"
+    };
+  }
+  const totalMins = Math.round(remainingMinutes);
+  const hours = Math.floor(totalMins / 60);
+  const mins = totalMins % 60;
+  return {
+    text: hours > 0 ? `${hours}u ${mins}m` : `${mins}m`,
+    icon: "mdi:clock-outline"
+  };
+};
+
+// src/ui.ts
 var BASE_CARD_STYLES = i`
   :host {
     display: block;
@@ -823,57 +871,73 @@ var BASE_CARD_STYLES = i`
     width: 100%;
   }
 `;
-var isPermitEntryDisabled = (entry) => Boolean(entry.disabled_by) || entry.state != null && entry.state !== "loaded" && entry.state !== "setup_in_progress";
-var buildPermitOptions = (entries) => entries.map((entry) => ({
-  id: entry.entry_id,
-  label: (entry.title || entry.entry_id || "").trim() || entry.entry_id,
-  disabled: isPermitEntryDisabled(entry)
-})).sort((first, second) => first.label.localeCompare(second.label));
-var buildPermitTitleMap = (entries) => new Map(
-  entries.map((entry) => [entry.entry_id, entry.title || entry.entry_id])
-);
-var fetchPermitEntries = async (hass) => hass.callWS({
-  type: "config_entries/get",
-  type_filter: ["device", "hub", "service"],
-  domain: DOMAIN
+var createStatusState = () => ({
+  message: "",
+  type: "info",
+  clearHandle: null
 });
-var resolvePermitLabelsByDevice = (devices, entryTitles) => {
-  const labels = /* @__PURE__ */ new Map();
-  for (const device of devices) {
-    const entryIds = Array.isArray(device.config_entries) ? device.config_entries : [];
-    const entryId = entryIds.find((id) => entryTitles.has(id)) ?? entryIds[0];
-    if (!entryId) continue;
-    labels.set(device.id, entryTitles.get(entryId) ?? entryId);
+var triggerProgressButtonFeedback = async (host, selector, outcome) => {
+  await host.updateComplete;
+  const button = host.renderRoot.querySelector(
+    selector
+  );
+  if (!button) return;
+  if (outcome === "success") {
+    button.actionSuccess?.();
+  } else {
+    button.actionError?.();
   }
-  return labels;
 };
-var errorMessage = (err, fallbackKey, localizeFn) => {
-  for (const msg of [
-    err?.message,
-    err?.data?.message
-  ]) {
-    if (typeof msg === "string" && msg.trim()) return msg;
+var setStatusState = (state, message, type, requestRender, clearAfterMs) => {
+  if (state.clearHandle !== null) {
+    window.clearTimeout(state.clearHandle);
+    state.clearHandle = null;
   }
-  return localizeFn(fallbackKey);
+  state.message = message;
+  state.type = type;
+  if (clearAfterMs) {
+    state.clearHandle = window.setTimeout(() => {
+      state.clearHandle = null;
+      state.message = "";
+      state.type = "info";
+      requestRender();
+    }, clearAfterMs);
+  }
 };
-var pad = (value) => String(value).padStart(2, "0");
-var formatDate = (date) => `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
-var formatDateTimeLocal = (date) => `${formatDate(date)}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+var clearStatusState = (state, requestRender) => {
+  if (state.clearHandle !== null) {
+    window.clearTimeout(state.clearHandle);
+    state.clearHandle = null;
+  }
+  if (!state.message && state.type === "info") return;
+  state.message = "";
+  state.type = "info";
+  requestRender();
+};
 var HA_STARTING_MESSAGE_KEY = "ui.panel.lovelace.warning.starting";
 var getCardText = (key) => {
   const value = localize(getGlobalHass(), key);
   return value === key ? null : value;
 };
-var getConfigEntryId = (config) => config?.config_entry_id ?? null;
-var filterDomainDevices = (devices) => devices.filter(
-  (device) => (device.identifiers ?? []).some(
-    (identifier) => identifier[0] === DOMAIN
-  )
-);
-var getHassLanguage = (hass) => {
-  if (typeof hass?.language === "string" && hass.language) return hass.language;
-  const loc = hass?.locale;
-  return typeof loc?.language === "string" ? loc.language : void 0;
+var getLoadingMessage = (hass) => {
+  const hassLocalize = typeof hass === "function" ? hass : hass?.localize;
+  const haMessage = hassLocalize?.(HA_STARTING_MESSAGE_KEY);
+  if (haMessage && haMessage !== HA_STARTING_MESSAGE_KEY) return haMessage;
+  const key = "message.home_assistant_loading";
+  const message = localize(hass, key);
+  return message === key ? "" : message;
+};
+var renderLoadingCard = (hass) => {
+  const loadingMessage = getLoadingMessage(
+    hass ?? getGlobalHass()
+  );
+  return b2`
+    <ha-card>
+      <div class="card-content">
+        <ha-alert alert-type="warning">${loadingMessage}</ha-alert>
+      </div>
+    </ha-card>
+  `;
 };
 var renderCardHeader = (title, icon) => {
   if (!title && !icon) return A;
@@ -986,33 +1050,6 @@ var renderFavoriteSelect = (params) => {
     </div>
   `;
 };
-var formatBalanceLabel = (remainingMinutes, balanceUnit) => {
-  const isMonetary = balanceUnit !== null && balanceUnit !== "TIMES" && balanceUnit !== "MINUTE";
-  if (isMonetary) {
-    const formatted = Number.isInteger(remainingMinutes) ? String(remainingMinutes) : remainingMinutes.toFixed(2);
-    const currencySymbols = {
-      EURO: "\u20AC",
-      EUR: "\u20AC",
-      GBP: "\xA3",
-      USD: "$"
-    };
-    const symbol = currencySymbols[balanceUnit ?? ""] ?? balanceUnit ?? "";
-    return { text: `${symbol}${formatted}`, icon: "mdi:cash" };
-  }
-  if (balanceUnit === "TIMES") {
-    return {
-      text: String(Math.round(remainingMinutes)),
-      icon: "mdi:ticket-outline"
-    };
-  }
-  const totalMins = Math.round(remainingMinutes);
-  const hours = Math.floor(totalMins / 60);
-  const mins = totalMins % 60;
-  return {
-    text: hours > 0 ? `${hours}u ${mins}m` : `${mins}m`,
-    icon: "mdi:clock-outline"
-  };
-};
 var renderFavoriteActionRow = (params) => {
   const showFavoriteButton = params.showFavorites && (params.showRemoveFavorite || params.showAddFavorite);
   const showBalance = !showFavoriteButton && params.hasTarget && params.remainingMinutes !== null;
@@ -1083,49 +1120,8 @@ var renderFavoriteActionRow = (params) => {
     </div>
   `;
 };
-var makeDedupedLoader = (getPromise, setPromise, factory) => {
-  const existing = getPromise();
-  if (existing) return existing;
-  const promise = factory().finally(() => setPromise(null));
-  setPromise(promise);
-  return promise;
-};
-var extractEventValue = (event, fallbackElement) => {
-  const detail = event.detail;
-  return detail != null && "value" in detail ? detail.value ?? "" : fallbackElement?.value ?? "";
-};
-var createLocalize = (getHass) => (key, ..._args) => localize(getHass(), key);
-var createErrorMessage = (getHass) => (err, fallbackKey) => errorMessage(err, fallbackKey, (key) => localize(getHass(), key));
-var getLoadingMessage = (hass) => {
-  const hassLocalize = typeof hass === "function" ? hass : hass?.localize;
-  const haMessage = hassLocalize?.(HA_STARTING_MESSAGE_KEY);
-  if (haMessage && haMessage !== HA_STARTING_MESSAGE_KEY) return haMessage;
-  const key = "message.home_assistant_loading";
-  const message = localize(hass, key);
-  return message === key ? "" : message;
-};
-var renderLoadingCard = (hass) => {
-  const loadingMessage = getLoadingMessage(
-    hass ?? getGlobalHass()
-  );
-  return b2`
-    <ha-card>
-      <div class="card-content">
-        <ha-alert alert-type="warning">${loadingMessage}</ha-alert>
-      </div>
-    </ha-card>
-  `;
-};
-var formatOptionalDateTimeLocal = (value) => {
-  const date = parseDateTimeValue(value);
-  return date ? formatDateTimeLocal(date) : "";
-};
-var parseDateTimeValue = (value) => {
-  if (!value) return null;
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? null : date;
-};
-var isHassRunning = (hass) => hass?.config?.state === "RUNNING";
+
+// src/base.ts
 var createRenderScheduler = (requestUpdate) => {
   let handle = null;
   return () => {
@@ -1251,6 +1247,8 @@ var BaseCardEditor = class extends i4 {
     );
   }
 };
+
+// src/editor-parking.ts
 var buildFormHelpers = (localizeTarget, prefix) => {
   const resolve = (section, name) => {
     const fieldName = name === "config_entry_id" ? "config_entry" : name;
@@ -1358,6 +1356,1123 @@ var getCardConfigForm = createConfigFormGetter(
   "editor",
   (cardTypeOptions) => buildCardEditorSchema(cardTypeOptions, false)
 );
+
+// src/card-parking.ts
+var CARD_TYPE = "city-visitor-parking-card";
+var WS_LIST_FAVORITES = "city_visitor_parking/favorites";
+var WS_GET_STATUS = "city_visitor_parking/status";
+var STATUS_THROTTLE_MS = 6e4;
+var STATUS_REFRESH_MS = 3e5;
+var INPUT_VALUE_IDS = /* @__PURE__ */ new Set([
+  "licensePlate",
+  "favorite",
+  "startDateTime",
+  "endDateTime"
+]);
+var CHANGE_VALUE_IDS = /* @__PURE__ */ new Set(["startDateTime", "endDateTime"]);
+var CityVisitorParkingNewReservationCard = class extends BaseLocalizedCard {
+  constructor() {
+    super(...arguments);
+    this._deviceId = null;
+    this._deviceEntryId = null;
+    this._deviceLoadPromise = null;
+    this._deviceIdByEntryId = /* @__PURE__ */ new Map();
+    this._favorites = [];
+    this._favoritesError = null;
+    this._favoritesLoadedFor = null;
+    this._favoritesRetryAfter = 0;
+    this._favoritesLoading = false;
+    this._favoritesByPlate = /* @__PURE__ */ new Map();
+    this._favoritesByPlateName = /* @__PURE__ */ new Map();
+    this._favoritesByValue = /* @__PURE__ */ new Map();
+    this._permitOptions = [];
+    this._permitOptionsLoaded = false;
+    this._permitOptionsLoading = false;
+    this._permitOptionsLoadPromise = null;
+    this._formValues = {};
+    this._pendingRemoveFavoriteId = null;
+    this._selectedEntryId = null;
+    this._startButtonSuccess = false;
+    this._startButtonSuccessTimeout = null;
+    this._startInFlight = false;
+    this._favoriteRemoveInFlight = false;
+    this._addFavoriteChecked = false;
+    this._suppressFavoriteClear = false;
+    this._zoneState = null;
+    this._windowKind = null;
+    this._windowStartIso = null;
+    this._windowEndIso = null;
+    this._remainingMinutes = null;
+    this._balanceUnit = null;
+    this._zoneStatusTsByEntryId = /* @__PURE__ */ new Map();
+    this._zoneStatusInFlightByEntryId = /* @__PURE__ */ new Map();
+    this._zoneStatusByEntryId = /* @__PURE__ */ new Map();
+    this._pendingPermitDefaultsEntryId = null;
+    this._pendingPermitDefaultsForce = false;
+    this._statusRefreshHandle = null;
+    this._statusVisibilityHandler = null;
+    this._translationsReady = false;
+    this._translationsLanguage = null;
+    this._activeReservationsByPlate = /* @__PURE__ */ new Map();
+    this._activeReservationsLoadedFor = null;
+    this._licensePlateFocused = false;
+    this._onClick = (event) => this._handleClick(event);
+    this._onInput = (event) => this._handleInput(event);
+    this._onChange = (event) => this._handleChange(event);
+    this._onLicensePlateFocusIn = () => {
+      if (this._licensePlateFocused) return;
+      this._licensePlateFocused = true;
+      this._requestRender();
+    };
+    this._onLicensePlateFocusOut = () => {
+      if (!this._licensePlateFocused) return;
+      this._licensePlateFocused = false;
+      this._requestRender();
+    };
+    this._onPermitSelectChange = (event) => this._handlePermitSelectChange(event);
+    this._onFavoriteSelectChange = (event) => this._handleFavoriteSelectChange(event);
+  }
+  static async getConfigForm(hass) {
+    return getCardConfigForm(hass);
+  }
+  static getConfigElement() {
+    return document.createElement("city-visitor-parking-card-editor");
+  }
+  static getStubConfig() {
+    return {
+      type: `custom:${CARD_TYPE}`,
+      show_name: true,
+      show_favorites: true,
+      show_start_time: true,
+      show_end_time: true
+    };
+  }
+  setConfig(config) {
+    if (!config || !config.type) {
+      throw new Error(this._localize("message.invalid_config"));
+    }
+    const priorEntryId = this._getActiveEntryId();
+    const priorShowName = this._config?.show_name ?? true;
+    const priorShowFavorites = this._config?.show_favorites ?? true;
+    this._config = {
+      show_name: config.show_name !== false,
+      show_favorites: config.show_favorites !== false,
+      show_start_time: config.show_start_time !== false,
+      show_end_time: config.show_end_time !== false,
+      ...config
+    };
+    if (this._config.default_license_plate && !this._formValues["licensePlate"]) {
+      this._setInputValue("licensePlate", this._config.default_license_plate);
+    }
+    if (priorShowName && !this._config.show_name) {
+      this._setInputValue("favorite", "");
+    }
+    if (priorShowFavorites && !this._config.show_favorites) {
+      this._resetFavoritesState();
+      this._setInputValue("favorite", "");
+    }
+    if (getConfigEntryId(this._config)) {
+      this._selectedEntryId = null;
+    }
+    const entryChanged = this._getActiveEntryId() !== priorEntryId;
+    if (this._config.device_id) {
+      this._deviceId = this._config.device_id;
+      this._deviceEntryId = getConfigEntryId(this._config) || priorEntryId;
+      if (entryChanged) this._resetFavoritesState();
+    } else if (entryChanged) {
+      this._resetDeviceState();
+    }
+    this._syncEntryState(true);
+  }
+  set hass(hass) {
+    const prev = this._prevHaState;
+    this._prevHaState = hass.config?.state;
+    this._hass = hass;
+    const nextLanguage = hass.language || navigator.language || "en";
+    if (nextLanguage !== this._translationsLanguage || !this._translationsReady) {
+      this._translationsReady = false;
+      void ensureTranslations(this._hass).then(() => {
+        this._translationsReady = true;
+        this._translationsLanguage = nextLanguage;
+        this.requestUpdate();
+      });
+    }
+    if (prev !== "RUNNING" && hass.config?.state === "RUNNING") {
+      invalidateFavoritesCache(this, { resetRetryAfter: true });
+      this._zoneStatusTsByEntryId.clear();
+    }
+    this._syncEntryState(false);
+  }
+  disconnectedCallback() {
+    super.disconnectedCallback();
+    this._clearStatusRefresh();
+  }
+  getCardSize() {
+    return 4;
+  }
+  getGridOptions() {
+    return {
+      columns: 12,
+      min_columns: 6,
+      min_rows: 2
+    };
+  }
+  async _ensureDeviceId() {
+    if (!this._hass) return;
+    const entryId = this._getActiveEntryId();
+    if (!entryId) return;
+    if (this._config?.device_id) {
+      this._deviceId = this._config.device_id;
+      this._deviceEntryId = getConfigEntryId(this._config) || entryId;
+      return;
+    }
+    if (this._deviceEntryId === entryId && this._deviceId) return;
+    const cachedDeviceId = this._deviceIdByEntryId.get(entryId);
+    if (cachedDeviceId !== void 0) {
+      this._deviceId = cachedDeviceId;
+      this._deviceEntryId = entryId;
+      this._requestRender();
+      return;
+    }
+    if (this._deviceLoadPromise) return;
+    this._deviceLoadPromise = this._hass.callWS({ type: "config/device_registry/list" }).then((devices) => {
+      const match = devices.find(
+        (device) => (device.identifiers ?? []).some(
+          (identifier) => identifier[0] === DOMAIN
+        ) && Array.isArray(device.config_entries) && device.config_entries.includes(entryId)
+      );
+      const deviceId = match ? match.id : null;
+      this._deviceId = deviceId;
+      if (deviceId) this._deviceIdByEntryId.set(entryId, deviceId);
+      this._deviceEntryId = entryId;
+    }).catch(() => {
+      this._deviceId = null;
+      this._deviceEntryId = entryId;
+    }).finally(() => {
+      this._deviceLoadPromise = null;
+      this._requestRender();
+    });
+  }
+  _ensurePermitOptions() {
+    if (getConfigEntryId(this._config) || !this._hass) return;
+    if (this._permitOptionsLoaded || this._permitOptionsLoadPromise) return;
+    void this._loadPermitOptions();
+  }
+  _maybeSelectSinglePermit() {
+    if (getConfigEntryId(this._config)) return;
+    if (!this._permitOptionsLoaded || this._permitOptions.length !== 1) return;
+    if (this._getActiveEntryId()) return;
+    this._handlePermitChange(this._permitOptions[0].id);
+  }
+  async _loadPermitOptions() {
+    if (!this._hass || getConfigEntryId(this._config)) return;
+    const hass = this._hass;
+    if (this._permitOptionsLoadPromise) return this._permitOptionsLoadPromise;
+    this._permitOptionsLoading = true;
+    this._requestRender();
+    const loadPromise = (async () => {
+      try {
+        const result = await fetchPermitEntries(hass);
+        this._permitOptions = buildPermitOptions(result);
+        this._permitOptionsLoaded = true;
+        this._maybeSelectSinglePermit();
+      } catch {
+        this._permitOptions = [];
+        this._permitOptionsLoaded = false;
+      } finally {
+        this._permitOptionsLoading = false;
+        this._permitOptionsLoadPromise = null;
+        this._requestRender();
+      }
+    })();
+    this._permitOptionsLoadPromise = loadPromise;
+    return loadPromise;
+  }
+  async _maybeLoadFavorites() {
+    if (!this._hass || !this._config?.show_favorites || !this._config?.show_name)
+      return;
+    if (!isHassRunning(this._hass)) return;
+    const entryId = this._getActiveEntryId();
+    if (!entryId) return;
+    if (this._permitOptions.some((o5) => o5.id === entryId && o5.disabled)) return;
+    if (Date.now() < this._favoritesRetryAfter) return;
+    if (this._favoritesLoading) return;
+    if (this._favoritesLoadedFor === entryId) return;
+    this._favoritesLoadedFor = entryId;
+    this._favoritesError = null;
+    this._favoritesLoading = true;
+    this._requestRender();
+    try {
+      const result = await this._hass.callWS({
+        type: WS_LIST_FAVORITES,
+        config_entry_id: entryId
+      });
+      this._setFavorites(
+        Array.isArray(result?.favorites) ? result.favorites : []
+      );
+      this._favoritesRetryAfter = 0;
+    } catch (err) {
+      invalidateFavoritesCache(this);
+      this._favoritesRetryAfter = Date.now() + 15e3;
+      this._setFavorites([]);
+      this._favoritesError = this._errorMessage(
+        err,
+        "message.load_favorites_failed"
+      );
+    } finally {
+      this._favoritesLoading = false;
+      if (this._pendingRemoveFavoriteId) {
+        const pendingId = normalizeMatchValue(this._pendingRemoveFavoriteId);
+        const stillPresent = this._favorites.some((favorite) => {
+          const candidate = normalizeMatchValue(
+            favorite.id || favorite.license_plate
+          );
+          return candidate === pendingId;
+        });
+        if (this._favoritesError || stillPresent) {
+          this._setStatus(
+            this._localize("message.favorite_remove_failed"),
+            "warning"
+          );
+        } else {
+          this._setStatus(
+            this._localize("message.favorite_removed"),
+            "success",
+            5e3
+          );
+          this._setInputValue("licensePlate", "");
+          this._setInputValue("favorite", "");
+        }
+        this._pendingRemoveFavoriteId = null;
+      }
+      this._requestRender();
+    }
+  }
+  async _loadZoneStatusForEntry(entryId) {
+    if (!this._hass || !entryId) return;
+    const hass = this._hass;
+    const force = this._pendingPermitDefaultsEntryId === entryId;
+    const now = Date.now();
+    const lastTs = this._zoneStatusTsByEntryId.get(entryId);
+    if (!force && lastTs !== void 0 && now - lastTs < STATUS_THROTTLE_MS)
+      return;
+    const inFlight = this._zoneStatusInFlightByEntryId.get(entryId);
+    if (inFlight) return inFlight;
+    const loadPromise = (async () => {
+      let status;
+      try {
+        status = this._normalizeZoneStatus(
+          await hass.callWS({
+            type: WS_GET_STATUS,
+            config_entry_id: entryId
+          })
+        );
+      } catch {
+        status = EMPTY_ZONE_STATUS;
+      }
+      this._zoneStatusByEntryId.set(entryId, status);
+      if (entryId === this._getActiveEntryId()) {
+        applyZoneStatus(this, status);
+        this._applyPendingPermitDefaults(entryId);
+      }
+      this._zoneStatusTsByEntryId.set(entryId, Date.now());
+      this._zoneStatusInFlightByEntryId.delete(entryId);
+      this._requestRender();
+    })();
+    this._zoneStatusInFlightByEntryId.set(entryId, loadPromise);
+    return loadPromise;
+  }
+  _getFavoriteActionState() {
+    if (!this._config?.show_favorites || !this._config?.show_name) {
+      return {
+        showAddFavorite: false,
+        showRemoveFavorite: false,
+        selectedFavorite: null,
+        removeFavorite: null
+      };
+    }
+    const controlsDisabled = this._isInEditor();
+    const license = this._getInputValue("licensePlate").trim();
+    const name = this._getInputValue("favorite").trim();
+    const selectedFavorite = this._findFavoriteByValue(
+      this._getInputValue("favorite")
+    );
+    const selectedFavoriteMatchesLicense = selectedFavorite ? this._selectedFavoriteMatchesLicense(selectedFavorite, license) : false;
+    const licenseFavorite = this._findFavorite(license, "");
+    const removeFavorite = selectedFavoriteMatchesLicense ? selectedFavorite : licenseFavorite;
+    const matchingFavorite = name ? this._findFavorite(license, name) : licenseFavorite;
+    const canManageFavorites = !controlsDisabled && !this._favoritesLoading && Boolean(this._deviceId);
+    const showAddFavorite = canManageFavorites && Boolean(license) && Boolean(name) && !matchingFavorite && !licenseFavorite && !selectedFavoriteMatchesLicense;
+    const showRemoveFavorite = canManageFavorites && Boolean(removeFavorite?.id || removeFavorite?.license_plate);
+    return {
+      showAddFavorite: showAddFavorite && !showRemoveFavorite,
+      showRemoveFavorite,
+      selectedFavorite,
+      removeFavorite
+    };
+  }
+  render() {
+    if (!this._config) return b2``;
+    if (!this._hass || this._hass.config?.state === "NOT_RUNNING") {
+      return renderLoadingCard(this._hass ?? getGlobalHass());
+    }
+    if (!this._translationsReady) return b2``;
+    const priorLicense = this._getInputValue("licensePlate");
+    const priorStartDateTime = this._getInputValue("startDateTime");
+    const priorEndDateTime = this._getInputValue("endDateTime");
+    const priorFavorite = this._getInputValue("favorite");
+    const title = this._config.title || "";
+    const icon = this._config.icon;
+    const showName = this._config.show_name ?? true;
+    const showFavorites = this._config.show_favorites ?? true;
+    const showStart = this._config.show_start_time ?? true;
+    const showEnd = this._config.show_end_time ?? true;
+    const activeEntryId = this._getActiveEntryId();
+    const showPermitPicker = !getConfigEntryId(this._config) && !(this._permitOptionsLoaded && this._permitOptions.length === 1);
+    const hasTarget = Boolean(activeEntryId);
+    const hasLicense = Boolean(priorLicense.trim());
+    const favoriteValue = hasTarget ? priorFavorite : "";
+    const hasDevice = Boolean(this._deviceId);
+    const controlsDisabled = this._isInEditor();
+    const localizeFn = this._localize;
+    const permitSelectValue = activeEntryId ?? "";
+    const permitSelectDisabled = controlsDisabled || this._permitOptionsLoading;
+    const selectedPermitDisabled = Boolean(
+      activeEntryId && this._permitOptions.find((o5) => o5.id === activeEntryId)?.disabled
+    );
+    const { showAddFavorite, showRemoveFavorite, removeFavorite } = this._getFavoriteActionState();
+    const favoriteRemoveDisabled = controlsDisabled || this._favoriteRemoveInFlight;
+    const favoritesOptions = this._favorites;
+    const favoriteSelectDisabled = controlsDisabled || this._favoritesLoading || selectedPermitDisabled;
+    const { start: resolvedStart, end: resolvedEnd } = this._resolveTimes();
+    const plateAlreadyActive = (() => {
+      if (!hasLicense || !resolvedStart || !resolvedEnd) return false;
+      const plateKey = normalizePlateValue(priorLicense);
+      const existing = this._activeReservationsByPlate.get(plateKey);
+      if (!existing) return false;
+      return existing.some(
+        (r4) => r4.start < resolvedEnd && r4.end > resolvedStart
+      );
+    })();
+    const startDisabled = controlsDisabled || !hasDevice || !hasTarget || !hasLicense || plateAlreadyActive || this._startInFlight;
+    const todayStart = /* @__PURE__ */ new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const minDateTime = formatDateTimeLocal(todayStart);
+    return b2`
+      <ha-card
+        @click=${this._onClick}
+        @input=${this._onInput}
+        @change=${this._onChange}
+      >
+        ${renderCardHeader(title, icon)}
+        <div class="card-content">
+          ${showPermitPicker ? renderPermitSelect({
+      hass: this._hass,
+      label: localizeFn("field.permit"),
+      value: permitSelectValue,
+      disabled: permitSelectDisabled,
+      preview: controlsDisabled,
+      onSelected: this._onPermitSelectChange
+    }) : A}
+          ${renderFavoriteSelect({
+      showName,
+      showFavorites,
+      favoriteValue,
+      favoriteSelectDisabled,
+      hass: this._hass,
+      favoritesOptions,
+      favoritesError: this._favoritesError,
+      preview: controlsDisabled,
+      localize: localizeFn,
+      onSelected: this._onFavoriteSelectChange,
+      wrapSelect: (content) => i6(activeEntryId ?? "", content)
+    })}
+          <div class="row">
+            <ha-input
+              id="licensePlate"
+              appearance="material"
+              with-clear
+              .label=${localizeFn("field.license_plate")}
+              placeholder=${this._licensePlateFocused ? localizeFn("placeholder.license_plate") : ""}
+              .value=${priorLicense}
+              ?disabled=${controlsDisabled || selectedPermitDisabled}
+              @focusin=${this._onLicensePlateFocusIn}
+              @focusout=${this._onLicensePlateFocusOut}
+            ></ha-input>
+          </div>
+          ${showStart || showEnd ? b2`
+                <div class="row datetime-fields">
+                  ${showStart ? b2`
+                        <div class="datetime-row">
+                          <ha-input
+                            appearance="material"
+                            type="datetime-local"
+                            id="startDateTime"
+                            .label=${localizeFn("field.start_time")}
+                            .value=${priorStartDateTime}
+                            .min=${minDateTime}
+                            ?disabled=${controlsDisabled || selectedPermitDisabled}
+                            @input=${this._onInput}
+                            @change=${this._onChange}
+                          ></ha-input>
+                        </div>
+                      ` : A}
+                  ${showEnd ? b2`
+                        <div class="datetime-row">
+                          <ha-input
+                            appearance="material"
+                            type="datetime-local"
+                            id="endDateTime"
+                            .label=${localizeFn("field.end_time")}
+                            .value=${priorEndDateTime}
+                            .min=${minDateTime}
+                            ?disabled=${controlsDisabled || selectedPermitDisabled}
+                            @input=${this._onInput}
+                            @change=${this._onChange}
+                          ></ha-input>
+                        </div>
+                      ` : A}
+                </div>
+              ` : A}
+          ${renderFavoriteActionRow({
+      showFavorites: showFavorites && showName,
+      showAddFavorite,
+      showRemoveFavorite,
+      selectedFavoriteId: removeFavorite?.id || removeFavorite?.license_plate || "",
+      favoriteRemoveDisabled,
+      addFavoriteChecked: this._addFavoriteChecked,
+      startInFlight: this._startInFlight,
+      startButtonSuccess: this._startButtonSuccess,
+      startButtonWarning: selectedPermitDisabled,
+      startButtonTimeConflict: plateAlreadyActive,
+      startDisabled,
+      hasTarget,
+      remainingMinutes: this._remainingMinutes,
+      balanceUnit: this._balanceUnit,
+      localize: localizeFn
+    })}
+        </div>
+      </ha-card>
+    `;
+  }
+  updated() {
+    if (!this._config) return;
+    const controlsDisabled = this._isInEditor();
+    this.toggleAttribute("data-preview", controlsDisabled);
+    if (this._addFavoriteChecked) {
+      const { showAddFavorite } = this._getFavoriteActionState();
+      if (!showAddFavorite) {
+        this._addFavoriteChecked = false;
+        this._requestRender();
+      }
+    }
+  }
+  _scheduleFavoriteActionsUpdate() {
+    if (!this._config?.show_favorites || !this._config?.show_name) return;
+    const license = this._getInputValue("licensePlate").trim();
+    const name = this._getInputValue("favorite").trim();
+    const matchingFavorite = this._findFavorite(license, name);
+    if (matchingFavorite) {
+      const matchingValue = (matchingFavorite.name || "").trim();
+      const currentValue = normalizeMatchValue(this._getInputValue("favorite"));
+      if (matchingValue && currentValue !== normalizeMatchValue(matchingValue)) {
+        this._setInputValue("favorite", matchingValue);
+      }
+    }
+    const { showAddFavorite } = this._getFavoriteActionState();
+    if (!showAddFavorite && this._addFavoriteChecked) {
+      this._addFavoriteChecked = false;
+    }
+    this._requestRender();
+  }
+  _handleClick(event) {
+    if (this._isInEditor()) return;
+    const path = event.composedPath();
+    const findById = (id) => path.find((el) => el instanceof HTMLElement && el.id === id);
+    const removeButton = findById("removeFavorite");
+    if (removeButton) {
+      const id = removeButton.getAttribute("data-favorite-id") ?? "";
+      void this._removeFavorite(id);
+      return;
+    }
+    if (findById("addFavoriteWrap")) {
+      this._addFavoriteChecked = !this._addFavoriteChecked;
+      this._scheduleFavoriteActionsUpdate();
+      return;
+    }
+    const startButton = findById("startReservation");
+    if (startButton) void this._handleStart();
+  }
+  _handleInput(event) {
+    const field = this._getValueFromEvent(event, INPUT_VALUE_IDS);
+    if (field) this._setInputValue(field.id, field.value);
+    if (field?.id === "licensePlate") {
+      this._scheduleFavoriteActionsUpdate();
+      return;
+    }
+    this._maybeSyncEndWithStart(field?.id);
+  }
+  _handleChange(event) {
+    const target = event.target;
+    if (!target) return;
+    const field = this._getValueFromEvent(event, CHANGE_VALUE_IDS);
+    if (field) this._setInputValue(field.id, field.value);
+    if (target.id === "addFavorite") {
+      this._addFavoriteChecked = target.checked;
+      this._scheduleFavoriteActionsUpdate();
+      return;
+    }
+    this._maybeSyncEndWithStart(field?.id);
+  }
+  _maybeSyncEndWithStart(fieldId) {
+    if (fieldId === "startDateTime" && this._config?.show_start_time && this._config?.show_end_time) {
+      this._syncEndWithStart();
+    }
+  }
+  _handlePermitSelectChange(event) {
+    if (this._isInEditor()) return;
+    const target = event.currentTarget;
+    this._handlePermitChange(extractEventValue(event, target));
+  }
+  _handleFavoriteSelectChange(event) {
+    if (!this._config?.show_favorites || !this._config?.show_name || this._isInEditor())
+      return;
+    const select = event.currentTarget;
+    const path = event.composedPath();
+    const pathValueElement = path.find(
+      (node) => node instanceof HTMLElement && (node.id === "favorite" || node.getAttribute("id") === "favorite")
+    );
+    const nextValue = extractEventValue(event, select ?? pathValueElement);
+    if (this._suppressFavoriteClear) {
+      this._suppressFavoriteClear = false;
+      if (!nextValue) {
+        this._setInputValue("favorite", "");
+        this._scheduleFavoriteActionsUpdate();
+        return;
+      }
+    }
+    if (!nextValue) {
+      this._setInputValue("favorite", "");
+      void this._applyFavoriteSelection("", "");
+      return;
+    }
+    const favorite = this._favoritesByValue.get(normalizeMatchValue(nextValue));
+    if (favorite) {
+      const preferredValue = (favorite.name || "").trim();
+      this._setInputValue("favorite", preferredValue);
+      void this._applyFavoriteSelection(
+        favorite.license_plate || nextValue,
+        favorite.name ?? ""
+      );
+      return;
+    }
+    this._setInputValue("favorite", nextValue);
+    void this._applyFavoriteSelection(
+      this._getInputValue("licensePlate"),
+      nextValue
+    );
+  }
+  _handlePermitChange(value) {
+    if (!value) {
+      this._selectedEntryId = null;
+      setPendingPermitDefaults(this, null);
+      this._clearStatusRefresh();
+      this._resetDeviceState();
+      this._clearPermitScopedFormValues();
+      this._setInputValue("licensePlate", "");
+      this._clearStatus();
+      return;
+    }
+    if (value === this._selectedEntryId && this._deviceEntryId === value && this._deviceId) {
+      return;
+    }
+    this._selectedEntryId = value;
+    setPendingPermitDefaults(this, value, true);
+    this._resetDeviceState();
+    this._suppressFavoriteClear = false;
+    this._setInputValue("favorite", "");
+    applyZoneStatus(this, this._zoneStatusByEntryId.get(value) ?? null);
+    this._applyStatusDefaultsToForm(true);
+    this._clearStatus();
+    this._ensureDeviceId();
+    this._maybeLoadFavorites();
+    void this._loadZoneStatusForEntry(value);
+    void this._loadActivePlates(value);
+    this._setupStatusRefresh(value);
+  }
+  _resetFavoritesState() {
+    invalidateFavoritesCache(this, {
+      resetRetryAfter: true,
+      clearLoading: true
+    });
+    clearFavoriteTransientState(this);
+    this._setFavorites([]);
+  }
+  _resetDeviceState() {
+    this._deviceId = null;
+    this._deviceEntryId = null;
+    applyZoneStatus(this, null);
+    this._resetFavoritesState();
+    this._activeReservationsByPlate = /* @__PURE__ */ new Map();
+    this._activeReservationsLoadedFor = null;
+  }
+  _clearPermitScopedFormValues() {
+    const hadValues = Boolean(this._formValues.licensePlate) || Boolean(this._formValues.favorite);
+    const hadAddFavoriteChecked = this._addFavoriteChecked;
+    delete this._formValues.licensePlate;
+    delete this._formValues.favorite;
+    clearFavoriteTransientState(this);
+    if (hadValues || hadAddFavoriteChecked) this._requestRender();
+  }
+  _syncEntryState(forceSetupRefresh) {
+    const entryId = this._getActiveEntryId();
+    applyZoneStatus(
+      this,
+      entryId ? this._zoneStatusByEntryId.get(entryId) ?? null : null
+    );
+    this._applyStatusDefaultsToForm(false);
+    if (getConfigEntryId(this._config) && entryId) {
+      setPendingPermitDefaults(this, entryId);
+    }
+    this._requestRender();
+    this._ensureDeviceId();
+    this._ensurePermitOptions();
+    this._maybeSelectSinglePermit();
+    if (entryId) void this._loadZoneStatusForEntry(entryId);
+    if (forceSetupRefresh || this._statusRefreshHandle === null) {
+      this._setupStatusRefresh(entryId);
+    }
+    void this._maybeLoadFavorites();
+    if (entryId) void this._loadActivePlates(entryId);
+  }
+  _setupStatusRefresh(entryId) {
+    this._clearStatusRefresh();
+    if (!getConfigEntryId(this._config) || !entryId) return;
+    const refresh = () => {
+      if (!this._hass) return;
+      const activeEntryId = this._getActiveEntryId();
+      if (!activeEntryId || activeEntryId !== entryId) return;
+      setPendingPermitDefaults(this, entryId);
+      void this._loadZoneStatusForEntry(entryId);
+      this._activeReservationsLoadedFor = null;
+      void this._loadActivePlates(entryId);
+    };
+    this._statusRefreshHandle = window.setInterval(refresh, STATUS_REFRESH_MS);
+    this._statusVisibilityHandler = () => {
+      if (document.visibilityState === "visible") refresh();
+    };
+    document.addEventListener(
+      "visibilitychange",
+      this._statusVisibilityHandler
+    );
+  }
+  _clearStatusRefresh() {
+    if (this._statusRefreshHandle !== null) {
+      window.clearInterval(this._statusRefreshHandle);
+      this._statusRefreshHandle = null;
+    }
+    if (this._statusVisibilityHandler !== null) {
+      document.removeEventListener(
+        "visibilitychange",
+        this._statusVisibilityHandler
+      );
+      this._statusVisibilityHandler = null;
+    }
+  }
+  _setFavorites(favorites) {
+    this._favorites = favorites;
+    const { byPlate, byPlateName, byValue } = createFavoriteIndex(favorites);
+    this._favoritesByPlate = byPlate;
+    this._favoritesByPlateName = byPlateName;
+    this._favoritesByValue = byValue;
+  }
+  _applyPendingPermitDefaults(entryId) {
+    if (this._pendingPermitDefaultsEntryId !== entryId) return;
+    this._applyStatusDefaultsToForm(this._pendingPermitDefaultsForce);
+    setPendingPermitDefaults(this, null, false);
+  }
+  _findFavorite(license, name) {
+    const licenseKey = normalizePlateValue(license);
+    const nameKey = normalizeMatchValue(name);
+    if (!licenseKey) return null;
+    if (!nameKey) return this._favoritesByPlate.get(licenseKey) ?? null;
+    return this._favoritesByPlateName.get(`${licenseKey}|${nameKey}`) ?? null;
+  }
+  _findFavoriteByValue(value) {
+    const favoriteValue = normalizeMatchValue(value);
+    if (!favoriteValue) return null;
+    return this._favoritesByValue.get(favoriteValue) ?? null;
+  }
+  _normalizeZoneStatus(payload) {
+    const state = payload?.state === "chargeable" || payload?.state === "free" ? payload.state : null;
+    const kind = payload?.window_kind === "current" || payload?.window_kind === "next" ? payload.window_kind : null;
+    const str = (v2) => typeof v2 === "string" && v2 ? v2 : null;
+    const num = (v2) => typeof v2 === "number" && Number.isFinite(v2) ? v2 : null;
+    return {
+      state,
+      kind,
+      start: kind ? str(payload?.window_start) : null,
+      end: kind ? str(payload?.window_end) : null,
+      remainingMinutes: num(payload?.remaining_minutes),
+      balanceUnit: str(payload?.balance_unit)
+    };
+  }
+  _selectedFavoriteMatchesLicense(favorite, license) {
+    const key = normalizePlateValue(favorite.license_plate || favorite.id);
+    return Boolean(key) && key === normalizePlateValue(license);
+  }
+  _addFavorite(license, name) {
+    if (!this._hass || !this._deviceId || !license || !this._config?.show_favorites)
+      return;
+    invalidateFavoritesCache(this);
+    this._hass.callService(DOMAIN, "add_favorite", {
+      device_id: this._deviceId,
+      license_plate: license,
+      ...name ? { name } : {}
+    });
+    this._maybeLoadFavorites();
+  }
+  async _removeFavorite(favoriteId) {
+    if (!this._hass || !this._deviceId || !favoriteId || !this._config?.show_favorites)
+      return;
+    if (this._favoriteRemoveInFlight) return;
+    this._favoriteRemoveInFlight = true;
+    this._pendingRemoveFavoriteId = favoriteId;
+    this._setStatus(this._localize("message.removing_favorite"), "info", 5e3);
+    this._requestRender();
+    invalidateFavoritesCache(this);
+    try {
+      await this._hass.callService(DOMAIN, "remove_favorite", {
+        device_id: this._deviceId,
+        favorite_id: favoriteId
+      });
+    } catch (err) {
+      this._setStatus(
+        this._errorMessage(err, "message.favorite_remove_failed"),
+        "warning"
+      );
+      this._pendingRemoveFavoriteId = null;
+      this._favoriteRemoveInFlight = false;
+      this._requestRender();
+      return;
+    }
+    await this._maybeLoadFavorites();
+    this._favoriteRemoveInFlight = false;
+    this._requestRender();
+  }
+  async _handleStart() {
+    if (!this._hass) return;
+    if (!this._deviceId) {
+      this._setStatus(
+        this._localize("message.select_permit_before_start"),
+        "warning"
+      );
+      this._requestRender();
+      return;
+    }
+    if (this._startInFlight) return;
+    this._startInFlight = true;
+    this._requestRender();
+    const license = this._getInputValue("licensePlate").trim();
+    const { start, end } = this._resolveTimes();
+    const validationError = !license ? "message.license_plate_required" : !start || !end ? "message.start_end_required" : end <= start ? "message.end_before_start" : null;
+    if (validationError) {
+      this._setStatus(this._localize(validationError), "warning");
+      this._startInFlight = false;
+      this._requestRender();
+      await triggerProgressButtonFeedback(this, "#startReservation", "error");
+      return;
+    }
+    const name = this._getInputValue("favorite").trim();
+    const { showAddFavorite } = this._getFavoriteActionState();
+    if (this._addFavoriteChecked && showAddFavorite) {
+      this._addFavorite(license, name);
+      this._addFavoriteChecked = false;
+    }
+    try {
+      await this._hass.callService(DOMAIN, "start_reservation", {
+        device_id: this._deviceId,
+        start_time: start.toISOString(),
+        end_time: end.toISOString(),
+        license_plate: license
+      });
+    } catch (err) {
+      const message = this._errorMessage(
+        err,
+        "message.reservation_start_failed"
+      );
+      this._setStatus(message, "warning");
+      this._startInFlight = false;
+      this._requestRender();
+      await triggerProgressButtonFeedback(this, "#startReservation", "error");
+      return;
+    }
+    this._setStatus(
+      this._localize("message.reservation_requested"),
+      "success",
+      5e3
+    );
+    this._setStartButtonSuccess();
+    this._startInFlight = false;
+    this._setInputValue("licensePlate", "");
+    this._setInputValue("favorite", "");
+    this._scheduleFavoriteActionsUpdate();
+    this._activeReservationsLoadedFor = null;
+    const activeEntryId = this._getActiveEntryId();
+    if (activeEntryId) void this._loadActivePlates(activeEntryId);
+    this._requestRender();
+    await triggerProgressButtonFeedback(this, "#startReservation", "success");
+    window.dispatchEvent(
+      new CustomEvent(RESERVATION_STARTED_EVENT, {
+        detail: {
+          device_id: this._deviceId,
+          license_plate: license,
+          name
+        }
+      })
+    );
+  }
+  _setStartButtonSuccess() {
+    if (this._startButtonSuccessTimeout) {
+      window.clearTimeout(this._startButtonSuccessTimeout);
+    }
+    this._startButtonSuccess = true;
+    this._requestRender();
+    this._startButtonSuccessTimeout = window.setTimeout(() => {
+      this._startButtonSuccess = false;
+      this._startButtonSuccessTimeout = null;
+      this._requestRender();
+    }, 1e3);
+  }
+  _resolveTimes() {
+    const now = /* @__PURE__ */ new Date();
+    if (!this._config) return { start: null, end: null };
+    const fallbackStart = new Date(now.getTime() + 60 * 1e3);
+    const startValue = this._config.show_start_time ? this._getInputValue("startDateTime") : "";
+    const start = parseDateTimeValue(startValue) ?? fallbackStart;
+    const endValue = this._config.show_end_time ? this._getInputValue("endDateTime") : "";
+    const end = parseDateTimeValue(endValue) ?? new Date(start.getTime() + 60 * 60 * 1e3);
+    return { start, end };
+  }
+  _getInputValue(id) {
+    return this._formValues[id] ?? "";
+  }
+  _getValueFromEvent(event, ids) {
+    const customEvent = event;
+    const detailValue = customEvent.detail?.value;
+    const path = event.composedPath();
+    let element = null;
+    let inputElement = null;
+    for (const node of path) {
+      if (!element && node instanceof HTMLElement && ids.has(node.id)) {
+        element = node;
+        if (typeof detailValue === "string") break;
+        continue;
+      }
+      if (!inputElement && (node instanceof HTMLInputElement || node instanceof HTMLTextAreaElement)) {
+        inputElement = node;
+      }
+      if (element && inputElement) break;
+    }
+    if (!element) return null;
+    if (typeof detailValue === "string") {
+      return { id: element.id, value: detailValue };
+    }
+    const value = inputElement?.value ?? element.value ?? "";
+    return { id: element.id, value };
+  }
+  _setInputValue(id, value) {
+    if (this._formValues[id] === value) return;
+    this._formValues[id] = value;
+    this._requestRender();
+  }
+  _syncEndWithStart() {
+    if (!this._config?.show_end_time) return;
+    const startValue = this._getInputValue("startDateTime");
+    if (!startValue) return;
+    const start = parseDateTimeValue(startValue);
+    if (!start) return;
+    this._setInputValue(
+      "endDateTime",
+      formatDateTimeLocal(this._resolveDefaultEnd(start))
+    );
+  }
+  _getStatusDefaultTimes(now) {
+    const window2 = this._getRelevantWindowTimes();
+    if (window2) {
+      return {
+        start: this._resolveDefaultStart(window2.start, now),
+        end: this._normalizeEndOfDayDisplay(window2.end)
+      };
+    }
+    const start = new Date(now);
+    const end = new Date(now);
+    end.setHours(23, 59, 0, 0);
+    return { start, end };
+  }
+  _getRelevantWindowTimes() {
+    const validKind = this._zoneState === "chargeable" && this._windowKind === "current" || this._zoneState === "free" && this._windowKind === "next";
+    if (!validKind) return null;
+    const start = parseDateTimeValue(this._windowStartIso);
+    const end = parseDateTimeValue(this._windowEndIso);
+    if (!start || !end || end <= start) return null;
+    return { start, end };
+  }
+  _normalizeEndOfDayDisplay(end) {
+    if (end.getHours() !== 0 || end.getMinutes() !== 0) return end;
+    const normalized = new Date(end);
+    normalized.setMinutes(normalized.getMinutes() - 1);
+    return normalized;
+  }
+  _resolveDefaultStart(start, now) {
+    return start > now ? start : new Date(now);
+  }
+  _resolveDefaultEnd(start) {
+    const window2 = this._getRelevantWindowTimes();
+    if (window2 && window2.end > start) {
+      return this._normalizeEndOfDayDisplay(window2.end);
+    }
+    const fallback = new Date(start.getTime() + 60 * 1e3);
+    if (!window2) {
+      const dayEnd = new Date(start);
+      dayEnd.setHours(23, 59, 0, 0);
+      return dayEnd > start ? dayEnd : fallback;
+    }
+    return fallback;
+  }
+  _applyStatusDefaultsToForm(force = false) {
+    if (!this._config) return;
+    const now = /* @__PURE__ */ new Date();
+    const defaults = this._getStatusDefaultTimes(now);
+    if (this._config.show_start_time) {
+      const current = force ? null : parseDateTimeValue(this._getInputValue("startDateTime"));
+      if (!current) {
+        this._setInputValue(
+          "startDateTime",
+          formatDateTimeLocal(defaults.start)
+        );
+      } else if (current <= now) {
+        this._setInputValue(
+          "startDateTime",
+          formatDateTimeLocal(this._resolveDefaultStart(current, now))
+        );
+      }
+    }
+    if (this._config.show_end_time) {
+      if (force || !this._getInputValue("endDateTime")) {
+        this._setInputValue("endDateTime", formatDateTimeLocal(defaults.end));
+      }
+    }
+  }
+  async _applyFavoriteSelection(plate, name) {
+    this._setInputValue("favorite", name);
+    this._setInputValue("licensePlate", plate);
+    await this.updateComplete;
+    this._scheduleFavoriteActionsUpdate();
+  }
+  async _loadActivePlates(entryId) {
+    if (!this._hass || !entryId) return;
+    if (this._activeReservationsLoadedFor === entryId) return;
+    this._activeReservationsLoadedFor = entryId;
+    try {
+      const hass = this._hass;
+      const devices = await hass.callWS({
+        type: "config/device_registry/list"
+      });
+      const domainDevices = filterDomainDevices(devices).filter(
+        (device) => (device.config_entries ?? []).includes(entryId)
+      );
+      const byPlate = /* @__PURE__ */ new Map();
+      const results = await Promise.allSettled(
+        domainDevices.map(
+          (device) => hass.callWS({
+            type: "call_service",
+            domain: DOMAIN,
+            service: "list_reservations",
+            return_response: true,
+            service_data: { device_id: device.id }
+          })
+        )
+      );
+      for (const settled of results) {
+        if (settled.status === "rejected") continue;
+        const result = settled.value;
+        const response = result?.response ?? result;
+        const reservations = response?.reservations;
+        if (Array.isArray(reservations)) {
+          for (const r4 of reservations) {
+            const plate = normalizePlateValue(r4.license_plate);
+            const start = parseDateTimeValue(r4.start_time);
+            const end = parseDateTimeValue(r4.end_time);
+            if (!plate || !start || !end) continue;
+            const existing = byPlate.get(plate) ?? [];
+            existing.push({ start, end });
+            byPlate.set(plate, existing);
+          }
+        }
+      }
+      if (this._activeReservationsLoadedFor === entryId) {
+        this._activeReservationsByPlate = byPlate;
+      }
+    } catch {
+      this._activeReservationsLoadedFor = null;
+      this._activeReservationsByPlate = /* @__PURE__ */ new Map();
+    }
+    this._requestRender();
+  }
+  _getActiveEntryId() {
+    return getConfigEntryId(this._config) || this._selectedEntryId;
+  }
+};
+CityVisitorParkingNewReservationCard.styles = [
+  BASE_CARD_STYLES,
+  i`
+      ha-input,
+      ha-textfield,
+      ha-select,
+      ha-selector {
+        width: 100%;
+      }
+      .actions {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+      .favorite-actions {
+        display: flex;
+        align-items: center;
+      }
+      .favorite-actions ha-badge {
+        --badge-color: var(--secondary-text-color);
+      }
+      .favorite-actions .badge-checked {
+        --badge-color: var(--primary-color);
+      }
+      .start-button {
+        margin-left: auto;
+      }
+    `
+];
+registerCustomCardWithTranslations(
+  CARD_TYPE,
+  CityVisitorParkingNewReservationCard,
+  "name",
+  "description"
+);
+
+// src/editor-active.ts
+var buildFormHelpers2 = (localizeTarget, prefix) => {
+  const resolve = (section, name) => {
+    const fieldName = name === "config_entry_id" ? "config_entry" : name;
+    const key = `${prefix}.${section}.${fieldName}`;
+    const result = localize(localizeTarget, key);
+    return result === key ? "" : result;
+  };
+  return {
+    computeLabel: (schema) => resolve("field", schema.name),
+    computeHelper: (schema) => resolve("description", schema.name)
+  };
+};
 var buildActiveCardEditorSchema = (cardTypeOptions, displayOptionsExpanded, displayOptionsTitle) => [
   {
     type: "select",
@@ -1386,8 +2501,7 @@ var CityVisitorParkingActiveCardEditor = class extends BaseCardEditor {
   render() {
     if (!this.hass) return b2``;
     const localizeTarget = this.hass;
-    void ensureTranslations(localizeTarget);
-    const { computeLabel, computeHelper } = buildFormHelpers(
+    const { computeLabel, computeHelper } = buildFormHelpers2(
       localizeTarget,
       "active_editor"
     );
@@ -1428,1776 +2542,643 @@ var getActiveCardConfigForm = createConfigFormGetter(
     localize(target, "active_editor.field.display_options")
   )
 );
-(() => {
-  const CARD_TYPE = "city-visitor-parking-card";
-  const WS_LIST_FAVORITES = "city_visitor_parking/favorites";
-  const WS_GET_STATUS = "city_visitor_parking/status";
-  const STATUS_THROTTLE_MS = 6e4;
-  const STATUS_REFRESH_MS = 3e5;
-  const INPUT_VALUE_IDS = /* @__PURE__ */ new Set([
-    "licensePlate",
-    "favorite",
-    "startDateTime",
-    "endDateTime"
-  ]);
-  const CHANGE_VALUE_IDS = /* @__PURE__ */ new Set(["startDateTime", "endDateTime"]);
-  class CityVisitorParkingNewReservationCard extends BaseLocalizedCard {
-    constructor() {
-      super(...arguments);
-      this._deviceId = null;
-      this._deviceEntryId = null;
-      this._deviceLoadPromise = null;
-      this._deviceIdByEntryId = /* @__PURE__ */ new Map();
-      this._favorites = [];
-      this._favoritesError = null;
-      this._favoritesLoadedFor = null;
-      this._favoritesRetryAfter = 0;
-      this._favoritesLoading = false;
-      this._favoritesByPlate = /* @__PURE__ */ new Map();
-      this._favoritesByPlateName = /* @__PURE__ */ new Map();
-      this._favoritesByValue = /* @__PURE__ */ new Map();
-      this._permitOptions = [];
-      this._permitOptionsLoaded = false;
-      this._permitOptionsLoading = false;
-      this._permitOptionsLoadPromise = null;
-      this._formValues = {};
-      this._pendingRemoveFavoriteId = null;
-      this._selectedEntryId = null;
-      this._startButtonSuccess = false;
-      this._startButtonSuccessTimeout = null;
-      this._startInFlight = false;
-      this._favoriteRemoveInFlight = false;
-      this._addFavoriteChecked = false;
-      this._suppressFavoriteClear = false;
-      this._zoneState = null;
-      this._windowKind = null;
-      this._windowStartIso = null;
-      this._windowEndIso = null;
-      this._remainingMinutes = null;
-      this._balanceUnit = null;
-      this._zoneStatusTsByEntryId = /* @__PURE__ */ new Map();
-      this._zoneStatusInFlightByEntryId = /* @__PURE__ */ new Map();
-      this._zoneStatusByEntryId = /* @__PURE__ */ new Map();
-      this._pendingPermitDefaultsEntryId = null;
-      this._pendingPermitDefaultsForce = false;
-      this._statusRefreshHandle = null;
-      this._statusVisibilityHandler = null;
-      this._translationsReady = false;
-      this._translationsLanguage = null;
-      this._activeReservationsByPlate = /* @__PURE__ */ new Map();
-      this._activeReservationsLoadedFor = null;
-      this._licensePlateFocused = false;
-      this._onClick = (event) => this._handleClick(event);
-      this._onInput = (event) => this._handleInput(event);
-      this._onChange = (event) => this._handleChange(event);
-      this._onLicensePlateFocusIn = () => {
-        if (this._licensePlateFocused) return;
-        this._licensePlateFocused = true;
-        this._requestRender();
-      };
-      this._onLicensePlateFocusOut = () => {
-        if (!this._licensePlateFocused) return;
-        this._licensePlateFocused = false;
-        this._requestRender();
-      };
-      this._onPermitSelectChange = (event) => this._handlePermitSelectChange(event);
-      this._onFavoriteSelectChange = (event) => this._handleFavoriteSelectChange(event);
-    }
-    static async getConfigForm(hass) {
-      return getCardConfigForm(hass);
-    }
-    static getConfigElement() {
-      return document.createElement("city-visitor-parking-card-editor");
-    }
-    static getStubConfig() {
-      return {
-        type: `custom:${CARD_TYPE}`,
-        show_name: true,
-        show_favorites: true,
-        show_start_time: true,
-        show_end_time: true
-      };
-    }
-    setConfig(config) {
-      if (!config || !config.type) {
-        throw new Error(
-          localize(
-            this._hass ?? getGlobalHass(),
-            "message.invalid_config"
-          )
-        );
-      }
-      const priorEntryId = this._getActiveEntryId();
-      const priorShowName = this._config?.show_name ?? true;
-      const priorShowFavorites = this._config?.show_favorites ?? true;
-      this._config = {
-        show_name: config.show_name !== false,
-        show_favorites: config.show_favorites !== false,
-        show_start_time: config.show_start_time !== false,
-        show_end_time: config.show_end_time !== false,
-        ...config
-      };
-      if (this._config.default_license_plate && !this._formValues["licensePlate"]) {
-        this._setInputValue("licensePlate", this._config.default_license_plate);
-      }
-      if (priorShowName && !this._config.show_name) {
-        this._setInputValue("favorite", "");
-      }
-      if (priorShowFavorites && !this._config.show_favorites) {
-        this._resetFavoritesState();
-        this._setInputValue("favorite", "");
-      }
-      if (getConfigEntryId(this._config)) {
-        this._selectedEntryId = null;
-      }
-      const entryChanged = this._getActiveEntryId() !== priorEntryId;
-      if (this._config.device_id) {
-        this._deviceId = this._config.device_id;
-        this._deviceEntryId = getConfigEntryId(this._config);
-        if (entryChanged) this._resetFavoritesState();
-      } else if (entryChanged) {
-        this._resetDeviceState();
-      }
-      this._syncEntryState(true);
-    }
-    set hass(hass) {
-      const prev = this._prevHaState;
-      this._prevHaState = hass.config?.state;
-      this._hass = hass;
-      const nextLanguage = getHassLanguage(hass) || navigator.language || "en";
-      if (nextLanguage !== this._translationsLanguage || !this._translationsReady) {
-        this._translationsReady = false;
-        void ensureTranslations(this._hass).then(() => {
-          this._translationsReady = true;
-          this._translationsLanguage = nextLanguage;
-          this.requestUpdate();
-        });
-      }
-      if (prev !== "RUNNING" && hass.config?.state === "RUNNING") {
-        invalidateFavoritesCache(this, { resetRetryAfter: true });
-        this._zoneStatusTsByEntryId.clear();
-      }
-      this._syncEntryState(false);
-    }
-    disconnectedCallback() {
-      super.disconnectedCallback();
-      this._clearStatusRefresh();
-    }
-    getCardSize() {
-      return 4;
-    }
-    getGridOptions() {
-      return {
-        columns: 12,
-        min_columns: 6,
-        min_rows: 2
-      };
-    }
-    async _ensureDeviceId() {
-      if (!this._hass) return;
-      const entryId = this._getActiveEntryId();
-      if (!entryId) return;
-      if (this._config?.device_id) {
-        this._deviceId = this._config.device_id;
-        this._deviceEntryId = getConfigEntryId(this._config) || entryId;
-        return;
-      }
-      if (this._deviceEntryId === entryId && this._deviceId) return;
-      const cachedDeviceId = this._deviceIdByEntryId.get(entryId);
-      if (cachedDeviceId !== void 0) {
-        this._deviceId = cachedDeviceId;
-        this._deviceEntryId = entryId;
-        this._requestRender();
-        return;
-      }
-      if (this._deviceLoadPromise) return;
-      this._deviceLoadPromise = this._hass.callWS({ type: "config/device_registry/list" }).then((devices) => {
-        const match = devices.find(
-          (device) => (device.identifiers ?? []).some(
-            (identifier) => identifier[0] === DOMAIN
-          ) && Array.isArray(device.config_entries) && device.config_entries.includes(entryId)
-        );
-        const deviceId = match ? match.id : null;
-        this._deviceId = deviceId;
-        if (deviceId) this._deviceIdByEntryId.set(entryId, deviceId);
-        this._deviceEntryId = entryId;
-      }).catch(() => {
-        this._deviceId = null;
-        this._deviceEntryId = entryId;
-      }).finally(() => {
-        this._deviceLoadPromise = null;
-        this._requestRender();
-      });
-    }
-    _ensurePermitOptions() {
-      if (getConfigEntryId(this._config) || !this._hass) return;
-      if (this._permitOptionsLoaded || this._permitOptionsLoadPromise) return;
-      void this._loadPermitOptions();
-    }
-    _maybeSelectSinglePermit() {
-      if (getConfigEntryId(this._config)) return;
-      if (!this._permitOptionsLoaded || this._permitOptions.length !== 1)
-        return;
-      if (this._getActiveEntryId()) return;
-      this._handlePermitChange(this._permitOptions[0].id);
-    }
-    async _loadPermitOptions() {
-      if (!this._hass || getConfigEntryId(this._config)) return;
-      const hass = this._hass;
-      if (this._permitOptionsLoadPromise) return this._permitOptionsLoadPromise;
-      this._permitOptionsLoading = true;
-      this._requestRender();
-      const loadPromise = (async () => {
-        try {
-          const result = await fetchPermitEntries(hass);
-          this._permitOptions = buildPermitOptions(result);
-          this._permitOptionsLoaded = true;
-          this._maybeSelectSinglePermit();
-        } catch {
-          this._permitOptions = [];
-          this._permitOptionsLoaded = false;
-        } finally {
-          this._permitOptionsLoading = false;
-          this._permitOptionsLoadPromise = null;
-          this._requestRender();
-        }
-      })();
-      this._permitOptionsLoadPromise = loadPromise;
-      return loadPromise;
-    }
-    async _maybeLoadFavorites() {
-      if (!this._hass || !this._config?.show_favorites || !this._config?.show_name)
-        return;
-      if (!isHassRunning(this._hass)) return;
-      const entryId = this._getActiveEntryId();
-      if (!entryId) return;
-      if (this._permitOptions.some((o5) => o5.id === entryId && o5.disabled))
-        return;
-      if (Date.now() < this._favoritesRetryAfter) return;
-      if (this._favoritesLoading) return;
-      if (this._favoritesLoadedFor === entryId) return;
-      this._favoritesLoadedFor = entryId;
-      this._favoritesError = null;
-      this._favoritesLoading = true;
-      this._requestRender();
-      try {
-        const result = await this._hass.callWS({
-          type: WS_LIST_FAVORITES,
-          config_entry_id: entryId
-        });
-        this._setFavorites(
-          Array.isArray(result?.favorites) ? result.favorites : []
-        );
-        this._favoritesRetryAfter = 0;
-      } catch (err) {
-        invalidateFavoritesCache(this);
-        this._favoritesRetryAfter = Date.now() + 15e3;
-        this._setFavorites([]);
-        this._favoritesError = this._errorMessage(
-          err,
-          "message.load_favorites_failed"
-        );
-      } finally {
-        this._favoritesLoading = false;
-        if (this._pendingRemoveFavoriteId) {
-          const pendingId = normalizeMatchValue(this._pendingRemoveFavoriteId);
-          const stillPresent = this._favorites.some(
-            (favorite) => {
-              const candidate = normalizeMatchValue(
-                favorite.id || favorite.license_plate
-              );
-              return candidate === pendingId;
-            }
-          );
-          if (this._favoritesError || stillPresent) {
-            this._setStatus(
-              this._localize("message.favorite_remove_failed"),
-              "warning"
-            );
-          } else {
-            this._setStatus(
-              this._localize("message.favorite_removed"),
-              "success",
-              5e3
-            );
-            this._setInputValue("licensePlate", "");
-            this._setInputValue("favorite", "");
-          }
-          this._pendingRemoveFavoriteId = null;
-        }
-        this._requestRender();
-      }
-    }
-    async _loadZoneStatusForEntry(entryId) {
-      if (!this._hass || !entryId) return;
-      const hass = this._hass;
-      const force = this._pendingPermitDefaultsEntryId === entryId;
-      const now = Date.now();
-      const lastTs = this._zoneStatusTsByEntryId.get(entryId);
-      if (!force && lastTs !== void 0 && now - lastTs < STATUS_THROTTLE_MS)
-        return;
-      const inFlight = this._zoneStatusInFlightByEntryId.get(entryId);
-      if (inFlight) return inFlight;
-      const loadPromise = (async () => {
-        let status;
-        try {
-          status = this._normalizeZoneStatus(
-            await hass.callWS({
-              type: WS_GET_STATUS,
-              config_entry_id: entryId
-            })
-          );
-        } catch {
-          status = EMPTY_ZONE_STATUS;
-        }
-        this._zoneStatusByEntryId.set(entryId, status);
-        if (entryId === this._getActiveEntryId()) {
-          applyZoneStatus(this, status);
-          this._applyPendingPermitDefaults(entryId);
-        }
-        this._zoneStatusTsByEntryId.set(entryId, Date.now());
-        this._zoneStatusInFlightByEntryId.delete(entryId);
-        this._requestRender();
-      })();
-      this._zoneStatusInFlightByEntryId.set(entryId, loadPromise);
-      return loadPromise;
-    }
-    _getFavoriteActionState() {
-      if (!this._config?.show_favorites || !this._config?.show_name) {
-        return {
-          showAddFavorite: false,
-          showRemoveFavorite: false,
-          selectedFavorite: null,
-          removeFavorite: null
-        };
-      }
-      const controlsDisabled = this._isInEditor();
-      const license = this._getInputValue("licensePlate").trim();
-      const name = this._getInputValue("favorite").trim();
-      const selectedFavorite = this._findFavoriteByValue(
-        this._getInputValue("favorite")
-      );
-      const selectedFavoriteMatchesLicense = selectedFavorite ? this._selectedFavoriteMatchesLicense(selectedFavorite, license) : false;
-      const licenseFavorite = this._findFavorite(license, "");
-      const removeFavorite = selectedFavoriteMatchesLicense ? selectedFavorite : licenseFavorite;
-      const matchingFavorite = name ? this._findFavorite(license, name) : licenseFavorite;
-      const canManageFavorites = !controlsDisabled && !this._favoritesLoading && Boolean(this._deviceId);
-      const showAddFavorite = canManageFavorites && Boolean(license) && Boolean(name) && !matchingFavorite && !licenseFavorite && !selectedFavoriteMatchesLicense;
-      const showRemoveFavorite = canManageFavorites && Boolean(removeFavorite?.id || removeFavorite?.license_plate);
-      return {
-        showAddFavorite: showAddFavorite && !showRemoveFavorite,
-        showRemoveFavorite,
-        selectedFavorite,
-        removeFavorite
-      };
-    }
-    render() {
-      if (!this._config) return b2``;
-      if (!this._hass || this._hass.config?.state === "NOT_RUNNING") {
-        return renderLoadingCard(this._hass ?? getGlobalHass());
-      }
-      if (!this._translationsReady) return b2``;
-      const priorLicense = this._getInputValue("licensePlate");
-      const priorStartDateTime = this._getInputValue("startDateTime");
-      const priorEndDateTime = this._getInputValue("endDateTime");
-      const priorFavorite = this._getInputValue("favorite");
-      const title = this._config.title || "";
-      const icon = this._config.icon;
-      const showName = this._config.show_name ?? true;
-      const showFavorites = this._config.show_favorites ?? true;
-      const showStart = this._config.show_start_time ?? true;
-      const showEnd = this._config.show_end_time ?? true;
-      const activeEntryId = this._getActiveEntryId();
-      const showPermitPicker = !getConfigEntryId(this._config) && !(this._permitOptionsLoaded && this._permitOptions.length === 1);
-      const hasTarget = Boolean(activeEntryId);
-      const hasLicense = Boolean(priorLicense.trim());
-      const favoriteValue = hasTarget ? priorFavorite : "";
-      const hasDevice = Boolean(this._deviceId);
-      const controlsDisabled = this._isInEditor();
-      const localizeFn = this._localize;
-      const permitSelectValue = activeEntryId ?? "";
-      const permitSelectDisabled = controlsDisabled || this._permitOptionsLoading;
-      const selectedPermitDisabled = Boolean(
-        activeEntryId && this._permitOptions.find((o5) => o5.id === activeEntryId)?.disabled
-      );
-      const { showAddFavorite, showRemoveFavorite, removeFavorite } = this._getFavoriteActionState();
-      const favoriteRemoveDisabled = controlsDisabled || this._favoriteRemoveInFlight;
-      const favoritesOptions = this._favorites;
-      const favoriteSelectDisabled = controlsDisabled || this._favoritesLoading || selectedPermitDisabled;
-      const { start: resolvedStart, end: resolvedEnd } = this._resolveTimes();
-      const plateAlreadyActive = (() => {
-        if (!hasLicense || !resolvedStart || !resolvedEnd) return false;
-        const plateKey = normalizePlateValue(priorLicense);
-        const existing = this._activeReservationsByPlate.get(plateKey);
-        if (!existing) return false;
-        return existing.some(
-          (r4) => r4.start < resolvedEnd && r4.end > resolvedStart
-        );
-      })();
-      const startDisabled = controlsDisabled || !hasDevice || !hasTarget || !hasLicense || plateAlreadyActive || this._startInFlight;
-      const todayStart = /* @__PURE__ */ new Date();
-      todayStart.setHours(0, 0, 0, 0);
-      const minDateTime = formatDateTimeLocal(todayStart);
-      return b2`
-        <ha-card
-          @click=${this._onClick}
-          @input=${this._onInput}
-          @change=${this._onChange}
-        >
-          ${renderCardHeader(title, icon)}
-          <div class="card-content">
-            ${showPermitPicker ? renderPermitSelect({
-        hass: this._hass,
-        label: localizeFn("field.permit"),
-        value: permitSelectValue,
-        disabled: permitSelectDisabled,
-        preview: controlsDisabled,
-        onSelected: this._onPermitSelectChange
-      }) : A}
-            ${renderFavoriteSelect({
-        showName,
-        showFavorites,
-        favoriteValue,
-        favoriteSelectDisabled,
-        hass: this._hass,
-        favoritesOptions,
-        favoritesError: this._favoritesError,
-        preview: controlsDisabled,
-        localize: localizeFn,
-        onSelected: this._onFavoriteSelectChange,
-        wrapSelect: (content) => i6(activeEntryId ?? "", content)
-      })}
-            <div class="row">
-              <ha-input
-                id="licensePlate"
-                appearance="material"
-                with-clear
-                .label=${localizeFn("field.license_plate")}
-                placeholder=${this._licensePlateFocused ? localizeFn("placeholder.license_plate") : ""}
-                .value=${priorLicense}
-                ?disabled=${controlsDisabled || selectedPermitDisabled}
-                @focusin=${this._onLicensePlateFocusIn}
-                @focusout=${this._onLicensePlateFocusOut}
-              ></ha-input>
-            </div>
-            ${showStart || showEnd ? b2`
-                  <div class="row datetime-fields">
-                    ${showStart ? b2`
-                          <div class="datetime-row">
-                            <ha-input
-                              appearance="material"
-                              type="datetime-local"
-                              id="startDateTime"
-                              .label=${localizeFn("field.start_time")}
-                              .value=${priorStartDateTime}
-                              .min=${minDateTime}
-                              ?disabled=${controlsDisabled || selectedPermitDisabled}
-                              @input=${this._onInput}
-                              @change=${this._onChange}
-                            ></ha-input>
-                          </div>
-                        ` : A}
-                    ${showEnd ? b2`
-                          <div class="datetime-row">
-                            <ha-input
-                              appearance="material"
-                              type="datetime-local"
-                              id="endDateTime"
-                              .label=${localizeFn("field.end_time")}
-                              .value=${priorEndDateTime}
-                              .min=${minDateTime}
-                              ?disabled=${controlsDisabled || selectedPermitDisabled}
-                              @input=${this._onInput}
-                              @change=${this._onChange}
-                            ></ha-input>
-                          </div>
-                        ` : A}
-                  </div>
-                ` : A}
-            ${renderFavoriteActionRow({
-        showFavorites: showFavorites && showName,
-        showAddFavorite,
-        showRemoveFavorite,
-        selectedFavoriteId: removeFavorite?.id || removeFavorite?.license_plate || "",
-        favoriteRemoveDisabled,
-        addFavoriteChecked: this._addFavoriteChecked,
-        startInFlight: this._startInFlight,
-        startButtonSuccess: this._startButtonSuccess,
-        startButtonWarning: selectedPermitDisabled,
-        startButtonTimeConflict: plateAlreadyActive,
-        startDisabled,
-        hasTarget,
-        remainingMinutes: this._remainingMinutes,
-        balanceUnit: this._balanceUnit,
-        localize: localizeFn
-      })}
-          </div>
-        </ha-card>
-      `;
-    }
-    updated() {
-      if (!this._config) return;
-      const controlsDisabled = this._isInEditor();
-      this.toggleAttribute("data-preview", controlsDisabled);
-      if (this._addFavoriteChecked) {
-        const { showAddFavorite } = this._getFavoriteActionState();
-        if (!showAddFavorite) {
-          this._addFavoriteChecked = false;
-          this._requestRender();
-        }
-      }
-    }
-    _scheduleFavoriteActionsUpdate() {
-      if (!this._config?.show_favorites || !this._config?.show_name) return;
-      const license = this._getInputValue("licensePlate").trim();
-      const name = this._getInputValue("favorite").trim();
-      const matchingFavorite = this._findFavorite(license, name);
-      if (matchingFavorite) {
-        const matchingValue = (matchingFavorite.name || "").trim();
-        const currentValue = normalizeMatchValue(
-          this._getInputValue("favorite")
-        );
-        if (matchingValue && currentValue !== normalizeMatchValue(matchingValue)) {
-          this._setInputValue("favorite", matchingValue);
-        }
-      }
-      const { showAddFavorite } = this._getFavoriteActionState();
-      if (!showAddFavorite && this._addFavoriteChecked) {
-        this._addFavoriteChecked = false;
-      }
-      this._requestRender();
-    }
-    _handleClick(event) {
-      if (this._isInEditor()) return;
-      const path = event.composedPath();
-      const findById = (id) => path.find((el) => el instanceof HTMLElement && el.id === id);
-      const removeButton = findById("removeFavorite");
-      if (removeButton) {
-        const id = removeButton.getAttribute("data-favorite-id") ?? "";
-        void this._removeFavorite(id);
-        return;
-      }
-      if (findById("addFavoriteWrap")) {
-        this._addFavoriteChecked = !this._addFavoriteChecked;
-        this._scheduleFavoriteActionsUpdate();
-        return;
-      }
-      const startButton = findById("startReservation");
-      if (startButton) void this._handleStart();
-    }
-    _handleInput(event) {
-      const field = this._getValueFromEvent(event, INPUT_VALUE_IDS);
-      if (field) this._setInputValue(field.id, field.value);
-      if (field?.id === "licensePlate") {
-        this._scheduleFavoriteActionsUpdate();
-        return;
-      }
-      this._maybeSyncEndWithStart(field?.id);
-    }
-    _handleChange(event) {
-      const target = event.target;
-      if (!target) return;
-      const field = this._getValueFromEvent(event, CHANGE_VALUE_IDS);
-      if (field) this._setInputValue(field.id, field.value);
-      if (target.id === "addFavorite") {
-        this._addFavoriteChecked = target.checked;
-        this._scheduleFavoriteActionsUpdate();
-        return;
-      }
-      this._maybeSyncEndWithStart(field?.id);
-    }
-    _maybeSyncEndWithStart(fieldId) {
-      if (fieldId === "startDateTime" && this._config?.show_start_time && this._config?.show_end_time) {
-        this._syncEndWithStart();
-      }
-    }
-    _handlePermitSelectChange(event) {
-      if (this._isInEditor()) return;
-      const target = event.currentTarget;
-      this._handlePermitChange(extractEventValue(event, target));
-    }
-    _handleFavoriteSelectChange(event) {
-      if (!this._config?.show_favorites || !this._config?.show_name || this._isInEditor())
-        return;
-      const select = event.currentTarget;
-      const path = event.composedPath();
-      const pathValueElement = path.find(
-        (node) => node instanceof HTMLElement && (node.id === "favorite" || node.getAttribute("id") === "favorite")
-      );
-      const nextValue = extractEventValue(event, select ?? pathValueElement);
-      if (this._suppressFavoriteClear) {
-        this._suppressFavoriteClear = false;
-        if (!nextValue) {
-          this._setInputValue("favorite", "");
-          this._scheduleFavoriteActionsUpdate();
-          return;
-        }
-      }
-      if (!nextValue) {
-        this._setInputValue("favorite", "");
-        void this._applyFavoriteSelection("", "");
-        return;
-      }
-      const favorite = this._favoritesByValue.get(
-        normalizeMatchValue(nextValue)
-      );
-      if (favorite) {
-        const preferredValue = (favorite.name || "").trim();
-        this._setInputValue("favorite", preferredValue);
-        void this._applyFavoriteSelection(
-          favorite.license_plate || nextValue,
-          favorite.name ?? ""
-        );
-        return;
-      }
-      this._setInputValue("favorite", nextValue);
-      void this._applyFavoriteSelection(
-        this._getInputValue("licensePlate"),
-        nextValue
-      );
-    }
-    _handlePermitChange(value) {
-      if (!value) {
-        this._selectedEntryId = null;
-        setPendingPermitDefaults(this, null);
-        this._clearStatusRefresh();
-        this._resetDeviceState();
-        this._clearPermitScopedFormValues();
-        this._setInputValue("licensePlate", "");
-        this._clearStatus();
-        return;
-      }
-      if (value === this._selectedEntryId && this._deviceEntryId === value && this._deviceId) {
-        return;
-      }
-      this._selectedEntryId = value;
-      setPendingPermitDefaults(this, value, true);
-      this._resetDeviceState();
-      this._suppressFavoriteClear = false;
-      this._setInputValue("favorite", "");
-      applyZoneStatus(this, this._zoneStatusByEntryId.get(value) ?? null);
-      this._applyStatusDefaultsToForm(true);
-      this._clearStatus();
-      this._ensureDeviceId();
-      this._maybeLoadFavorites();
-      void this._loadZoneStatusForEntry(value);
-      void this._loadActivePlates(value);
-      this._setupStatusRefresh(value);
-    }
-    _resetFavoritesState() {
-      invalidateFavoritesCache(this, {
-        resetRetryAfter: true,
-        clearLoading: true
-      });
-      clearFavoriteTransientState(this);
-      this._setFavorites([]);
-    }
-    _resetDeviceState() {
-      this._deviceId = null;
-      this._deviceEntryId = null;
-      applyZoneStatus(this, null);
-      this._resetFavoritesState();
-      this._activeReservationsByPlate = /* @__PURE__ */ new Map();
-      this._activeReservationsLoadedFor = null;
-    }
-    _clearPermitScopedFormValues() {
-      const hadValues = Boolean(this._formValues.licensePlate) || Boolean(this._formValues.favorite);
-      const hadAddFavoriteChecked = this._addFavoriteChecked;
-      delete this._formValues.licensePlate;
-      delete this._formValues.favorite;
-      clearFavoriteTransientState(this);
-      if (hadValues || hadAddFavoriteChecked) this._requestRender();
-    }
-    _syncEntryState(forceSetupRefresh) {
-      const entryId = this._getActiveEntryId();
-      applyZoneStatus(
-        this,
-        entryId ? this._zoneStatusByEntryId.get(entryId) ?? null : null
-      );
-      this._applyStatusDefaultsToForm(false);
-      if (getConfigEntryId(this._config) && entryId) {
-        setPendingPermitDefaults(this, entryId);
-      }
-      this._requestRender();
-      this._ensureDeviceId();
-      this._ensurePermitOptions();
-      this._maybeSelectSinglePermit();
-      if (entryId) void this._loadZoneStatusForEntry(entryId);
-      if (forceSetupRefresh || this._statusRefreshHandle === null) {
-        this._setupStatusRefresh(entryId);
-      }
-      void this._maybeLoadFavorites();
-      if (entryId) void this._loadActivePlates(entryId);
-    }
-    _setupStatusRefresh(entryId) {
-      this._clearStatusRefresh();
-      if (!getConfigEntryId(this._config) || !entryId) return;
-      const refresh = () => {
-        if (!this._hass) return;
-        const activeEntryId = this._getActiveEntryId();
-        if (!activeEntryId || activeEntryId !== entryId) return;
-        setPendingPermitDefaults(this, entryId);
-        void this._loadZoneStatusForEntry(entryId);
-        this._activeReservationsLoadedFor = null;
-        void this._loadActivePlates(entryId);
-      };
-      this._statusRefreshHandle = window.setInterval(
-        refresh,
-        STATUS_REFRESH_MS
-      );
-      this._statusVisibilityHandler = () => {
-        if (document.visibilityState === "visible") refresh();
-      };
-      document.addEventListener(
-        "visibilitychange",
-        this._statusVisibilityHandler
-      );
-    }
-    _clearStatusRefresh() {
-      if (this._statusRefreshHandle !== null) {
-        window.clearInterval(this._statusRefreshHandle);
-        this._statusRefreshHandle = null;
-      }
-      if (this._statusVisibilityHandler !== null) {
-        document.removeEventListener(
-          "visibilitychange",
-          this._statusVisibilityHandler
-        );
-        this._statusVisibilityHandler = null;
-      }
-    }
-    _setFavorites(favorites) {
-      this._favorites = favorites;
-      const { byPlate, byPlateName, byValue } = createFavoriteIndex(favorites);
-      this._favoritesByPlate = byPlate;
-      this._favoritesByPlateName = byPlateName;
-      this._favoritesByValue = byValue;
-    }
-    _applyPendingPermitDefaults(entryId) {
-      if (this._pendingPermitDefaultsEntryId !== entryId) return;
-      this._applyStatusDefaultsToForm(this._pendingPermitDefaultsForce);
-      setPendingPermitDefaults(this, null, false);
-    }
-    _findFavorite(license, name) {
-      const licenseKey = normalizePlateValue(license);
-      const nameKey = normalizeMatchValue(name);
-      if (!licenseKey) return null;
-      if (!nameKey) return this._favoritesByPlate.get(licenseKey) ?? null;
-      return this._favoritesByPlateName.get(`${licenseKey}|${nameKey}`) ?? null;
-    }
-    _findFavoriteByValue(value) {
-      const favoriteValue = normalizeMatchValue(value);
-      if (!favoriteValue) return null;
-      return this._favoritesByValue.get(favoriteValue) ?? null;
-    }
-    _normalizeZoneStatus(payload) {
-      const state = payload?.state === "chargeable" || payload?.state === "free" ? payload.state : null;
-      const kind = payload?.window_kind === "current" || payload?.window_kind === "next" ? payload.window_kind : null;
-      const str = (v2) => typeof v2 === "string" && v2 ? v2 : null;
-      const num = (v2) => typeof v2 === "number" && Number.isFinite(v2) ? v2 : null;
-      return {
-        state,
-        kind,
-        start: kind ? str(payload?.window_start) : null,
-        end: kind ? str(payload?.window_end) : null,
-        remainingMinutes: num(payload?.remaining_minutes),
-        balanceUnit: str(payload?.balance_unit)
-      };
-    }
-    _selectedFavoriteMatchesLicense(favorite, license) {
-      const key = normalizePlateValue(favorite.license_plate || favorite.id);
-      return Boolean(key) && key === normalizePlateValue(license);
-    }
-    _addFavorite(license, name) {
-      if (!this._hass || !this._deviceId || !license || !this._config?.show_favorites)
-        return;
-      invalidateFavoritesCache(this);
-      this._hass.callService(DOMAIN, "add_favorite", {
-        device_id: this._deviceId,
-        license_plate: license,
-        ...name ? { name } : {}
-      });
-      this._maybeLoadFavorites();
-    }
-    async _removeFavorite(favoriteId) {
-      if (!this._hass || !this._deviceId || !favoriteId || !this._config?.show_favorites)
-        return;
-      if (this._favoriteRemoveInFlight) return;
-      this._favoriteRemoveInFlight = true;
-      this._pendingRemoveFavoriteId = favoriteId;
-      this._setStatus(
-        this._localize("message.removing_favorite"),
-        "info",
-        5e3
-      );
-      this._requestRender();
-      invalidateFavoritesCache(this);
-      try {
-        await this._hass.callService(DOMAIN, "remove_favorite", {
-          device_id: this._deviceId,
-          favorite_id: favoriteId
-        });
-      } catch (err) {
-        this._setStatus(
-          this._errorMessage(err, "message.favorite_remove_failed"),
-          "warning"
-        );
-        this._pendingRemoveFavoriteId = null;
-        this._favoriteRemoveInFlight = false;
-        this._requestRender();
-        return;
-      }
-      await this._maybeLoadFavorites();
-      this._favoriteRemoveInFlight = false;
-      this._requestRender();
-    }
-    async _handleStart() {
-      if (!this._hass) return;
-      if (!this._deviceId) {
-        this._setStatus(
-          this._localize("message.select_permit_before_start"),
-          "warning"
-        );
-        this._requestRender();
-        return;
-      }
-      if (this._startInFlight) return;
-      this._startInFlight = true;
-      this._requestRender();
-      const license = this._getInputValue("licensePlate").trim();
-      const { start, end } = this._resolveTimes();
-      const validationError = !license ? "message.license_plate_required" : !start || !end ? "message.start_end_required" : end <= start ? "message.end_before_start" : null;
-      if (validationError) {
-        this._setStatus(this._localize(validationError), "warning");
-        this._startInFlight = false;
-        this._requestRender();
-        await triggerProgressButtonFeedback(this, "#startReservation", "error");
-        return;
-      }
-      const name = this._getInputValue("favorite").trim();
-      const { showAddFavorite } = this._getFavoriteActionState();
-      if (this._addFavoriteChecked && showAddFavorite) {
-        this._addFavorite(license, name);
-        this._addFavoriteChecked = false;
-      }
-      try {
-        await this._hass.callService(DOMAIN, "start_reservation", {
-          device_id: this._deviceId,
-          start_time: start.toISOString(),
-          end_time: end.toISOString(),
-          license_plate: license
-        });
-      } catch (err) {
-        const message = this._errorMessage(
-          err,
-          "message.reservation_start_failed"
-        );
-        this._setStatus(message, "warning");
-        this._startInFlight = false;
-        this._requestRender();
-        await triggerProgressButtonFeedback(this, "#startReservation", "error");
-        return;
-      }
-      this._setStatus(
-        this._localize("message.reservation_requested"),
-        "success",
-        5e3
-      );
-      this._setStartButtonSuccess();
-      this._startInFlight = false;
-      this._setInputValue("licensePlate", "");
-      this._setInputValue("favorite", "");
-      this._scheduleFavoriteActionsUpdate();
-      this._activeReservationsLoadedFor = null;
-      const activeEntryId = this._getActiveEntryId();
-      if (activeEntryId) void this._loadActivePlates(activeEntryId);
-      this._requestRender();
-      await triggerProgressButtonFeedback(this, "#startReservation", "success");
-      window.dispatchEvent(
-        new CustomEvent(RESERVATION_STARTED_EVENT, {
-          detail: {
-            device_id: this._deviceId,
-            license_plate: license,
-            name
-          }
-        })
-      );
-    }
-    _setStartButtonSuccess() {
-      if (this._startButtonSuccessTimeout) {
-        window.clearTimeout(this._startButtonSuccessTimeout);
-      }
-      this._startButtonSuccess = true;
-      this._requestRender();
-      this._startButtonSuccessTimeout = window.setTimeout(() => {
-        this._startButtonSuccess = false;
-        this._startButtonSuccessTimeout = null;
-        this._requestRender();
-      }, 1e3);
-    }
-    _resolveTimes() {
-      const now = /* @__PURE__ */ new Date();
-      if (!this._config) return { start: null, end: null };
-      const fallbackStart = new Date(now.getTime() + 60 * 1e3);
-      const startValue = this._config.show_start_time ? this._getInputValue("startDateTime") : "";
-      const start = parseDateTimeValue(startValue) ?? fallbackStart;
-      const endValue = this._config.show_end_time ? this._getInputValue("endDateTime") : "";
-      const end = parseDateTimeValue(endValue) ?? new Date(start.getTime() + 60 * 60 * 1e3);
-      return { start, end };
-    }
-    _getInputValue(id) {
-      return this._formValues[id] ?? "";
-    }
-    _getValueFromEvent(event, ids) {
-      const customEvent = event;
-      const detailValue = customEvent.detail?.value;
-      const path = event.composedPath();
-      let element = null;
-      let inputElement = null;
-      for (const node of path) {
-        if (!element && node instanceof HTMLElement && ids.has(node.id)) {
-          element = node;
-          if (typeof detailValue === "string") break;
-          continue;
-        }
-        if (!inputElement && (node instanceof HTMLInputElement || node instanceof HTMLTextAreaElement)) {
-          inputElement = node;
-        }
-        if (element && inputElement) break;
-      }
-      if (!element) return null;
-      if (typeof detailValue === "string") {
-        return { id: element.id, value: detailValue };
-      }
-      const value = inputElement?.value ?? element.value ?? "";
-      return { id: element.id, value };
-    }
-    _setInputValue(id, value) {
-      if (this._formValues[id] === value) return;
-      this._formValues[id] = value;
-      this._requestRender();
-    }
-    _syncEndWithStart() {
-      if (!this._config?.show_end_time) return;
-      const startValue = this._getInputValue("startDateTime");
-      if (!startValue) return;
-      const start = parseDateTimeValue(startValue);
-      if (!start) return;
-      this._setInputValue(
-        "endDateTime",
-        formatDateTimeLocal(this._resolveDefaultEnd(start))
-      );
-    }
-    _getStatusDefaultTimes(now) {
-      const window2 = this._getRelevantWindowTimes();
-      if (window2) {
-        return {
-          start: this._resolveDefaultStart(window2.start, now),
-          end: this._normalizeEndOfDayDisplay(window2.end)
-        };
-      }
-      const start = new Date(now);
-      const end = new Date(now);
-      end.setHours(23, 59, 0, 0);
-      return { start, end };
-    }
-    _getRelevantWindowTimes() {
-      const validKind = this._zoneState === "chargeable" && this._windowKind === "current" || this._zoneState === "free" && this._windowKind === "next";
-      if (!validKind) return null;
-      const start = parseDateTimeValue(this._windowStartIso);
-      const end = parseDateTimeValue(this._windowEndIso);
-      if (!start || !end || end <= start) return null;
-      return { start, end };
-    }
-    _normalizeEndOfDayDisplay(end) {
-      if (end.getHours() !== 0 || end.getMinutes() !== 0) return end;
-      const normalized = new Date(end);
-      normalized.setMinutes(normalized.getMinutes() - 1);
-      return normalized;
-    }
-    _resolveDefaultStart(start, now) {
-      return start > now ? start : new Date(now);
-    }
-    _resolveDefaultEnd(start) {
-      const window2 = this._getRelevantWindowTimes();
-      if (window2 && window2.end > start) {
-        return this._normalizeEndOfDayDisplay(window2.end);
-      }
-      const fallback = new Date(start.getTime() + 60 * 1e3);
-      if (!window2) {
-        const dayEnd = new Date(start);
-        dayEnd.setHours(23, 59, 0, 0);
-        return dayEnd > start ? dayEnd : fallback;
-      }
-      return fallback;
-    }
-    _applyStatusDefaultsToForm(force = false) {
-      if (!this._config) return;
-      const now = /* @__PURE__ */ new Date();
-      const defaults = this._getStatusDefaultTimes(now);
-      if (this._config.show_start_time) {
-        const current = force ? null : parseDateTimeValue(this._getInputValue("startDateTime"));
-        if (!current) {
-          this._setInputValue(
-            "startDateTime",
-            formatDateTimeLocal(defaults.start)
-          );
-        } else if (current <= now) {
-          this._setInputValue(
-            "startDateTime",
-            formatDateTimeLocal(this._resolveDefaultStart(current, now))
-          );
-        }
-      }
-      if (this._config.show_end_time) {
-        if (force || !this._getInputValue("endDateTime")) {
-          this._setInputValue("endDateTime", formatDateTimeLocal(defaults.end));
-        }
-      }
-    }
-    async _applyFavoriteSelection(plate, name) {
-      this._setInputValue("favorite", name);
-      this._setInputValue("licensePlate", plate);
-      await this.updateComplete;
-      this._scheduleFavoriteActionsUpdate();
-    }
-    async _loadActivePlates(entryId) {
-      if (!this._hass || !entryId) return;
-      if (this._activeReservationsLoadedFor === entryId) return;
-      this._activeReservationsLoadedFor = entryId;
-      try {
-        const hass = this._hass;
-        const devices = await hass.callWS({
-          type: "config/device_registry/list"
-        });
-        const domainDevices = filterDomainDevices(devices).filter(
-          (device) => (device.config_entries ?? []).includes(entryId)
-        );
-        const byPlate = /* @__PURE__ */ new Map();
-        const results = await Promise.allSettled(
-          domainDevices.map(
-            (device) => hass.callWS({
-              type: "call_service",
-              domain: DOMAIN,
-              service: "list_reservations",
-              return_response: true,
-              service_data: { device_id: device.id }
-            })
-          )
-        );
-        for (const settled of results) {
-          if (settled.status === "rejected") continue;
-          const result = settled.value;
-          const response = result?.response ?? result;
-          const reservations = response?.reservations;
-          if (Array.isArray(reservations)) {
-            for (const r4 of reservations) {
-              const plate = normalizePlateValue(r4.license_plate);
-              const start = parseDateTimeValue(r4.start_time);
-              const end = parseDateTimeValue(r4.end_time);
-              if (!plate || !start || !end) continue;
-              const existing = byPlate.get(plate) ?? [];
-              existing.push({ start, end });
-              byPlate.set(plate, existing);
-            }
-          }
-        }
-        if (this._activeReservationsLoadedFor === entryId) {
-          this._activeReservationsByPlate = byPlate;
-        }
-      } catch {
-        this._activeReservationsLoadedFor = null;
-        this._activeReservationsByPlate = /* @__PURE__ */ new Map();
-      }
-      this._requestRender();
-    }
-    _getActiveEntryId() {
-      return getConfigEntryId(this._config) || this._selectedEntryId;
-    }
+
+// src/card-active.ts
+var CARD_TYPE2 = "city-visitor-parking-active-card";
+var SERVICE_LIST_RESERVATIONS = "list_reservations";
+var SERVICE_UPDATE_RESERVATION = "update_reservation";
+var SERVICE_END_RESERVATION = "end_reservation";
+var UPDATE_START_FLAG = 1;
+var UPDATE_END_FLAG = 2;
+var CityVisitorParkingActiveCard = class extends BaseLocalizedCard {
+  constructor() {
+    super(...arguments);
+    this._activeReservations = [];
+    this._activeReservationsById = /* @__PURE__ */ new Map();
+    this._activeReservationsError = null;
+    this._activeReservationsLoadedFor = null;
+    this._activeReservationsLoading = false;
+    this._reservationUpdateFlagsByDevice = /* @__PURE__ */ new Map();
+    this._devicesPromise = null;
+    this._configEntriesPromise = null;
+    this._permitLabelsByDeviceId = /* @__PURE__ */ new Map();
+    this._reservationStartedHandler = null;
+    this._reservationInFlight = /* @__PURE__ */ new Set();
+    this._endButtonSuccessByReservationId = /* @__PURE__ */ new Set();
+    this._endButtonSuccessTimeoutByReservationId = /* @__PURE__ */ new Map();
+    this._endButtonSuccessResolverByReservationId = /* @__PURE__ */ new Map();
+    this._pendingReservationNameByKey = /* @__PURE__ */ new Map();
+    this._reservationInputValues = /* @__PURE__ */ new Map();
+    this._onActionClick = (event) => this._handleActionClick(event);
+    this._onReservationInput = (event) => this._handleReservationInput(event);
+    this._onReservationChange = (event) => this._handleReservationChange(event);
   }
-  CityVisitorParkingNewReservationCard.styles = [
-    BASE_CARD_STYLES,
-    i`
-        ha-input,
-        ha-textfield,
-        ha-select,
-        ha-selector {
-          width: 100%;
-        }
-        .actions {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-        }
-        .favorite-actions {
-          display: flex;
-          align-items: center;
-        }
-        .favorite-actions ha-badge {
-          --badge-color: var(--secondary-text-color);
-        }
-        .favorite-actions .badge-checked {
-          --badge-color: var(--primary-color);
-        }
-        .start-button {
-          margin-left: auto;
-        }
-      `
-  ];
-  registerCustomCardWithTranslations(
-    CARD_TYPE,
-    CityVisitorParkingNewReservationCard,
-    "name",
-    "description"
-  );
-})();
-(() => {
-  const CARD_TYPE = "city-visitor-parking-active-card";
-  const SERVICE_LIST_RESERVATIONS = "list_reservations";
-  const SERVICE_UPDATE_RESERVATION = "update_reservation";
-  const SERVICE_END_RESERVATION = "end_reservation";
-  const UPDATE_START_FLAG = 1;
-  const UPDATE_END_FLAG = 2;
-  class CityVisitorParkingActiveCard extends BaseLocalizedCard {
-    constructor() {
-      super(...arguments);
-      this._activeReservations = [];
-      this._activeReservationsById = /* @__PURE__ */ new Map();
-      this._activeReservationsError = null;
-      this._activeReservationsLoadedFor = null;
-      this._activeReservationsLoading = false;
-      this._reservationUpdateFlagsByDevice = /* @__PURE__ */ new Map();
-      this._devicesPromise = null;
-      this._configEntriesPromise = null;
-      this._permitLabelsByDeviceId = /* @__PURE__ */ new Map();
-      this._reservationStartedHandler = null;
-      this._reservationInFlight = /* @__PURE__ */ new Set();
-      this._endButtonSuccessByReservationId = /* @__PURE__ */ new Set();
-      this._endButtonSuccessTimeoutByReservationId = /* @__PURE__ */ new Map();
-      this._endButtonSuccessResolverByReservationId = /* @__PURE__ */ new Map();
-      this._pendingReservationNameByKey = /* @__PURE__ */ new Map();
-      this._reservationInputValues = /* @__PURE__ */ new Map();
-      this._onActionClick = (event) => this._handleActionClick(event);
-      this._onReservationInput = (event) => this._handleReservationInput(event);
-      this._onReservationChange = (event) => this._handleReservationChange(event);
-    }
-    connectedCallback() {
-      super.connectedCallback();
-      if (this._reservationStartedHandler) {
-        window.removeEventListener(
-          RESERVATION_STARTED_EVENT,
-          this._reservationStartedHandler
-        );
-      }
-      this._reservationStartedHandler = (event) => {
-        const detail = event.detail;
-        const deviceId = (detail?.device_id ?? "").trim();
-        const licensePlate = (detail?.license_plate ?? "").trim();
-        const name = (detail?.name ?? "").trim();
-        if (deviceId && licensePlate && name) {
-          this._setPendingReservationName(deviceId, licensePlate, name);
-        }
-        void this._maybeLoadActiveReservations(true);
-      };
-      window.addEventListener(
+  connectedCallback() {
+    super.connectedCallback();
+    if (this._reservationStartedHandler) {
+      window.removeEventListener(
         RESERVATION_STARTED_EVENT,
         this._reservationStartedHandler
       );
     }
-    disconnectedCallback() {
-      for (const reservationId of [...this._endButtonSuccessByReservationId]) {
-        this._clearEndButtonState(reservationId);
+    this._reservationStartedHandler = (event) => {
+      const detail = event.detail;
+      const deviceId = (detail?.device_id ?? "").trim();
+      const licensePlate = (detail?.license_plate ?? "").trim();
+      const name = (detail?.name ?? "").trim();
+      if (deviceId && licensePlate && name) {
+        this._setPendingReservationName(deviceId, licensePlate, name);
       }
-      this._pendingReservationNameByKey.clear();
-      if (this._reservationStartedHandler)
-        window.removeEventListener(
-          RESERVATION_STARTED_EVENT,
-          this._reservationStartedHandler
-        );
-      super.disconnectedCallback();
+      void this._maybeLoadActiveReservations(true);
+    };
+    window.addEventListener(
+      RESERVATION_STARTED_EVENT,
+      this._reservationStartedHandler
+    );
+  }
+  disconnectedCallback() {
+    for (const reservationId of [...this._endButtonSuccessByReservationId]) {
+      this._clearEndButtonState(reservationId);
     }
-    static async getConfigForm(hass) {
-      return getActiveCardConfigForm(hass);
+    this._pendingReservationNameByKey.clear();
+    if (this._reservationStartedHandler)
+      window.removeEventListener(
+        RESERVATION_STARTED_EVENT,
+        this._reservationStartedHandler
+      );
+    super.disconnectedCallback();
+  }
+  static async getConfigForm(hass) {
+    return getActiveCardConfigForm(hass);
+  }
+  static getConfigElement() {
+    return document.createElement("city-visitor-parking-active-card-editor");
+  }
+  static getStubConfig() {
+    return { type: `custom:${CARD_TYPE2}` };
+  }
+  setConfig(config) {
+    if (!config || !config.type) {
+      throw new Error(
+        localize(
+          this._hass ?? getGlobalHass(),
+          "message.invalid_config"
+        )
+      );
     }
-    static getConfigElement() {
-      return document.createElement("city-visitor-parking-active-card-editor");
+    this._config = { ...config };
+    this._requestRender();
+    void this._maybeLoadActiveReservations();
+  }
+  set hass(hass) {
+    this._hass = hass;
+    void ensureTranslations(this._hass).then(() => this._requestRender());
+    this._requestRender();
+    void this._maybeLoadActiveReservations();
+  }
+  getCardSize() {
+    return 3;
+  }
+  getGridOptions() {
+    return {
+      columns: 12,
+      min_columns: 6,
+      min_rows: 4
+    };
+  }
+  async _maybeLoadActiveReservations(force = false) {
+    if (!this._hass || !this._config) return;
+    if (!isHassRunning(this._hass)) return;
+    const entryId = this._getActiveEntryId();
+    const target = entryId ?? "all";
+    if (this._activeReservationsLoading || !force && this._activeReservationsLoadedFor === target && !this._activeReservationsError) {
+      return;
     }
-    static getStubConfig() {
-      return { type: `custom:${CARD_TYPE}` };
-    }
-    setConfig(config) {
-      if (!config || !config.type) {
-        throw new Error(
-          localize(
-            this._hass ?? getGlobalHass(),
-            "message.invalid_config"
-          )
+    this._activeReservationsLoading = true;
+    this._activeReservationsError = null;
+    this._requestRender();
+    try {
+      let devices = await this._getDomainDevices();
+      if (entryId) {
+        devices = devices.filter(
+          (device) => (device.config_entries ?? []).includes(entryId)
         );
       }
-      this._config = { ...config };
-      this._requestRender();
-      void this._maybeLoadActiveReservations();
-    }
-    set hass(hass) {
-      this._hass = hass;
-      void ensureTranslations(this._hass).then(() => this._requestRender());
-      this._requestRender();
-      void this._maybeLoadActiveReservations();
-    }
-    getCardSize() {
-      return 3;
-    }
-    getGridOptions() {
-      return {
-        columns: 12,
-        min_columns: 6,
-        min_rows: 4
-      };
-    }
-    async _maybeLoadActiveReservations(force = false) {
-      if (!this._hass || !this._config) return;
-      if (!isHassRunning(this._hass)) return;
-      const entryId = this._getActiveEntryId();
-      const target = entryId ?? "all";
-      if (this._activeReservationsLoading || !force && this._activeReservationsLoadedFor === target && !this._activeReservationsError) {
-        return;
-      }
-      this._activeReservationsLoading = true;
-      this._activeReservationsError = null;
-      this._requestRender();
-      try {
-        let devices = await this._getDomainDevices();
-        if (entryId) {
-          devices = devices.filter(
-            (device) => (device.config_entries ?? []).includes(entryId)
-          );
-        }
-        if (!devices.length) {
-          this._activeReservations = [];
-          this._activeReservationsById.clear();
-          this._reservationUpdateFlagsByDevice.clear();
-          this._activeReservationsLoadedFor = target;
-          return;
-        }
-        const entryTitles = await this._getConfigEntryTitles();
-        this._permitLabelsByDeviceId = resolvePermitLabelsByDevice(
-          devices,
-          entryTitles
-        );
-        const results = await Promise.allSettled(
-          devices.map(
-            (device) => this._hass.callWS({
-              type: "call_service",
-              domain: DOMAIN,
-              service: SERVICE_LIST_RESERVATIONS,
-              return_response: true,
-              service_data: { device_id: device.id }
-            })
-          )
-        );
-        const collected = [];
-        const collectedById = /* @__PURE__ */ new Map();
-        const reservationUpdateFlagsByDevice = /* @__PURE__ */ new Map();
-        const failedDevices = [];
-        for (const [index, settled] of results.entries()) {
-          const device = devices[index];
-          if (settled.status === "rejected") {
-            failedDevices.push(device.name ?? device.id);
-            continue;
-          }
-          const result = settled.value;
-          const response = result?.response ?? result;
-          const activeReservations = response?.reservations;
-          const updateFields = response?.reservation_update_fields;
-          if (Array.isArray(updateFields)) {
-            const updateFlags = (updateFields.includes("start_time") ? UPDATE_START_FLAG : 0) | (updateFields.includes("end_time") ? UPDATE_END_FLAG : 0);
-            reservationUpdateFlagsByDevice.set(device.id, updateFlags);
-          }
-          if (Array.isArray(activeReservations)) {
-            for (const reservation of activeReservations) {
-              const resolvedReservation = reservation.device_id ? reservation : { ...reservation, device_id: device.id };
-              collected.push(resolvedReservation);
-              collectedById.set(
-                resolvedReservation.reservation_id,
-                resolvedReservation
-              );
-            }
-          }
-        }
-        if (failedDevices.length) {
-          console.warn(
-            `[city-visitor-parking] Could not load reservations for ${failedDevices.length} device(s): ${failedDevices.join(", ")}`
-          );
-        }
-        this._reservationUpdateFlagsByDevice = reservationUpdateFlagsByDevice;
-        this._activeReservations = collected;
-        this._activeReservationsById = collectedById;
-        if (!failedDevices.length) {
-          this._activeReservationsLoadedFor = target;
-        }
-        for (const reservationId of this._reservationInputValues.keys()) {
-          if (!collectedById.has(reservationId)) {
-            this._reservationInputValues.delete(reservationId);
-          }
-        }
-        this._prunePendingReservationNames();
-        for (const reservationId of [
-          ...this._endButtonSuccessByReservationId
-        ]) {
-          if (!collectedById.has(reservationId)) {
-            this._clearEndButtonState(reservationId);
-          }
-        }
-      } catch (err) {
+      if (!devices.length) {
         this._activeReservations = [];
         this._activeReservationsById.clear();
         this._reservationUpdateFlagsByDevice.clear();
-        this._activeReservationsError = this._errorMessage(
-          err,
-          "message.active_reservations_failed"
-        );
-        this._activeReservationsLoadedFor = null;
-      } finally {
-        this._activeReservationsLoading = false;
-        this._requestRender();
-      }
-    }
-    render() {
-      if (!this._config) return b2``;
-      if (!isHassRunning(this._hass)) {
-        return renderLoadingCard(this._hass ?? getGlobalHass());
-      }
-      const controlsDisabled = this._isInEditor();
-      return b2`
-        <ha-card @click=${this._onActionClick}>
-          ${renderCardHeader(this._config.title || "", this._config.icon)}
-          <div class="card-content">
-            ${this._renderActiveReservations(controlsDisabled)}
-          </div>
-        </ha-card>
-      `;
-    }
-    _renderActiveReservations(controlsDisabled) {
-      const showEmpty = !this._activeReservationsLoading && !this._activeReservationsError && this._activeReservations.length === 0;
-      return b2`
-        <div class="row active-reservations">
-          ${this._activeReservationsError ? b2`
-                <ha-alert alert-type="warning">
-                  ${this._activeReservationsError}
-                </ha-alert>
-              ` : A}
-          ${showEmpty ? b2`<div class="active-reservations-empty">
-                ${this._localize("message.no_active_reservations")}
-              </div>` : A}
-          ${this._activeReservations.map(
-        (reservation) => this._renderActiveReservation(reservation, controlsDisabled)
-      )}
-        </div>
-      `;
-    }
-    _renderActiveReservation(reservation, controlsDisabled) {
-      const name = reservation.name ?? reservation.favorite_name;
-      const license = reservation.license_plate ?? "";
-      const pendingName = !name && reservation.device_id ? this._getPendingReservationName(reservation.device_id, license) : null;
-      const identify = name || pendingName || license || reservation.reservation_id;
-      const permitLabel = reservation.device_id ? this._permitLabelsByDeviceId.get(reservation.device_id) : null;
-      const updateFlags = this._getReservationUpdateFlags(
-        reservation.device_id
-      );
-      const allowStart = Boolean(updateFlags & UPDATE_START_FLAG);
-      const allowEnd = Boolean(updateFlags & UPDATE_END_FLAG);
-      const isBusy = this._reservationInFlight.has(reservation.reservation_id);
-      const endButtonSuccess = this._endButtonSuccessByReservationId.has(
-        reservation.reservation_id
-      );
-      const startValue = this._getReservationInputOverride(
-        reservation.reservation_id,
-        "start"
-      ) ?? formatOptionalDateTimeLocal(reservation.start_time);
-      const endValue = this._getReservationInputOverride(reservation.reservation_id, "end") ?? formatOptionalDateTimeLocal(reservation.end_time);
-      const startMin = formatOptionalDateTimeLocal(reservation.start_time);
-      const endMin = startValue || startMin;
-      return b2`
-        <div class="active-reservation">
-          <div class="active-reservation-summary">
-            <div class="active-reservation-heading">${identify}</div>
-            ${license ? b2`<div class="active-reservation-label">
-                  ${this._localize("field.license_plate")}: ${license}
-                </div>` : A}
-            ${permitLabel ? b2`<div class="active-reservation-label">
-                  ${this._localize("field.permit")}: ${permitLabel}
-                </div>` : A}
-          </div>
-          <div class="active-reservation-times">
-            <div class="datetime-row">
-              <ha-input
-                appearance="material"
-                type="datetime-local"
-                data-reservation-id=${reservation.reservation_id}
-                data-field="start"
-                .value=${startValue}
-                .min=${startMin}
-                .label=${this._localize("field.start_time")}
-                ?disabled=${controlsDisabled || !allowStart || isBusy}
-                @input=${this._onReservationInput}
-                @change=${this._onReservationChange}
-              ></ha-input>
-            </div>
-            <div class="datetime-row">
-              <ha-input
-                appearance="material"
-                type="datetime-local"
-                data-reservation-id=${reservation.reservation_id}
-                data-field="end"
-                .value=${endValue}
-                .min=${endMin}
-                .label=${this._localize("field.end_time")}
-                ?disabled=${controlsDisabled || !allowEnd || isBusy}
-                @input=${this._onReservationInput}
-                @change=${this._onReservationChange}
-              ></ha-input>
-            </div>
-          </div>
-          <div class="active-reservation-actions">
-            <ha-progress-button
-              class=${endButtonSuccess ? "active-reservation-end success" : "active-reservation-end"}
-              data-reservation-id=${reservation.reservation_id}
-              variant=${endButtonSuccess ? "success" : A}
-              appearance=${endButtonSuccess ? "filled" : A}
-              .progress=${isBusy}
-              ?disabled=${controlsDisabled || isBusy}
-            >
-              ${this._localize("button.end_reservation")}
-            </ha-progress-button>
-          </div>
-        </div>
-      `;
-    }
-    _handleActionClick(event) {
-      const target = event.target;
-      if (!target) return;
-      const endButton = target.closest(
-        "ha-progress-button.active-reservation-end"
-      );
-      if (endButton) {
-        const reservationId = endButton.dataset.reservationId ?? "";
-        if (this._endButtonSuccessByReservationId.has(reservationId)) return;
-        void this._handleActiveReservationEnd(reservationId);
-      }
-    }
-    _handleReservationInput(event, resolved) {
-      const reservationField = resolved ?? this._getReservationField(event);
-      if (!reservationField) return;
-      const { reservationId, fieldKey, value } = reservationField;
-      const current = this._reservationInputValues.get(reservationId);
-      if (current) {
-        current[fieldKey] = value;
+        this._activeReservationsLoadedFor = target;
         return;
       }
-      this._reservationInputValues.set(reservationId, { [fieldKey]: value });
-    }
-    _handleReservationChange(event) {
-      if (this._isInEditor()) return;
-      const reservationField = this._getReservationField(event);
-      if (!reservationField) return;
-      this._handleReservationInput(event, reservationField);
-      void this._handleActiveReservationUpdate(reservationField.reservationId);
-    }
-    _getReservationField(event) {
-      const customEvent = event;
-      const detailValue = customEvent.detail?.value;
-      const path = event.composedPath();
-      let fieldElement = null;
-      let inputElement = null;
-      for (const node of path) {
-        if (!fieldElement && node instanceof HTMLElement && Boolean(node.dataset.reservationId)) {
-          const nodeField = node.dataset.field;
-          if (nodeField === "start" || nodeField === "end") {
-            fieldElement = node;
-            if (typeof detailValue === "string") break;
-            continue;
+      const entryTitles = await this._getConfigEntryTitles();
+      this._permitLabelsByDeviceId = resolvePermitLabelsByDevice(
+        devices,
+        entryTitles
+      );
+      const results = await Promise.allSettled(
+        devices.map(
+          (device) => this._hass.callWS({
+            type: "call_service",
+            domain: DOMAIN,
+            service: SERVICE_LIST_RESERVATIONS,
+            return_response: true,
+            service_data: { device_id: device.id }
+          })
+        )
+      );
+      const collected = [];
+      const collectedById = /* @__PURE__ */ new Map();
+      const reservationUpdateFlagsByDevice = /* @__PURE__ */ new Map();
+      const failedDevices = [];
+      for (const [index, settled] of results.entries()) {
+        const device = devices[index];
+        if (settled.status === "rejected") {
+          failedDevices.push(device.name ?? device.id);
+          continue;
+        }
+        const result = settled.value;
+        const response = result?.response ?? result;
+        const activeReservations = response?.reservations;
+        const updateFields = response?.reservation_update_fields;
+        if (Array.isArray(updateFields)) {
+          const updateFlags = (updateFields.includes("start_time") ? UPDATE_START_FLAG : 0) | (updateFields.includes("end_time") ? UPDATE_END_FLAG : 0);
+          reservationUpdateFlagsByDevice.set(device.id, updateFlags);
+        }
+        if (Array.isArray(activeReservations)) {
+          for (const reservation of activeReservations) {
+            const resolvedReservation = reservation.device_id ? reservation : { ...reservation, device_id: device.id };
+            collected.push(resolvedReservation);
+            collectedById.set(
+              resolvedReservation.reservation_id,
+              resolvedReservation
+            );
           }
         }
-        if (!inputElement && (node instanceof HTMLInputElement || node instanceof HTMLTextAreaElement)) {
-          inputElement = node;
-        }
-        if (fieldElement && inputElement) break;
       }
-      if (!fieldElement) return null;
-      const reservationId = fieldElement.dataset.reservationId ?? "";
-      if (!reservationId) return null;
-      return {
-        reservationId,
-        fieldKey: fieldElement.dataset.field,
-        value: detailValue ?? inputElement?.value ?? fieldElement.value ?? ""
-      };
-    }
-    _getReservationUpdateFlags(deviceId) {
-      if (!deviceId) return 0;
-      return this._reservationUpdateFlagsByDevice.get(deviceId) ?? 0;
-    }
-    _getReservationInputOverride(reservationId, fieldKey) {
-      return this._reservationInputValues.get(reservationId)?.[fieldKey];
-    }
-    _reservationNameKey(deviceId, licensePlate) {
-      const resolvedDeviceId = (deviceId ?? "").trim();
-      const plateKey = normalizePlateValue(licensePlate);
-      if (!resolvedDeviceId || !plateKey) return null;
-      return `${resolvedDeviceId}|${plateKey}`;
-    }
-    _setPendingReservationName(deviceId, licensePlate, name) {
-      const key = this._reservationNameKey(deviceId, licensePlate);
-      if (!key || !name) return;
-      this._pendingReservationNameByKey.set(key, {
-        name,
-        expiresAt: Date.now() + 30 * 60 * 1e3
-      });
-    }
-    _getPendingReservationName(deviceId, licensePlate) {
-      const key = this._reservationNameKey(deviceId, licensePlate);
-      if (!key) return null;
-      const entry = this._pendingReservationNameByKey.get(key);
-      if (!entry) return null;
-      if (entry.expiresAt <= Date.now()) {
-        this._pendingReservationNameByKey.delete(key);
-        return null;
-      }
-      return entry.name;
-    }
-    _prunePendingReservationNames() {
-      const now = Date.now();
-      for (const [key, entry] of this._pendingReservationNameByKey) {
-        if (entry.expiresAt <= now) {
-          this._pendingReservationNameByKey.delete(key);
-        }
-      }
-    }
-    _beginReservationAction(reservationId) {
-      if (this._reservationInFlight.has(reservationId)) return false;
-      this._reservationInFlight.add(reservationId);
-      this._requestRender();
-      return true;
-    }
-    _endReservationAction(reservationId) {
-      this._reservationInFlight.delete(reservationId);
-      this._requestRender();
-    }
-    _getReservationTarget(reservationId) {
-      const reservation = this._activeReservationsById.get(reservationId);
-      const deviceId = reservation?.device_id ?? "";
-      return reservation && deviceId ? { reservation, deviceId } : null;
-    }
-    _completeReservationActionSuccess(reservationId, successMessageKey, invalidateLoadedFor = true) {
-      this._setStatus(this._localize(successMessageKey), "success", 5e3);
-      this._reservationInputValues.delete(reservationId);
-      this._endReservationAction(reservationId);
-      if (invalidateLoadedFor) this._activeReservationsLoadedFor = null;
-    }
-    _clearEndButtonState(reservationId) {
-      const timeoutHandle = this._endButtonSuccessTimeoutByReservationId.get(reservationId);
-      if (timeoutHandle !== void 0) {
-        window.clearTimeout(timeoutHandle);
-        this._endButtonSuccessTimeoutByReservationId.delete(reservationId);
-      }
-      this._endButtonSuccessResolverByReservationId.get(reservationId)?.();
-      this._endButtonSuccessResolverByReservationId.delete(reservationId);
-      this._endButtonSuccessByReservationId.delete(reservationId);
-    }
-    _setEndButtonSuccess(reservationId) {
-      this._clearEndButtonState(reservationId);
-      this._endButtonSuccessByReservationId.add(reservationId);
-      this._requestRender();
-      return new Promise((resolve) => {
-        this._endButtonSuccessResolverByReservationId.set(
-          reservationId,
-          resolve
+      if (failedDevices.length) {
+        console.warn(
+          `[city-visitor-parking] Could not load reservations for ${failedDevices.length} device(s): ${failedDevices.join(", ")}`
         );
-        const timeoutHandle = window.setTimeout(() => {
+      }
+      this._reservationUpdateFlagsByDevice = reservationUpdateFlagsByDevice;
+      this._activeReservations = collected;
+      this._activeReservationsById = collectedById;
+      if (!failedDevices.length) {
+        this._activeReservationsLoadedFor = target;
+      }
+      for (const reservationId of this._reservationInputValues.keys()) {
+        if (!collectedById.has(reservationId)) {
+          this._reservationInputValues.delete(reservationId);
+        }
+      }
+      this._prunePendingReservationNames();
+      for (const reservationId of [...this._endButtonSuccessByReservationId]) {
+        if (!collectedById.has(reservationId)) {
           this._clearEndButtonState(reservationId);
-          this._requestRender();
-          resolve();
-        }, 1e3);
-        this._endButtonSuccessTimeoutByReservationId.set(
-          reservationId,
-          timeoutHandle
-        );
+        }
+      }
+    } catch (err) {
+      this._activeReservations = [];
+      this._activeReservationsById.clear();
+      this._reservationUpdateFlagsByDevice.clear();
+      this._activeReservationsError = this._errorMessage(
+        err,
+        "message.active_reservations_failed"
+      );
+      this._activeReservationsLoadedFor = null;
+    } finally {
+      this._activeReservationsLoading = false;
+      this._requestRender();
+    }
+  }
+  render() {
+    if (!this._config) return b2``;
+    if (!isHassRunning(this._hass)) {
+      return renderLoadingCard(this._hass ?? getGlobalHass());
+    }
+    const controlsDisabled = this._isInEditor();
+    return b2`
+      <ha-card @click=${this._onActionClick}>
+        ${renderCardHeader(this._config.title || "", this._config.icon)}
+        <div class="card-content">
+          ${this._renderActiveReservations(controlsDisabled)}
+        </div>
+      </ha-card>
+    `;
+  }
+  _renderActiveReservations(controlsDisabled) {
+    const showEmpty = !this._activeReservationsLoading && !this._activeReservationsError && this._activeReservations.length === 0;
+    return b2`
+      <div class="row active-reservations">
+        ${this._activeReservationsError ? b2`
+              <ha-alert alert-type="warning">
+                ${this._activeReservationsError}
+              </ha-alert>
+            ` : A}
+        ${showEmpty ? b2`<div class="active-reservations-empty">
+              ${this._localize("message.no_active_reservations")}
+            </div>` : A}
+        ${this._activeReservations.map(
+      (reservation) => this._renderActiveReservation(reservation, controlsDisabled)
+    )}
+      </div>
+    `;
+  }
+  _renderActiveReservation(reservation, controlsDisabled) {
+    const name = reservation.name ?? reservation.favorite_name;
+    const license = reservation.license_plate ?? "";
+    const pendingName = !name && reservation.device_id ? this._getPendingReservationName(reservation.device_id, license) : null;
+    const identify = name || pendingName || license || reservation.reservation_id;
+    const permitLabel = reservation.device_id ? this._permitLabelsByDeviceId.get(reservation.device_id) : null;
+    const updateFlags = this._getReservationUpdateFlags(reservation.device_id);
+    const allowStart = Boolean(updateFlags & UPDATE_START_FLAG);
+    const allowEnd = Boolean(updateFlags & UPDATE_END_FLAG);
+    const isBusy = this._reservationInFlight.has(reservation.reservation_id);
+    const endButtonSuccess = this._endButtonSuccessByReservationId.has(
+      reservation.reservation_id
+    );
+    const startValue = this._getReservationInputOverride(reservation.reservation_id, "start") ?? formatOptionalDateTimeLocal(reservation.start_time);
+    const endValue = this._getReservationInputOverride(reservation.reservation_id, "end") ?? formatOptionalDateTimeLocal(reservation.end_time);
+    const startMin = formatOptionalDateTimeLocal(reservation.start_time);
+    const endMin = startValue || startMin;
+    return b2`
+      <div class="active-reservation">
+        <div class="active-reservation-summary">
+          <div class="active-reservation-heading">${identify}</div>
+          ${license ? b2`<div class="active-reservation-label">
+                ${this._localize("field.license_plate")}: ${license}
+              </div>` : A}
+          ${permitLabel ? b2`<div class="active-reservation-label">
+                ${this._localize("field.permit")}: ${permitLabel}
+              </div>` : A}
+        </div>
+        <div class="active-reservation-times">
+          <div class="datetime-row">
+            <ha-input
+              appearance="material"
+              type="datetime-local"
+              data-reservation-id=${reservation.reservation_id}
+              data-field="start"
+              .value=${startValue}
+              .min=${startMin}
+              .label=${this._localize("field.start_time")}
+              ?disabled=${controlsDisabled || !allowStart || isBusy}
+              @input=${this._onReservationInput}
+              @change=${this._onReservationChange}
+            ></ha-input>
+          </div>
+          <div class="datetime-row">
+            <ha-input
+              appearance="material"
+              type="datetime-local"
+              data-reservation-id=${reservation.reservation_id}
+              data-field="end"
+              .value=${endValue}
+              .min=${endMin}
+              .label=${this._localize("field.end_time")}
+              ?disabled=${controlsDisabled || !allowEnd || isBusy}
+              @input=${this._onReservationInput}
+              @change=${this._onReservationChange}
+            ></ha-input>
+          </div>
+        </div>
+        <div class="active-reservation-actions">
+          <ha-progress-button
+            class=${endButtonSuccess ? "active-reservation-end success" : "active-reservation-end"}
+            data-reservation-id=${reservation.reservation_id}
+            variant=${endButtonSuccess ? "success" : A}
+            appearance=${endButtonSuccess ? "filled" : A}
+            .progress=${isBusy}
+            ?disabled=${controlsDisabled || isBusy}
+          >
+            ${this._localize("button.end_reservation")}
+          </ha-progress-button>
+        </div>
+      </div>
+    `;
+  }
+  _handleActionClick(event) {
+    const target = event.target;
+    if (!target) return;
+    const endButton = target.closest(
+      "ha-progress-button.active-reservation-end"
+    );
+    if (endButton) {
+      const reservationId = endButton.dataset.reservationId ?? "";
+      if (this._endButtonSuccessByReservationId.has(reservationId)) return;
+      void this._handleActiveReservationEnd(reservationId);
+    }
+  }
+  _handleReservationInput(event, resolved) {
+    const reservationField = resolved ?? this._getReservationField(event);
+    if (!reservationField) return;
+    const { reservationId, fieldKey, value } = reservationField;
+    const current = this._reservationInputValues.get(reservationId);
+    if (current) {
+      current[fieldKey] = value;
+      return;
+    }
+    this._reservationInputValues.set(reservationId, { [fieldKey]: value });
+  }
+  _handleReservationChange(event) {
+    if (this._isInEditor()) return;
+    const reservationField = this._getReservationField(event);
+    if (!reservationField) return;
+    this._handleReservationInput(event, reservationField);
+    void this._handleActiveReservationUpdate(reservationField.reservationId);
+  }
+  _getReservationField(event) {
+    const customEvent = event;
+    const detailValue = customEvent.detail?.value;
+    const path = event.composedPath();
+    let fieldElement = null;
+    let inputElement = null;
+    for (const node of path) {
+      if (!fieldElement && node instanceof HTMLElement && Boolean(node.dataset.reservationId)) {
+        const nodeField = node.dataset.field;
+        if (nodeField === "start" || nodeField === "end") {
+          fieldElement = node;
+          if (typeof detailValue === "string") break;
+          continue;
+        }
+      }
+      if (!inputElement && (node instanceof HTMLInputElement || node instanceof HTMLTextAreaElement)) {
+        inputElement = node;
+      }
+      if (fieldElement && inputElement) break;
+    }
+    if (!fieldElement) return null;
+    const reservationId = fieldElement.dataset.reservationId ?? "";
+    if (!reservationId) return null;
+    return {
+      reservationId,
+      fieldKey: fieldElement.dataset.field,
+      value: detailValue ?? inputElement?.value ?? fieldElement.value ?? ""
+    };
+  }
+  _getReservationUpdateFlags(deviceId) {
+    if (!deviceId) return 0;
+    return this._reservationUpdateFlagsByDevice.get(deviceId) ?? 0;
+  }
+  _getReservationInputOverride(reservationId, fieldKey) {
+    return this._reservationInputValues.get(reservationId)?.[fieldKey];
+  }
+  _reservationNameKey(deviceId, licensePlate) {
+    const resolvedDeviceId = (deviceId ?? "").trim();
+    const plateKey = normalizePlateValue(licensePlate);
+    if (!resolvedDeviceId || !plateKey) return null;
+    return `${resolvedDeviceId}|${plateKey}`;
+  }
+  _setPendingReservationName(deviceId, licensePlate, name) {
+    const key = this._reservationNameKey(deviceId, licensePlate);
+    if (!key || !name) return;
+    this._pendingReservationNameByKey.set(key, {
+      name,
+      expiresAt: Date.now() + 30 * 60 * 1e3
+    });
+  }
+  _getPendingReservationName(deviceId, licensePlate) {
+    const key = this._reservationNameKey(deviceId, licensePlate);
+    if (!key) return null;
+    const entry = this._pendingReservationNameByKey.get(key);
+    if (!entry) return null;
+    if (entry.expiresAt <= Date.now()) {
+      this._pendingReservationNameByKey.delete(key);
+      return null;
+    }
+    return entry.name;
+  }
+  _prunePendingReservationNames() {
+    const now = Date.now();
+    for (const [key, entry] of this._pendingReservationNameByKey) {
+      if (entry.expiresAt <= now) {
+        this._pendingReservationNameByKey.delete(key);
+      }
+    }
+  }
+  _beginReservationAction(reservationId) {
+    if (this._reservationInFlight.has(reservationId)) return false;
+    this._reservationInFlight.add(reservationId);
+    this._requestRender();
+    return true;
+  }
+  _endReservationAction(reservationId) {
+    this._reservationInFlight.delete(reservationId);
+    this._requestRender();
+  }
+  _getReservationTarget(reservationId) {
+    const reservation = this._activeReservationsById.get(reservationId);
+    const deviceId = reservation?.device_id ?? "";
+    return reservation && deviceId ? { reservation, deviceId } : null;
+  }
+  _completeReservationActionSuccess(reservationId, successMessageKey, invalidateLoadedFor = true) {
+    this._setStatus(this._localize(successMessageKey), "success", 5e3);
+    this._reservationInputValues.delete(reservationId);
+    this._endReservationAction(reservationId);
+    if (invalidateLoadedFor) this._activeReservationsLoadedFor = null;
+  }
+  _clearEndButtonState(reservationId) {
+    const timeoutHandle = this._endButtonSuccessTimeoutByReservationId.get(reservationId);
+    if (timeoutHandle !== void 0) {
+      window.clearTimeout(timeoutHandle);
+      this._endButtonSuccessTimeoutByReservationId.delete(reservationId);
+    }
+    this._endButtonSuccessResolverByReservationId.get(reservationId)?.();
+    this._endButtonSuccessResolverByReservationId.delete(reservationId);
+    this._endButtonSuccessByReservationId.delete(reservationId);
+  }
+  _setEndButtonSuccess(reservationId) {
+    this._clearEndButtonState(reservationId);
+    this._endButtonSuccessByReservationId.add(reservationId);
+    this._requestRender();
+    return new Promise((resolve) => {
+      this._endButtonSuccessResolverByReservationId.set(reservationId, resolve);
+      const timeoutHandle = window.setTimeout(() => {
+        this._clearEndButtonState(reservationId);
+        this._requestRender();
+        resolve();
+      }, 1e3);
+      this._endButtonSuccessTimeoutByReservationId.set(
+        reservationId,
+        timeoutHandle
+      );
+    });
+  }
+  async _handleActiveReservationUpdate(reservationId) {
+    if (!this._hass || !reservationId) return;
+    const target = this._getReservationTarget(reservationId);
+    if (!target) return;
+    const { reservation, deviceId } = target;
+    if (!this._beginReservationAction(reservationId)) return;
+    const updateFlags = this._getReservationUpdateFlags(deviceId);
+    const allowStart = Boolean(updateFlags & UPDATE_START_FLAG);
+    const allowEnd = Boolean(updateFlags & UPDATE_END_FLAG);
+    if (!allowStart && !allowEnd) {
+      this._endReservationAction(reservationId);
+      return;
+    }
+    const startValue = allowStart ? (this._getReservationInputOverride(reservationId, "start") ?? formatOptionalDateTimeLocal(reservation.start_time)).trim() : "";
+    const endValue = allowEnd ? (this._getReservationInputOverride(reservationId, "end") ?? formatOptionalDateTimeLocal(reservation.end_time)).trim() : "";
+    const startDate = allowStart ? parseDateTimeValue(startValue) : parseDateTimeValue(reservation.start_time);
+    const endDate = allowEnd ? parseDateTimeValue(endValue) : parseDateTimeValue(reservation.end_time);
+    const updateError = allowStart && !startDate || allowEnd && !endDate ? "message.start_end_required" : startDate && endDate && endDate <= startDate ? "message.end_before_start" : null;
+    if (updateError) {
+      this._setStatus(this._localize(updateError), "warning");
+      this._endReservationAction(reservationId);
+      return;
+    }
+    try {
+      const serviceData = {
+        device_id: deviceId,
+        reservation_id: reservationId
+      };
+      if (allowStart && startDate)
+        serviceData.start_time = startDate.toISOString();
+      if (allowEnd && endDate) serviceData.end_time = endDate.toISOString();
+      await this._hass.callService(
+        DOMAIN,
+        SERVICE_UPDATE_RESERVATION,
+        serviceData
+      );
+    } catch (err) {
+      this._setStatus(
+        this._errorMessage(err, "message.reservation_update_failed"),
+        "warning"
+      );
+      this._endReservationAction(reservationId);
+      return;
+    }
+    this._completeReservationActionSuccess(
+      reservationId,
+      "message.reservation_updated"
+    );
+    await this._maybeLoadActiveReservations(true);
+  }
+  async _handleActiveReservationEnd(reservationId) {
+    if (!this._hass || !reservationId) return;
+    const target = this._getReservationTarget(reservationId);
+    if (!target) return;
+    const { deviceId } = target;
+    if (!this._beginReservationAction(reservationId)) return;
+    try {
+      await this._hass.callService(DOMAIN, SERVICE_END_RESERVATION, {
+        device_id: deviceId,
+        reservation_id: reservationId
       });
-    }
-    async _handleActiveReservationUpdate(reservationId) {
-      if (!this._hass || !reservationId) return;
-      const target = this._getReservationTarget(reservationId);
-      if (!target) return;
-      const { reservation, deviceId } = target;
-      if (!this._beginReservationAction(reservationId)) return;
-      const updateFlags = this._getReservationUpdateFlags(deviceId);
-      const allowStart = Boolean(updateFlags & UPDATE_START_FLAG);
-      const allowEnd = Boolean(updateFlags & UPDATE_END_FLAG);
-      if (!allowStart && !allowEnd) {
-        this._endReservationAction(reservationId);
-        return;
-      }
-      const startValue = allowStart ? (this._getReservationInputOverride(reservationId, "start") ?? formatOptionalDateTimeLocal(reservation.start_time)).trim() : "";
-      const endValue = allowEnd ? (this._getReservationInputOverride(reservationId, "end") ?? formatOptionalDateTimeLocal(reservation.end_time)).trim() : "";
-      const startDate = allowStart ? parseDateTimeValue(startValue) : parseDateTimeValue(reservation.start_time);
-      const endDate = allowEnd ? parseDateTimeValue(endValue) : parseDateTimeValue(reservation.end_time);
-      const updateError = allowStart && !startDate || allowEnd && !endDate ? "message.start_end_required" : startDate && endDate && endDate <= startDate ? "message.end_before_start" : null;
-      if (updateError) {
-        this._setStatus(this._localize(updateError), "warning");
-        this._endReservationAction(reservationId);
-        return;
-      }
-      try {
-        const serviceData = {
-          device_id: deviceId,
-          reservation_id: reservationId
-        };
-        if (allowStart && startDate)
-          serviceData.start_time = startDate.toISOString();
-        if (allowEnd && endDate) serviceData.end_time = endDate.toISOString();
-        await this._hass.callService(
-          DOMAIN,
-          SERVICE_UPDATE_RESERVATION,
-          serviceData
-        );
-      } catch (err) {
-        this._setStatus(
-          this._errorMessage(err, "message.reservation_update_failed"),
-          "warning"
-        );
-        this._endReservationAction(reservationId);
-        return;
-      }
-      this._completeReservationActionSuccess(
-        reservationId,
-        "message.reservation_updated"
+    } catch (err) {
+      this._setStatus(
+        this._errorMessage(err, "message.reservation_end_failed"),
+        "warning"
       );
-      await this._maybeLoadActiveReservations(true);
-    }
-    async _handleActiveReservationEnd(reservationId) {
-      if (!this._hass || !reservationId) return;
-      const target = this._getReservationTarget(reservationId);
-      if (!target) return;
-      const { deviceId } = target;
-      if (!this._beginReservationAction(reservationId)) return;
-      try {
-        await this._hass.callService(DOMAIN, SERVICE_END_RESERVATION, {
-          device_id: deviceId,
-          reservation_id: reservationId
-        });
-      } catch (err) {
-        this._setStatus(
-          this._errorMessage(err, "message.reservation_end_failed"),
-          "warning"
-        );
-        this._endReservationAction(reservationId);
-        await triggerProgressButtonFeedback(
-          this,
-          `ha-progress-button.active-reservation-end[data-reservation-id="${reservationId}"]`,
-          "error"
-        );
-        return;
-      }
-      this._completeReservationActionSuccess(
-        reservationId,
-        "message.reservation_ended",
-        false
-      );
-      await this._setEndButtonSuccess(reservationId);
+      this._endReservationAction(reservationId);
       await triggerProgressButtonFeedback(
         this,
         `ha-progress-button.active-reservation-end[data-reservation-id="${reservationId}"]`,
-        "success"
+        "error"
       );
-      this._activeReservationsLoadedFor = null;
-      await this._maybeLoadActiveReservations(true);
+      return;
     }
-    async _getConfigEntryTitles() {
-      if (!this._hass) return /* @__PURE__ */ new Map();
-      const hass = this._hass;
-      return makeDedupedLoader(
-        () => this._configEntriesPromise,
-        (p4) => {
-          this._configEntriesPromise = p4;
-        },
-        () => fetchPermitEntries(hass).then(buildPermitTitleMap).catch(() => /* @__PURE__ */ new Map())
-      );
-    }
-    async _getDomainDevices() {
-      if (!this._hass) return [];
-      const hass = this._hass;
-      return makeDedupedLoader(
-        () => this._devicesPromise,
-        (p4) => {
-          this._devicesPromise = p4;
-        },
-        () => hass.callWS({ type: "config/device_registry/list" }).then(filterDomainDevices)
-      );
-    }
-    _getActiveEntryId() {
-      return getConfigEntryId(this._config);
-    }
+    this._completeReservationActionSuccess(
+      reservationId,
+      "message.reservation_ended",
+      false
+    );
+    await this._setEndButtonSuccess(reservationId);
+    await triggerProgressButtonFeedback(
+      this,
+      `ha-progress-button.active-reservation-end[data-reservation-id="${reservationId}"]`,
+      "success"
+    );
+    this._activeReservationsLoadedFor = null;
+    await this._maybeLoadActiveReservations(true);
   }
-  CityVisitorParkingActiveCard.styles = [
-    BASE_CARD_STYLES,
-    i`
-        .active-reservations {
-          display: flex;
-          flex-direction: column;
-          gap: var(--ha-space-2);
-        }
-        .active-reservation {
-          border: 1px solid var(--divider-color);
-          border-radius: var(--ha-card-border-radius, var(--ha-space-2));
-          padding: var(--ha-space-3);
-          display: flex;
-          flex-direction: column;
-          gap: var(--ha-space-2);
-        }
-        .active-reservation-summary {
-          display: flex;
-          flex-direction: column;
-          gap: var(--ha-space-1);
-        }
-        .active-reservation-heading {
-          font-weight: 600;
-        }
-        .active-reservation-label {
-          color: var(--secondary-text-color);
-          font-family: var(--primary-font-family, "Roboto", "Noto", sans-serif);
-          font-size: 14px;
-          font-weight: 400;
-        }
-        .active-reservation-times {
-          display: grid;
-          grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
-          gap: var(--ha-space-2);
-        }
-        .active-reservation-times ha-input,
-        .active-reservation-times ha-textfield {
-          width: 100%;
-        }
-        .active-reservation-actions {
-          display: flex;
-          gap: var(--ha-space-2);
-          flex-wrap: wrap;
-        }
-        .active-reservation-end {
-          margin-left: auto;
-        }
-        .active-reservations-empty {
-          font-size: 0.9rem;
-          color: var(--secondary-text-color);
-        }
-      `
-  ];
-  registerCustomCardWithTranslations(
-    CARD_TYPE,
-    CityVisitorParkingActiveCard,
-    "name",
-    ""
-  );
-  hideCustomCardFromPicker(CARD_TYPE);
-})();
+  async _getConfigEntryTitles() {
+    if (!this._hass) return /* @__PURE__ */ new Map();
+    const hass = this._hass;
+    return makeDedupedLoader(
+      () => this._configEntriesPromise,
+      (p4) => {
+        this._configEntriesPromise = p4;
+      },
+      () => fetchPermitEntries(hass).then(buildPermitTitleMap).catch(() => /* @__PURE__ */ new Map())
+    );
+  }
+  async _getDomainDevices() {
+    if (!this._hass) return [];
+    const hass = this._hass;
+    return makeDedupedLoader(
+      () => this._devicesPromise,
+      (p4) => {
+        this._devicesPromise = p4;
+      },
+      () => hass.callWS({ type: "config/device_registry/list" }).then(filterDomainDevices)
+    );
+  }
+  _getActiveEntryId() {
+    return getConfigEntryId(this._config);
+  }
+};
+CityVisitorParkingActiveCard.styles = [
+  BASE_CARD_STYLES,
+  i`
+      .active-reservations {
+        display: flex;
+        flex-direction: column;
+        gap: var(--ha-space-2);
+      }
+      .active-reservation {
+        border: 1px solid var(--divider-color);
+        border-radius: var(--ha-card-border-radius, var(--ha-space-2));
+        padding: var(--ha-space-3);
+        display: flex;
+        flex-direction: column;
+        gap: var(--ha-space-2);
+      }
+      .active-reservation-summary {
+        display: flex;
+        flex-direction: column;
+        gap: var(--ha-space-1);
+      }
+      .active-reservation-heading {
+        font-weight: 600;
+      }
+      .active-reservation-label {
+        color: var(--secondary-text-color);
+        font-family: var(--primary-font-family, "Roboto", "Noto", sans-serif);
+        font-size: 14px;
+        font-weight: 400;
+      }
+      .active-reservation-times {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+        gap: var(--ha-space-2);
+      }
+      .active-reservation-times ha-input,
+      .active-reservation-times ha-textfield {
+        width: 100%;
+      }
+      .active-reservation-actions {
+        display: flex;
+        gap: var(--ha-space-2);
+        flex-wrap: wrap;
+      }
+      .active-reservation-end {
+        margin-left: auto;
+      }
+      .active-reservations-empty {
+        font-size: 0.9rem;
+        color: var(--secondary-text-color);
+      }
+    `
+];
+registerCustomCardWithTranslations(
+  CARD_TYPE2,
+  CityVisitorParkingActiveCard,
+  "name",
+  ""
+);
+hideCustomCardFromPicker(CARD_TYPE2);
 /*! Bundled license information:
 
 @lit/reactive-element/css-tag.js:
