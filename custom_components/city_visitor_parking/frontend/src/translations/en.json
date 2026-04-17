@@ -78,5 +78,7 @@
   "message.reservation_update_failed": "We could not update your reservation.",
   "message.reservation_ended": "Your reservation was ended.",
   "message.reservation_end_failed": "We could not end your reservation.",
-  "placeholder.license_plate": "AA-123-B"
+  "placeholder.license_plate": "AA-123-B",
+  "unit.hours": "h",
+  "unit.minutes": "min"
 }

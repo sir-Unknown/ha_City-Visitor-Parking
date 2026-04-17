@@ -110,6 +110,9 @@ class CityVisitorParkingNewReservationCard extends BaseLocalizedCard<CardConfig>
       .favorite-actions .badge-checked {
         --badge-color: var(--primary-color);
       }
+      .favorite-actions .balance-badge {
+        --ha-font-size-xs: var(--ha-font-size-s);
+      }
       .start-button {
         margin-left: auto;
       }

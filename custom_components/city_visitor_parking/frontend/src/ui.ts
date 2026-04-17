@@ -395,9 +395,10 @@ export const renderFavoriteActionRow = (params: {
               const { text, icon } = formatBalanceLabel(
                 params.remainingMinutes!,
                 params.balanceUnit,
+                params.localize,
               );
               return html`
-                <ha-badge .label=${text}>
+                <ha-badge class="balance-badge" .label=${text}>
                   <ha-icon slot="icon" icon=${icon}></ha-icon>
                 </ha-badge>
               `;

@@ -788,7 +788,7 @@ var extractEventValue = (event, fallbackElement) => {
   return detail != null && "value" in detail ? detail.value ?? "" : fallbackElement?.value ?? "";
 };
 var isHassRunning = (hass) => hass?.config?.state === "RUNNING";
-var formatBalanceLabel = (remainingMinutes, balanceUnit) => {
+var formatBalanceLabel = (remainingMinutes, balanceUnit, localize2) => {
   const isMonetary = balanceUnit !== null && balanceUnit !== "TIMES" && balanceUnit !== "MINUTE";
   if (isMonetary) {
     const formatted = Number.isInteger(remainingMinutes) ? String(remainingMinutes) : remainingMinutes.toFixed(2);
@@ -810,10 +810,10 @@ var formatBalanceLabel = (remainingMinutes, balanceUnit) => {
   const totalMins = Math.round(remainingMinutes);
   const hours = Math.floor(totalMins / 60);
   const mins = totalMins % 60;
-  return {
-    text: hours > 0 ? `${hours}u ${mins}m` : `${mins}m`,
-    icon: "mdi:clock-outline"
-  };
+  const h3 = localize2("unit.hours");
+  const m3 = localize2("unit.minutes");
+  const text = hours > 0 && mins > 0 ? `${hours}${h3} ${mins}${m3}` : hours > 0 ? `${hours}${h3}` : `${mins}${m3}`;
+  return { text, icon: "mdi:progress-clock" };
 };
 
 // src/ui.ts
@@ -1085,10 +1085,11 @@ var renderFavoriteActionRow = (params) => {
         ${showBalance ? (() => {
     const { text, icon } = formatBalanceLabel(
       params.remainingMinutes,
-      params.balanceUnit
+      params.balanceUnit,
+      params.localize
     );
     return b2`
-                <ha-badge .label=${text}>
+                <ha-badge class="balance-badge" .label=${text}>
                   <ha-icon slot="icon" icon=${icon}></ha-icon>
                 </ha-badge>
               `;
@@ -2455,6 +2456,9 @@ CityVisitorParkingNewReservationCard.styles = [
       }
       .favorite-actions .badge-checked {
         --badge-color: var(--primary-color);
+      }
+      .favorite-actions .balance-badge {
+        --ha-font-size-xs: var(--ha-font-size-s);
       }
       .start-button {
         margin-left: auto;
