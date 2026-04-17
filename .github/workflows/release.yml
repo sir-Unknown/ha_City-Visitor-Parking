@@ -276,10 +276,12 @@ jobs:
                   if re.search(r'pycityvisitorparking', r, re.IGNORECASE):
                       # Replace existing git SHA or PyPI version with the given commit
                       if re.search(r'[a-f0-9]{40}', r):
-                          r = re.sub(r'[a-f0-9]{40}', pycvp_commit, r)
+                          r_new = re.sub(r'[a-f0-9]{40}', pycvp_commit, r)
                       else:
-                          r = re.sub(r'pycityvisitorparking==\S+', f'pycityvisitorparking @ git+https://github.com/sir-Unknown/pyCityVisitorParking@{pycvp_commit}', r, flags=re.IGNORECASE)
-                      replaced = True
+                          r_new = re.sub(r'pycityvisitorparking==\S+', f'pycityvisitorparking @ git+https://github.com/sir-Unknown/pyCityVisitorParking@{pycvp_commit}', r, flags=re.IGNORECASE)
+                      if r_new != r:
+                          replaced = True
+                          r = r_new
                   new_reqs.append(r)
               if not replaced:
                   raise ValueError("No pycityvisitorparking requirement found to replace")
