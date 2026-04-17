@@ -36,22 +36,26 @@ jobs:
         run: |
           CATEGORY_LABELS="breaking-change bugfix documentation enhancement refactor performance new-feature maintenance ci dependencies tests"
 
-          case "$PR_TITLE" in
-            # Breaking change: any type ending with ! before the colon
-            # Matches feat!: ..., feat(scope)!: ..., fix!: ..., etc.
-            *"!:"*)                        LABEL="breaking-change" ;;
-            "feat:"*|feat"("*"):"*)        LABEL="enhancement" ;;
-            "fix:"*|fix"("*"):"*)          LABEL="bugfix" ;;
-            "refactor:"*|refactor"("*"):"*) LABEL="refactor" ;;
-            "perf:"*|perf"("*"):"*)        LABEL="performance" ;;
-            "test:"*|"tests:"*|test"("*"):"*) LABEL="tests" ;;
-            "docs:"*|"doc:"*|docs"("*"):"*) LABEL="documentation" ;;
-            "chore:"*|chore"("*"):"*)      LABEL="maintenance" ;;
-            "ci:"*|ci"("*"):"*)            LABEL="ci" ;;
-            "build:"*|build"("*"):"*)      LABEL="maintenance" ;;
-            "deps:"*|deps"("*"):"*)        LABEL="dependencies" ;;
-            *)                             LABEL="" ;;
-          esac
+          # Breaking change: <type>[(<scope>)]!: anchored at the start of the title.
+          # Using grep rather than a case glob to avoid matching "!:" mid-title
+          # (e.g. "chore: explain the !: token" must not become breaking-change).
+          if echo "$PR_TITLE" | grep -qE '^[a-z]+(\([^)]+\))?!:'; then
+            LABEL="breaking-change"
+          else
+            case "$PR_TITLE" in
+              "feat:"*|feat"("*"):"*)        LABEL="enhancement" ;;
+              "fix:"*|fix"("*"):"*)          LABEL="bugfix" ;;
+              "refactor:"*|refactor"("*"):"*) LABEL="refactor" ;;
+              "perf:"*|perf"("*"):"*)        LABEL="performance" ;;
+              "test:"*|"tests:"*|test"("*"):"*|tests"("*"):"*) LABEL="tests" ;;
+              "docs:"*|"doc:"*|docs"("*"):"*|doc"("*"):"*) LABEL="documentation" ;;
+              "chore:"*|chore"("*"):"*)      LABEL="maintenance" ;;
+              "ci:"*|ci"("*"):"*)            LABEL="ci" ;;
+              "build:"*|build"("*"):"*)      LABEL="maintenance" ;;
+              "deps:"*|deps"("*"):"*)        LABEL="dependencies" ;;
+              *)                             LABEL="" ;;
+            esac
+          fi
 
           if [ -z "$LABEL" ]; then
             echo "No conventional commit prefix recognised in: $PR_TITLE"
