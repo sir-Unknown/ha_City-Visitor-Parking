@@ -891,6 +891,7 @@ dependencies = [
 dev = [
     { name = "mypy" },
     { name = "pre-commit" },
+    { name = "pymicro-vad" },
     { name = "pyright" },
     { name = "ruff" },
     { name = "types-pyyaml" },
@@ -915,6 +916,7 @@ requires-dist = [{ name = "pycityvisitorparking", specifier = "==0.5.23" }]
 dev = [
     { name = "mypy", specifier = "==1.20.0" },
     { name = "pre-commit", specifier = "==4.5.1" },
+    { name = "pymicro-vad", specifier = "==1.0.1" },
     { name = "pyright", specifier = "==1.1.408" },
     { name = "ruff", specifier = "==0.15.10" },
     { name = "types-pyyaml", specifier = "==6.0.12.20260408" },
@@ -1778,6 +1780,12 @@ sdist = { url = "https://files.pythonhosted.org/packages/a5/3d/21bec2f2f43251961
 wheels = [
     { url = "https://files.pythonhosted.org/packages/94/0e/bf3473d86648a17e6dd6ee9e6abce526b077169031177f4f2031368f864a/pylint_per_file_ignores-1.4.0-py3-none-any.whl", hash = "sha256:0cd82d22551738b4e63a0aa1dab2a1fc4016e8f27f1429159616483711e122fd", size = 4888, upload-time = "2025-01-17T21:35:00.371Z" },
 ]
+
+[[package]]
+name = "pymicro-vad"
+version = "1.0.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/2e/0f/a92acea368e2b37fbc706f6d049f04557497d981316a2f428b26f14666a9/pymicro_vad-1.0.1.tar.gz", hash = "sha256:60e0508b338b694c7ad71c633c0da6fcd2678a88abb8e948b80fa68934965111", size = 135575, upload-time = "2024-07-31T20:04:04.619Z" }
 
 [[package]]
 name = "pynacl"

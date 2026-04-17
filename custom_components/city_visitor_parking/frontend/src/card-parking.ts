@@ -1346,8 +1346,16 @@ class CityVisitorParkingNewReservationCard extends BaseLocalizedCard<CardConfig>
           }),
         ),
       );
-      for (const settled of results) {
-        if (settled.status === "rejected") continue;
+      let anyFailed = false;
+      for (const [index, settled] of results.entries()) {
+        if (settled.status === "rejected") {
+          anyFailed = true;
+          console.warn(
+            `[city-visitor-parking] Could not load active plates for device ${domainDevices[index].id}:`,
+            settled.reason,
+          );
+          continue;
+        }
         const result = settled.value;
         const response = result?.response ?? result;
         const reservations = response?.reservations;
@@ -1364,8 +1372,12 @@ class CityVisitorParkingNewReservationCard extends BaseLocalizedCard<CardConfig>
         }
       }
       // Only apply result if the entry hasn't changed while awaiting (P1).
+      // Reset the loaded marker when any device failed so the next call retries (P2).
       if (this._activeReservationsLoadedFor === entryId) {
         this._activeReservationsByPlate = byPlate;
+        if (anyFailed) {
+          this._activeReservationsLoadedFor = null;
+        }
       }
     } catch {
       // Reset loaded marker so a future call can retry (P2).
