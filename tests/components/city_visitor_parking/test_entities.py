@@ -39,7 +39,7 @@ from custom_components.city_visitor_parking.sensor import (
     RemainingTimeSensor,
     _as_utc_iso,
     _next_end_time,
-    _remaining_balance_minutes,
+    _remaining_balance,
     _timerange_to_dict,
 )
 from custom_components.city_visitor_parking.time_windows import current_or_next_window
@@ -117,7 +117,7 @@ async def test_zone_availability_uses_overrides() -> None:
 
         data = CoordinatorData(
             permit_id="permit",
-            permit_remaining_minutes=0,
+            permit_remaining_balance=0,
             permit_balance_unit=None,
             zone_validity=tuple(zone_validity),
             reservations=(),
@@ -173,7 +173,7 @@ async def test_next_chargeable_window_uses_overrides() -> None:
         availability = _compute_zone_availability(zone_validity, options, now)
         data = CoordinatorData(
             permit_id="permit",
-            permit_remaining_minutes=0,
+            permit_remaining_balance=0,
             permit_balance_unit=None,
             zone_validity=tuple(zone_validity),
             reservations=(),
@@ -238,7 +238,7 @@ async def test_sensors_handle_coordinator_update(
     )
     data = CoordinatorData(
         permit_id="permit",
-        permit_remaining_minutes=120,
+        permit_remaining_balance=120,
         permit_balance_unit=None,
         zone_validity=(zone_window,),
         reservations=(
@@ -311,7 +311,7 @@ def _sample_data(zone_availability: ZoneAvailability | None = None) -> Coordinat
     )
     return CoordinatorData(
         permit_id="permit",
-        permit_remaining_minutes=90,
+        permit_remaining_balance=90,
         permit_balance_unit=None,
         zone_validity=(),
         reservations=(
@@ -353,7 +353,7 @@ def test_sensor_helpers() -> None:
     data = _sample_data()
     data_no_active = CoordinatorData(
         permit_id=data.permit_id,
-        permit_remaining_minutes=data.permit_remaining_minutes,
+        permit_remaining_balance=data.permit_remaining_balance,
         permit_balance_unit=None,
         zone_validity=data.zone_validity,
         reservations=data.reservations,
@@ -363,7 +363,7 @@ def test_sensor_helpers() -> None:
     )
     data_with_active = CoordinatorData(
         permit_id=data.permit_id,
-        permit_remaining_minutes=data.permit_remaining_minutes,
+        permit_remaining_balance=data.permit_remaining_balance,
         permit_balance_unit=None,
         zone_validity=data.zone_validity,
         reservations=data.reservations,
@@ -382,7 +382,7 @@ def test_sensor_helpers() -> None:
             ),
         ),
     )
-    assert _remaining_balance_minutes(data) == EXPECTED_REMAINING_MINUTES
+    assert _remaining_balance(data) == EXPECTED_REMAINING_MINUTES
     assert _next_end_time(data_no_active) is None
     assert _next_end_time(data_with_active) == datetime(2025, 1, 1, 7, 30, tzinfo=UTC)
     assert _as_utc_iso(None) == ""

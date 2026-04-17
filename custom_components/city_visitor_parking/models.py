@@ -61,7 +61,7 @@ class CoordinatorData:
     """Coordinator data for entities and services."""
 
     permit_id: str
-    permit_remaining_minutes: float
+    permit_remaining_balance: float
     permit_balance_unit: str | None
     zone_validity: tuple[TimeRange, ...]
     reservations: tuple[Reservation, ...]

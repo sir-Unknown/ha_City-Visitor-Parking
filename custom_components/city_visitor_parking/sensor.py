@@ -89,7 +89,7 @@ class RemainingTimeSensor(CityVisitorParkingEntity):
     def _update_from_coordinator(self) -> None:
         """Update the sensor from coordinator data."""
         balance_unit = self.coordinator.data.permit_balance_unit
-        remaining_minutes = _remaining_balance_minutes(self.coordinator.data)
+        remaining_balance = _remaining_balance(self.coordinator.data)
         next_end_time = _next_end_time(self.coordinator.data)
         active_count = len(self.coordinator.data.active_reservations)
         attributes: dict[str, object] = dict(self._attr_extra_state_attributes or {})  # type: ignore[has-type]
@@ -105,13 +105,13 @@ class RemainingTimeSensor(CityVisitorParkingEntity):
             self._attr_device_class = SensorDeviceClass.MONETARY
             self._attr_native_unit_of_measurement = balance_unit
             self._attr_suggested_display_precision = 2
-            self._attr_native_value = float(remaining_minutes)
+            self._attr_native_value = float(remaining_balance)
         else:
             self._attr_device_class = None
             self._attr_native_unit_of_measurement = UnitOfTime.HOURS
             self._attr_suggested_display_precision = 2
-            attributes["remaining_minutes"] = remaining_minutes
-            self._attr_native_value = round(remaining_minutes / 60, 2)
+            attributes["remaining_balance"] = remaining_balance
+            self._attr_native_value = round(remaining_balance / 60, 2)
 
         self._attr_extra_state_attributes = attributes
 
@@ -247,9 +247,9 @@ class FavoritesSensor(CityVisitorParkingEntity):
         self._attr_native_value = len(self.coordinator.data.favorites)
 
 
-def _remaining_balance_minutes(data: CoordinatorData) -> float:
+def _remaining_balance(data: CoordinatorData) -> float:
     """Return the remaining balance (minutes, times, or monetary amount)."""
-    return max(0.0, data.permit_remaining_minutes)
+    return max(0.0, data.permit_remaining_balance)
 
 
 def _next_end_time(data: CoordinatorData) -> datetime | None:

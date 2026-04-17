@@ -34,7 +34,7 @@ from custom_components.city_visitor_parking.coordinator import (
     _as_utc_datetime,
     _compute_zone_availability,
     _normalize_favorites,
-    _normalize_remaining_minutes,
+    _normalize_remaining_balance,
     _normalize_reservations,
     _normalize_zone_validity,
     _should_attempt_auto_end,
@@ -250,19 +250,19 @@ async def test_provider_protocol_raises() -> None:
 def test_normalize_helpers() -> None:
     """Normalization helpers should handle invalid input."""
     assert (
-        _normalize_remaining_minutes(cast("Permit", {"remaining_balance": None})) == 0
+        _normalize_remaining_balance(cast("Permit", {"remaining_balance": None})) == 0
     )
     assert (
-        _normalize_remaining_minutes(cast("Permit", {"remaining_balance": "bad"})) == 0
+        _normalize_remaining_balance(cast("Permit", {"remaining_balance": "bad"})) == 0
     )
     assert (
-        _normalize_remaining_minutes(cast("Permit", {"remaining_balance": "-5"})) == 0
+        _normalize_remaining_balance(cast("Permit", {"remaining_balance": "-5"})) == 0
     )
     assert (
-        _normalize_remaining_minutes(cast("Permit", {"remaining_balance": 15}))
+        _normalize_remaining_balance(cast("Permit", {"remaining_balance": 15}))
         == EXPECTED_MINUTES
     )
-    assert _normalize_remaining_minutes(cast("Permit", {"remaining_balance": []})) == 0
+    assert _normalize_remaining_balance(cast("Permit", {"remaining_balance": []})) == 0
 
     now = datetime(2025, 1, 1, 8, 0, tzinfo=UTC)
     validity = _normalize_zone_validity(
@@ -356,7 +356,7 @@ async def test_auto_end_skips_when_chargeable(hass: HomeAssistant) -> None:
 
     data = CoordinatorData(
         permit_id="permit",
-        permit_remaining_minutes=0,
+        permit_remaining_balance=0,
         permit_balance_unit=None,
         zone_validity=(),
         reservations=(),
@@ -395,7 +395,7 @@ async def test_auto_end_skips_without_reservations(hass: HomeAssistant) -> None:
 
     data = CoordinatorData(
         permit_id="permit",
-        permit_remaining_minutes=0,
+        permit_remaining_balance=0,
         permit_balance_unit=None,
         zone_validity=(),
         reservations=(),
@@ -752,7 +752,7 @@ def _idle_data(
     """Return a CoordinatorData instance representing a quiet, idle state."""
     return CoordinatorData(
         permit_id="permit",
-        permit_remaining_minutes=0,
+        permit_remaining_balance=0,
         permit_balance_unit=None,
         zone_validity=(),
         reservations=(),
