@@ -1,3 +1,4 @@
+/** Editor schema helpers for the new-reservation Lovelace card. */
 import { html, type TemplateResult } from "lit";
 import type {
   CardEditorFormSchema,
@@ -12,6 +13,7 @@ import { BaseCardEditor, defineElementIfMissing } from "./base";
 
 type LocalizeFunc = (key: string, ...args: Array<string | number>) => string;
 
+/** Builds localized field-label and helper-text resolvers for `ha-form`. */
 const buildFormHelpers = (
   localizeTarget: LocalizeTarget | LocalizeFunc,
   prefix: string,
@@ -31,6 +33,7 @@ const buildFormHelpers = (
   };
 };
 
+/** Returns the selectable card types shown by the Lovelace card editor. */
 export const buildCardTypeOptions = (
   localizeTarget: LocalizeTarget | LocalizeFunc,
   prefix: string,
@@ -84,6 +87,7 @@ const buildCardEditorSchema = (
   },
 ];
 
+/** Lovelace editor element for configuring the new-reservation card. */
 export class CityVisitorParkingCardEditor extends BaseCardEditor<ParkingCardEditorConfig> {
   protected render(): TemplateResult {
     if (!this.hass) return html``;
@@ -123,6 +127,7 @@ defineElementIfMissing(
   CityVisitorParkingCardEditor,
 );
 
+/** Creates the async config-form getter used by Lovelace card metadata APIs. */
 export const createConfigFormGetter =
   (
     prefix: string,
@@ -150,6 +155,7 @@ export const createConfigFormGetter =
     };
   };
 
+/** Returns the config-form schema for the new-reservation card. */
 export const getCardConfigForm = createConfigFormGetter(
   "editor",
   (cardTypeOptions) => buildCardEditorSchema(cardTypeOptions, false),

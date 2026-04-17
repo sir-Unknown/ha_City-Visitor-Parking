@@ -1,3 +1,4 @@
+/** Shared Lit base classes and registration helpers for the custom cards. */
 import { LitElement } from "lit";
 import type {
   HomeAssistant,
@@ -20,6 +21,7 @@ import {
 
 export { LitElement };
 
+/** Batches repeated update requests into a single animation frame. */
 export const createRenderScheduler = (
   requestUpdate: () => void,
 ): (() => void) => {
@@ -33,6 +35,7 @@ export const createRenderScheduler = (
   };
 };
 
+/** Detects whether a node is rendered inside a Lovelace card editor context. */
 export const isInEditor = (startNode: Node): boolean => {
   const selector =
     "hui-card-preview, hui-card-picker, hui-card-element-editor, " +
@@ -54,6 +57,7 @@ export const isInEditor = (startNode: Node): boolean => {
   return false;
 };
 
+/** Base class for cards that need localized text and shared status messaging. */
 export abstract class BaseLocalizedCard<TConfig> extends LitElement {
   _config: TConfig | null = null;
   _hass: HomeAssistant | null = null;
@@ -81,6 +85,7 @@ export abstract class BaseLocalizedCard<TConfig> extends LitElement {
   }
 }
 
+/** Defines a custom element in the active registries when it is still missing. */
 export const defineElementIfMissing = (
   tagName: string,
   ctor: CustomElementConstructor,
@@ -93,6 +98,7 @@ export const defineElementIfMissing = (
   }
 };
 
+/** Registers a Lovelace custom card and keeps its picker metadata up to date. */
 export const registerCustomCard = (
   cardType: string,
   ctor: CustomElementConstructor,
@@ -113,6 +119,7 @@ export const registerCustomCard = (
   win.customCards.push({ type: cardType, name, description });
 };
 
+/** Registers a custom card using translated picker labels when available. */
 export const registerCustomCardWithTranslations = (
   cardType: string,
   ctor: CustomElementConstructor,
@@ -133,6 +140,7 @@ export const registerCustomCardWithTranslations = (
   void ensureTranslations(hass).then(registerCard);
 };
 
+/** Hides a card type from the Lovelace picker without affecting existing cards. */
 export const hideCustomCardFromPicker = (cardType: string): void => {
   const applyPatch = (pickerCtor: PickerCtor): void => {
     const { prototype } = pickerCtor;
@@ -166,6 +174,7 @@ export const hideCustomCardFromPicker = (cardType: string): void => {
   }
 };
 
+/** Base class for lightweight card editors backed by `ha-form`. */
 export abstract class BaseCardEditor<TConfig> extends LitElement {
   public hass?: unknown;
   protected _config?: TConfig;

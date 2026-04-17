@@ -1,3 +1,4 @@
+/** Translation loading and lookup helpers for the custom frontend bundle. */
 import type { LocalizeFunc, LocalizeTarget, TranslationObject } from "./types";
 
 const DEFAULT_LANGUAGE = "en";
@@ -6,6 +7,7 @@ const translationsCache = new Map<string, TranslationObject>();
 const translationsInFlight = new Map<string, Promise<void>>();
 const translationLookupCache = new Map<string, Map<string, string>>();
 
+/** Returns the globally injected Home Assistant object when available. */
 export const getGlobalHass = <T>(): T | undefined =>
   (window as Window & { hass?: T }).hass;
 
@@ -81,25 +83,7 @@ export const ensureTranslations = async (
   translationsInFlight.delete(language);
 };
 
-type TranslationValue = string | TranslationObject | undefined;
-
-const resolveTranslationValue = (
-  strings: TranslationObject,
-  key: string,
-): string | null => {
-  const directValue = strings[key];
-  if (typeof directValue === "string") return directValue;
-  const cardStrings = strings.card;
-  if (!cardStrings || typeof cardStrings !== "object") return null;
-  const parts = key.split(".");
-  let current: TranslationValue = cardStrings as TranslationObject;
-  for (const part of parts) {
-    if (!current || typeof current !== "object") return null;
-    current = (current as TranslationObject)[part] as TranslationValue;
-  }
-  return typeof current === "string" ? current : null;
-};
-
+/** Resolves a translation key from the cached frontend translation bundle. */
 export const localize = (target: LocalizeTarget, key: string): string => {
   const language = getLanguage(target);
   const strings =
@@ -112,11 +96,12 @@ export const localize = (target: LocalizeTarget, key: string): string => {
   }
   const cachedValue = cachedLookups.get(key);
   if (cachedValue !== undefined) return cachedValue;
-  const resolved = resolveTranslationValue(strings, key) ?? key;
+  const resolved = typeof strings[key] === "string" ? strings[key] : key;
   cachedLookups.set(key, resolved);
   return resolved;
 };
 
+/** Creates a localization helper that always reads the latest HA context lazily. */
 export const createLocalize =
   (
     getHass: () => LocalizeTarget | null | undefined,
@@ -124,6 +109,7 @@ export const createLocalize =
   (key: string, ..._args: Array<string | number>) =>
     localize(getHass(), key);
 
+/** Extracts the preferred language from a Home Assistant-like object. */
 export const getHassLanguage = (
   hass: { language?: unknown; locale?: unknown } | null | undefined,
 ): string | undefined => {

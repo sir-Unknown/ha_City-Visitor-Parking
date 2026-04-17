@@ -1,3 +1,4 @@
+/** Shared presentation helpers and templates used by both Lovelace cards. */
 import { css, html, nothing, type TemplateResult } from "lit";
 import type {
   FavoriteOption,
@@ -12,6 +13,7 @@ import { DOMAIN, formatBalanceLabel, normalizeMatchValue } from "./helpers";
 
 export { css };
 
+/** Baseline card styling shared by the reservation and active-reservations cards. */
 export const BASE_CARD_STYLES = css`
   :host {
     display: block;
@@ -65,12 +67,14 @@ export const BASE_CARD_STYLES = css`
   }
 `;
 
+/** Creates the mutable status object used for temporary banner feedback. */
 export const createStatusState = (): StatusState => ({
   message: "",
   type: "info",
   clearHandle: null,
 });
 
+/** Triggers visual success or error feedback on a rendered progress button. */
 export const triggerProgressButtonFeedback = async (
   host: {
     updateComplete: Promise<boolean>;
@@ -91,6 +95,7 @@ export const triggerProgressButtonFeedback = async (
   }
 };
 
+/** Updates the shared status banner state and optionally auto-clears it later. */
 export const setStatusState = (
   state: StatusState,
   message: string,
@@ -114,6 +119,7 @@ export const setStatusState = (
   }
 };
 
+/** Clears the shared status banner and cancels any pending auto-clear timer. */
 export const clearStatusState = (
   state: StatusState,
   requestRender: () => void,
@@ -128,13 +134,16 @@ export const clearStatusState = (
   requestRender();
 };
 
+/** Home Assistant core translation key for the startup warning message. */
 export const HA_STARTING_MESSAGE_KEY = "ui.panel.lovelace.warning.starting";
 
+/** Reads a card picker translation and returns `null` when it is unresolved. */
 export const getCardText = (key: string): string | null => {
   const value = localize(getGlobalHass<LocalizeTarget>(), key);
   return value === key ? null : value;
 };
 
+/** Builds the loading message shown while Home Assistant or translations initialize. */
 export const getLoadingMessage = (
   hass: LocalizeTarget | null | undefined,
 ): string => {
@@ -146,6 +155,7 @@ export const getLoadingMessage = (
   return message === key ? "" : message;
 };
 
+/** Renders a minimal warning card while the frontend is not ready yet. */
 export const renderLoadingCard = (
   hass: LocalizeTarget | null | undefined,
 ): TemplateResult => {
@@ -161,6 +171,7 @@ export const renderLoadingCard = (
   `;
 };
 
+/** Renders the standard card header with an optional icon. */
 export const renderCardHeader = (
   title: string,
   icon: string | undefined,
@@ -176,6 +187,7 @@ export const renderCardHeader = (
   `;
 };
 
+/** Renders the permit selector or a read-only preview equivalent. */
 export const renderPermitSelect = (params: {
   hass: HomeAssistant | null | undefined;
   label: string;
@@ -216,6 +228,7 @@ export const renderPermitSelect = (params: {
   `;
 };
 
+/** Renders the name/favorite selector, including preview and error states. */
 export const renderFavoriteSelect = (params: {
   showName: boolean;
   showFavorites: boolean;
@@ -315,6 +328,7 @@ export const renderFavoriteSelect = (params: {
   `;
 };
 
+/** Renders the favorite action controls together with the start button area. */
 export const renderFavoriteActionRow = (params: {
   showFavorites: boolean;
   showAddFavorite: boolean;

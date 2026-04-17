@@ -1,4 +1,4 @@
-// Entry point — imports trigger side-effects (custom element registration).
+/** Registers the frontend cards and editors through module side effects. */
 import "./card-parking";
 import "./card-active";
 import "./editor-parking";
