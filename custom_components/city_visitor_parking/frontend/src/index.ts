@@ -2174,6 +2174,10 @@ const getActiveCardConfigForm = createConfigFormGetter(
         if (!activeEntryId || activeEntryId !== entryId) return;
         setPendingPermitDefaults(this, entryId);
         void this._loadZoneStatusForEntry(entryId);
+        // Invalidate active-plate cache so the next render re-fetches and
+        // picks up reservations ended or changed outside this card.
+        this._activeReservationsLoadedFor = null;
+        void this._loadActivePlates(entryId);
       };
       this._statusRefreshHandle = window.setInterval(
         refresh,

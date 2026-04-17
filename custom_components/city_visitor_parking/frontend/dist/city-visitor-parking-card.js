@@ -2138,6 +2138,8 @@ var getActiveCardConfigForm = createConfigFormGetter(
         if (!activeEntryId || activeEntryId !== entryId) return;
         setPendingPermitDefaults(this, entryId);
         void this._loadZoneStatusForEntry(entryId);
+        this._activeReservationsLoadedFor = null;
+        void this._loadActivePlates(entryId);
       };
       this._statusRefreshHandle = window.setInterval(
         refresh,
