@@ -61,10 +61,6 @@ den_haag:
   gui_url: "https://parkerendenhaag.denhaag.nl/"
   api_url: "api"
 
-# den_haag_demo:
-#   municipality_name: Den Haag Demo
-#   provider_id: demo
-
 s_hertogenbosch:
   municipality_name: "'s-Hertogenbosch"
   provider_id: dvsportal
@@ -93,10 +89,6 @@ eindhoven:
   gui_url: "https://mijn.2park.nl/"
   api_url: "/gsmpark-app-www/json"
 
-# eindhoven_demo:
-#   municipality_name: Eindhoven Demo
-#   provider_id: demo
-
 emmen:
   municipality_name: Emmen
   provider_id: 2park
@@ -124,10 +116,6 @@ groningen:
   base_url: "https://aanvraagparkeren.groningen.nl"
   gui_url: "https://aanvraagparkeren.groningen.nl/DVSPortal/"
   api_url: "/DVSPortal/api"
-
-# groningen_demo:
-#   municipality_name: Groningen Demo
-#   provider_id: demo
 
 haarlem:
   municipality_name: Haarlem
@@ -412,3 +400,22 @@ zwolle:
   base_url: "https://parkeerloket.zwolle.nl"
   gui_url: "https://parkeerloket.zwolle.nl/DVSPortal/"
   api_url: "/DVSWebAPI/api"
+
+#######################################################################
+# DEMO PROVIDERS
+# Uncomment the lines below to enable the demo providers.
+# These can be used for testing and development purposes,
+# as they do not require real credentials and return fixed data.
+#####################################################################
+
+den_haag_demo:
+  municipality_name: Den Haag Demo
+  provider_id: demo
+
+eindhoven_demo:
+  municipality_name: Eindhoven Demo
+  provider_id: demo
+
+groningen_demo:
+  municipality_name: Groningen Demo
+  provider_id: demo
