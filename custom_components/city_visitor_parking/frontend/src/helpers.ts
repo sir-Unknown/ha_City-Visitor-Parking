@@ -12,6 +12,7 @@ import { localize } from "./translations";
 export const DOMAIN = "city_visitor_parking";
 export const RESERVATION_STARTED_EVENT =
   "city-visitor-parking-reservation-started";
+export const RESERVATION_ENDED_EVENT = "city-visitor-parking-reservation-ended";
 
 export const EMPTY_ZONE_STATUS: ZoneStatus = {
   state: null,

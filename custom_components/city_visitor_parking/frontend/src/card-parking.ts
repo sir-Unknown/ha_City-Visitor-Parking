@@ -11,6 +11,7 @@ import type {
 import { ensureTranslations, getGlobalHass } from "./translations";
 import {
   DOMAIN,
+  RESERVATION_ENDED_EVENT,
   EMPTY_ZONE_STATUS,
   RESERVATION_STARTED_EVENT,
   applyZoneStatus,
@@ -172,6 +173,13 @@ class CityVisitorParkingNewReservationCard extends BaseLocalizedCard<CardConfig>
     this._handlePermitSelectChange(event);
   _onFavoriteSelectChange = (event: Event) =>
     this._handleFavoriteSelectChange(event);
+  _onReservationEnded = (event: Event) =>
+    void this._handleReservationEnded(event);
+
+  connectedCallback(): void {
+    super.connectedCallback();
+    window.addEventListener(RESERVATION_ENDED_EVENT, this._onReservationEnded);
+  }
 
   static async getConfigForm(hass?: HomeAssistant): Promise<{
     readonly schema: ReadonlyArray<Record<string, unknown>>;
@@ -259,6 +267,10 @@ class CityVisitorParkingNewReservationCard extends BaseLocalizedCard<CardConfig>
   }
 
   disconnectedCallback(): void {
+    window.removeEventListener(
+      RESERVATION_ENDED_EVENT,
+      this._onReservationEnded,
+    );
     super.disconnectedCallback();
     this._clearStatusRefresh();
   }
@@ -736,7 +748,9 @@ class CityVisitorParkingNewReservationCard extends BaseLocalizedCard<CardConfig>
       this._scheduleFavoriteActionsUpdate();
       return;
     }
-    this._maybeSyncEndWithStart(field?.id);
+    if (field?.id === "startDateTime") {
+      this._syncEndDateWithStart();
+    }
   }
 
   _handleChange(event: Event): void {
@@ -749,16 +763,8 @@ class CityVisitorParkingNewReservationCard extends BaseLocalizedCard<CardConfig>
       this._scheduleFavoriteActionsUpdate();
       return;
     }
-    this._maybeSyncEndWithStart(field?.id);
-  }
-
-  _maybeSyncEndWithStart(fieldId: string | undefined): void {
-    if (
-      fieldId === "startDateTime" &&
-      this._config?.show_start_time &&
-      this._config?.show_end_time
-    ) {
-      this._syncEndWithStart();
+    if (field?.id === "startDateTime") {
+      this._syncEndDateWithStart();
     }
   }
 
@@ -1203,18 +1209,6 @@ class CityVisitorParkingNewReservationCard extends BaseLocalizedCard<CardConfig>
     this._requestRender();
   }
 
-  _syncEndWithStart(): void {
-    if (!this._config?.show_end_time) return;
-    const startValue = this._getInputValue("startDateTime");
-    if (!startValue) return;
-    const start = parseDateTimeValue(startValue);
-    if (!start) return;
-    this._setInputValue(
-      "endDateTime",
-      formatDateTimeLocal(this._resolveDefaultEnd(start)),
-    );
-  }
-
   _getStatusDefaultTimes(now: Date): { start: Date; end: Date } {
     const window = this._getRelevantWindowTimes();
     if (window) {
@@ -1251,18 +1245,25 @@ class CityVisitorParkingNewReservationCard extends BaseLocalizedCard<CardConfig>
     return start > now ? start : new Date(now);
   }
 
-  _resolveDefaultEnd(start: Date): Date {
-    const window = this._getRelevantWindowTimes();
-    if (window && window.end > start) {
-      return this._normalizeEndOfDayDisplay(window.end);
+  _syncEndDateWithStart(): void {
+    if (!this._config?.show_start_time || !this._config?.show_end_time) return;
+    const start = parseDateTimeValue(this._getInputValue("startDateTime"));
+    const end = parseDateTimeValue(this._getInputValue("endDateTime"));
+    if (!start || !end) return;
+    if (
+      start.getFullYear() === end.getFullYear() &&
+      start.getMonth() === end.getMonth() &&
+      start.getDate() === end.getDate()
+    ) {
+      return;
     }
-    const fallback = new Date(start.getTime() + 60 * 1000);
-    if (!window) {
-      const dayEnd = new Date(start);
-      dayEnd.setHours(23, 59, 0, 0);
-      return dayEnd > start ? dayEnd : fallback;
-    }
-    return fallback;
+    const syncedEnd = new Date(end);
+    syncedEnd.setFullYear(
+      start.getFullYear(),
+      start.getMonth(),
+      start.getDate(),
+    );
+    this._setInputValue("endDateTime", formatDateTimeLocal(syncedEnd));
   }
 
   _applyStatusDefaultsToForm(force = false): void {
@@ -1364,6 +1365,20 @@ class CityVisitorParkingNewReservationCard extends BaseLocalizedCard<CardConfig>
       this._activeReservationsByPlate = new Map();
     }
     this._requestRender();
+  }
+
+  async _handleReservationEnded(event: Event): Promise<void> {
+    const activeEntryId = this._getActiveEntryId();
+    if (!this._hass || !activeEntryId) return;
+    const detail = (
+      event as CustomEvent<{
+        device_id?: string | null;
+      }>
+    ).detail;
+    const deviceId = (detail?.device_id ?? "").trim();
+    if (deviceId && this._deviceId && deviceId !== this._deviceId) return;
+    this._activeReservationsLoadedFor = null;
+    await this._loadActivePlates(activeEntryId);
   }
 
   _getActiveEntryId(): string | null {

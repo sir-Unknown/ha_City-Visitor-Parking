@@ -671,6 +671,7 @@ var createLocalize = (getHass) => (key, ..._args) => localize(getHass(), key);
 // src/helpers.ts
 var DOMAIN = "city_visitor_parking";
 var RESERVATION_STARTED_EVENT = "city-visitor-parking-reservation-started";
+var RESERVATION_ENDED_EVENT = "city-visitor-parking-reservation-ended";
 var EMPTY_ZONE_STATUS = {
   state: null,
   kind: null,
@@ -1100,6 +1101,7 @@ var renderFavoriteActionRow = (params) => {
     const isSuccess = params.startButtonSuccess;
     const isWarning = params.startButtonWarning;
     const isTimeConflict = params.startButtonTimeConflict;
+    const isDisabled = params.startDisabled && !isSuccess;
     const buttonClass = `start-button${isSuccess ? " success" : isWarning ? " warning" : ""}`;
     const label = isWarning ? params.localize("action.permit_unavailable") : isTimeConflict ? params.localize("action.time_unavailable") : params.localize("action.start_reservation");
     return b2`
@@ -1109,7 +1111,7 @@ var renderFavoriteActionRow = (params) => {
             variant=${isSuccess ? "success" : isWarning ? "danger" : A}
             appearance=${isSuccess || isWarning || isTimeConflict ? "filled" : A}
             .progress=${params.startInFlight}
-            ?disabled=${params.startDisabled}
+            ?disabled=${isDisabled}
             aria-label=${label}
             title=${label}
           >
@@ -1431,6 +1433,11 @@ var CityVisitorParkingNewReservationCard = class extends BaseLocalizedCard {
     };
     this._onPermitSelectChange = (event) => this._handlePermitSelectChange(event);
     this._onFavoriteSelectChange = (event) => this._handleFavoriteSelectChange(event);
+    this._onReservationEnded = (event) => void this._handleReservationEnded(event);
+  }
+  connectedCallback() {
+    super.connectedCallback();
+    window.addEventListener(RESERVATION_ENDED_EVENT, this._onReservationEnded);
   }
   static async getConfigForm(hass) {
     return getCardConfigForm(hass);
@@ -1504,6 +1511,10 @@ var CityVisitorParkingNewReservationCard = class extends BaseLocalizedCard {
     this._syncEntryState(false);
   }
   disconnectedCallback() {
+    window.removeEventListener(
+      RESERVATION_ENDED_EVENT,
+      this._onReservationEnded
+    );
     super.disconnectedCallback();
     this._clearStatusRefresh();
   }
@@ -1910,7 +1921,9 @@ var CityVisitorParkingNewReservationCard = class extends BaseLocalizedCard {
       this._scheduleFavoriteActionsUpdate();
       return;
     }
-    this._maybeSyncEndWithStart(field?.id);
+    if (field?.id === "startDateTime") {
+      this._syncEndDateWithStart();
+    }
   }
   _handleChange(event) {
     const target = event.target;
@@ -1922,11 +1935,8 @@ var CityVisitorParkingNewReservationCard = class extends BaseLocalizedCard {
       this._scheduleFavoriteActionsUpdate();
       return;
     }
-    this._maybeSyncEndWithStart(field?.id);
-  }
-  _maybeSyncEndWithStart(fieldId) {
-    if (fieldId === "startDateTime" && this._config?.show_start_time && this._config?.show_end_time) {
-      this._syncEndWithStart();
+    if (field?.id === "startDateTime") {
+      this._syncEndDateWithStart();
     }
   }
   _handlePermitSelectChange(event) {
@@ -2286,17 +2296,6 @@ var CityVisitorParkingNewReservationCard = class extends BaseLocalizedCard {
     this._formValues[id] = value;
     this._requestRender();
   }
-  _syncEndWithStart() {
-    if (!this._config?.show_end_time) return;
-    const startValue = this._getInputValue("startDateTime");
-    if (!startValue) return;
-    const start = parseDateTimeValue(startValue);
-    if (!start) return;
-    this._setInputValue(
-      "endDateTime",
-      formatDateTimeLocal(this._resolveDefaultEnd(start))
-    );
-  }
   _getStatusDefaultTimes(now) {
     const window2 = this._getRelevantWindowTimes();
     if (window2) {
@@ -2327,18 +2326,21 @@ var CityVisitorParkingNewReservationCard = class extends BaseLocalizedCard {
   _resolveDefaultStart(start, now) {
     return start > now ? start : new Date(now);
   }
-  _resolveDefaultEnd(start) {
-    const window2 = this._getRelevantWindowTimes();
-    if (window2 && window2.end > start) {
-      return this._normalizeEndOfDayDisplay(window2.end);
+  _syncEndDateWithStart() {
+    if (!this._config?.show_start_time || !this._config?.show_end_time) return;
+    const start = parseDateTimeValue(this._getInputValue("startDateTime"));
+    const end = parseDateTimeValue(this._getInputValue("endDateTime"));
+    if (!start || !end) return;
+    if (start.getFullYear() === end.getFullYear() && start.getMonth() === end.getMonth() && start.getDate() === end.getDate()) {
+      return;
     }
-    const fallback = new Date(start.getTime() + 60 * 1e3);
-    if (!window2) {
-      const dayEnd = new Date(start);
-      dayEnd.setHours(23, 59, 0, 0);
-      return dayEnd > start ? dayEnd : fallback;
-    }
-    return fallback;
+    const syncedEnd = new Date(end);
+    syncedEnd.setFullYear(
+      start.getFullYear(),
+      start.getMonth(),
+      start.getDate()
+    );
+    this._setInputValue("endDateTime", formatDateTimeLocal(syncedEnd));
   }
   _applyStatusDefaultsToForm(force = false) {
     if (!this._config) return;
@@ -2419,6 +2421,15 @@ var CityVisitorParkingNewReservationCard = class extends BaseLocalizedCard {
       this._activeReservationsByPlate = /* @__PURE__ */ new Map();
     }
     this._requestRender();
+  }
+  async _handleReservationEnded(event) {
+    const activeEntryId = this._getActiveEntryId();
+    if (!this._hass || !activeEntryId) return;
+    const detail = event.detail;
+    const deviceId = (detail?.device_id ?? "").trim();
+    if (deviceId && this._deviceId && deviceId !== this._deviceId) return;
+    this._activeReservationsLoadedFor = null;
+    await this._loadActivePlates(activeEntryId);
   }
   _getActiveEntryId() {
     return getConfigEntryId(this._config) || this._selectedEntryId;
@@ -3083,6 +3094,13 @@ var CityVisitorParkingActiveCard = class extends BaseLocalizedCard {
       reservationId,
       "message.reservation_ended",
       false
+    );
+    window.dispatchEvent(
+      new CustomEvent(RESERVATION_ENDED_EVENT, {
+        detail: {
+          device_id: deviceId
+        }
+      })
     );
     await this._setEndButtonSuccess(reservationId);
     await triggerProgressButtonFeedback(

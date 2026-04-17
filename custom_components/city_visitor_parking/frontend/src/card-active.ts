@@ -3,6 +3,7 @@ import type { DeviceEntry, HomeAssistant, ValueElement } from "./types";
 import { ensureTranslations, getGlobalHass, localize } from "./translations";
 import {
   DOMAIN,
+  RESERVATION_ENDED_EVENT,
   RESERVATION_STARTED_EVENT,
   buildPermitTitleMap,
   fetchPermitEntries,
@@ -775,6 +776,13 @@ class CityVisitorParkingActiveCard extends BaseLocalizedCard<CardConfig> {
       reservationId,
       "message.reservation_ended",
       false,
+    );
+    window.dispatchEvent(
+      new CustomEvent(RESERVATION_ENDED_EVENT, {
+        detail: {
+          device_id: deviceId,
+        },
+      }),
     );
     await this._setEndButtonSuccess(reservationId);
     await triggerProgressButtonFeedback(

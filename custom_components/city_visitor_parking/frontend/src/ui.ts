@@ -394,6 +394,7 @@ export const renderFavoriteActionRow = (params: {
         const isSuccess = params.startButtonSuccess;
         const isWarning = params.startButtonWarning;
         const isTimeConflict = params.startButtonTimeConflict;
+        const isDisabled = params.startDisabled && !isSuccess;
         const buttonClass = `start-button${isSuccess ? " success" : isWarning ? " warning" : ""}`;
         const label = isWarning
           ? params.localize("action.permit_unavailable")
@@ -409,7 +410,7 @@ export const renderFavoriteActionRow = (params: {
               ? "filled"
               : nothing}
             .progress=${params.startInFlight}
-            ?disabled=${params.startDisabled}
+            ?disabled=${isDisabled}
             aria-label=${label}
             title=${label}
           >
