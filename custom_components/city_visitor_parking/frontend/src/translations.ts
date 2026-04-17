@@ -81,32 +81,40 @@ export const ensureTranslations = async (
   translationsInFlight.delete(language);
 };
 
+type TranslationValue = string | TranslationObject | undefined;
+
 const resolveTranslationValue = (
-  obj: TranslationObject,
-  parts: string[],
-): string | undefined => {
-  let current: TranslationObject | string = obj;
+  strings: TranslationObject,
+  key: string,
+): string | null => {
+  const directValue = strings[key];
+  if (typeof directValue === "string") return directValue;
+  const cardStrings = strings.card;
+  if (!cardStrings || typeof cardStrings !== "object") return null;
+  const parts = key.split(".");
+  let current: TranslationValue = cardStrings as TranslationObject;
   for (const part of parts) {
-    if (typeof current !== "object" || current === null) return undefined;
-    current = current[part] as TranslationObject | string;
+    if (!current || typeof current !== "object") return null;
+    current = (current as TranslationObject)[part] as TranslationValue;
   }
-  return typeof current === "string" ? current : undefined;
+  return typeof current === "string" ? current : null;
 };
 
 export const localize = (target: LocalizeTarget, key: string): string => {
   const language = getLanguage(target);
-  let lookup = translationLookupCache.get(language);
-  if (!lookup) {
-    lookup = new Map();
-    translationLookupCache.set(language, lookup);
+  const strings =
+    translationsCache.get(language) || translationsCache.get(DEFAULT_LANGUAGE);
+  if (!strings) return key;
+  let cachedLookups = translationLookupCache.get(language);
+  if (!cachedLookups) {
+    cachedLookups = new Map();
+    translationLookupCache.set(language, cachedLookups);
   }
-  if (lookup.has(key)) return lookup.get(key)!;
-  const strings = translationsCache.get(language);
-  const parts = key.split(".");
-  const value = strings ? resolveTranslationValue(strings, parts) : undefined;
-  const result = value ?? key;
-  lookup.set(key, result);
-  return result;
+  const cachedValue = cachedLookups.get(key);
+  if (cachedValue !== undefined) return cachedValue;
+  const resolved = resolveTranslationValue(strings, key) ?? key;
+  cachedLookups.set(key, resolved);
+  return resolved;
 };
 
 export const createLocalize =

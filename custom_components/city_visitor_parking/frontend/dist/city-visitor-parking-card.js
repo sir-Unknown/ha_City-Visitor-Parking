@@ -643,28 +643,33 @@ var ensureTranslations = async (target) => {
   await loadPromise;
   translationsInFlight.delete(language);
 };
-var resolveTranslationValue = (obj, parts) => {
-  let current = obj;
+var resolveTranslationValue = (strings, key) => {
+  const directValue = strings[key];
+  if (typeof directValue === "string") return directValue;
+  const cardStrings = strings.card;
+  if (!cardStrings || typeof cardStrings !== "object") return null;
+  const parts = key.split(".");
+  let current = cardStrings;
   for (const part of parts) {
-    if (typeof current !== "object" || current === null) return void 0;
+    if (!current || typeof current !== "object") return null;
     current = current[part];
   }
-  return typeof current === "string" ? current : void 0;
+  return typeof current === "string" ? current : null;
 };
 var localize = (target, key) => {
   const language = getLanguage(target);
-  let lookup = translationLookupCache.get(language);
-  if (!lookup) {
-    lookup = /* @__PURE__ */ new Map();
-    translationLookupCache.set(language, lookup);
+  const strings = translationsCache.get(language) || translationsCache.get(DEFAULT_LANGUAGE);
+  if (!strings) return key;
+  let cachedLookups = translationLookupCache.get(language);
+  if (!cachedLookups) {
+    cachedLookups = /* @__PURE__ */ new Map();
+    translationLookupCache.set(language, cachedLookups);
   }
-  if (lookup.has(key)) return lookup.get(key);
-  const strings = translationsCache.get(language);
-  const parts = key.split(".");
-  const value = strings ? resolveTranslationValue(strings, parts) : void 0;
-  const result = value ?? key;
-  lookup.set(key, result);
-  return result;
+  const cachedValue = cachedLookups.get(key);
+  if (cachedValue !== void 0) return cachedValue;
+  const resolved = resolveTranslationValue(strings, key) ?? key;
+  cachedLookups.set(key, resolved);
+  return resolved;
 };
 var createLocalize = (getHass) => (key, ..._args) => localize(getHass(), key);
 
