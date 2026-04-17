@@ -17,7 +17,7 @@ ZONE_STATUS_RESPONSE_KEYS = {
     "window_kind",
     "window_start",
     "window_end",
-    "remaining_minutes",
+    "remaining_balance",
     "balance_unit",
 }
 EXPECTED_REMAINING_MINUTES = 15
@@ -32,7 +32,7 @@ def test_build_status_payload_includes_zone_status_response_contract() -> None:
     )
     data = CoordinatorData(
         permit_id="permit-1",
-        permit_remaining_minutes=-12,
+        permit_remaining_balance=-12,
         permit_balance_unit="minutes",
         zone_validity=(current_window,),
         reservations=(),
@@ -53,7 +53,7 @@ def test_build_status_payload_includes_zone_status_response_contract() -> None:
     assert payload["window_kind"] == "current"
     assert payload["window_start"] == current_window.start.isoformat()
     assert payload["window_end"] == current_window.end.isoformat()
-    assert payload["remaining_minutes"] == 0.0
+    assert payload["remaining_balance"] == 0.0
     assert payload["balance_unit"] == "minutes"
 
 
@@ -63,7 +63,7 @@ def test_build_status_payload_uses_null_window_fields_when_no_window_applies() -
     next_change = now + timedelta(hours=2)
     data = CoordinatorData(
         permit_id="permit-1",
-        permit_remaining_minutes=15,
+        permit_remaining_balance=15,
         permit_balance_unit=None,
         zone_validity=(),
         reservations=(),
@@ -82,5 +82,5 @@ def test_build_status_payload_uses_null_window_fields_when_no_window_applies() -
     assert payload["window_kind"] is None
     assert payload["window_start"] is None
     assert payload["window_end"] is None
-    assert payload["remaining_minutes"] == EXPECTED_REMAINING_MINUTES
+    assert payload["remaining_balance"] == EXPECTED_REMAINING_MINUTES
     assert payload["balance_unit"] is None

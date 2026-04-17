@@ -110,6 +110,9 @@ class CityVisitorParkingNewReservationCard extends BaseLocalizedCard<CardConfig>
       .favorite-actions .badge-checked {
         --badge-color: var(--primary-color);
       }
+      .favorite-actions .balance-badge {
+        --ha-font-size-xs: var(--ha-font-size-s);
+      }
       .start-button {
         margin-left: auto;
       }
@@ -999,7 +1002,7 @@ class CityVisitorParkingNewReservationCard extends BaseLocalizedCard<CardConfig>
       kind,
       start: kind ? str(payload?.window_start) : null,
       end: kind ? str(payload?.window_end) : null,
-      remainingMinutes: num(payload?.remaining_minutes),
+      remainingMinutes: num(payload?.remaining_balance),
       balanceUnit: str(payload?.balance_unit),
     };
   }

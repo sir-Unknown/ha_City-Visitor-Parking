@@ -116,10 +116,10 @@ export type ZoneStatusResponse = {
   window_end: string | null;
 
   /**
-   * Non-negative remaining permit balance in minutes.
+   * Non-negative remaining permit balance.
    * `build_status_payload()` clamps this value to `0` or higher.
    */
-  remaining_minutes: number;
+  remaining_balance: number;
 
   /**
    * Permit balance unit from coordinator data, or `null` when the provider

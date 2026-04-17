@@ -934,7 +934,7 @@ async def test_service_list_reservations_response(
     )
     data = CoordinatorData(
         permit_id="permit1",
-        permit_remaining_minutes=0,
+        permit_remaining_balance=0,
         permit_balance_unit=None,
         zone_validity=(),
         reservations=(active_reservation, future_reservation, past_reservation),
@@ -986,7 +986,7 @@ async def test_service_list_reservations_stale(hass: HomeAssistant) -> None:
     now = datetime(2025, 1, 1, 12, 0, tzinfo=UTC)
     data = CoordinatorData(
         permit_id="permit1",
-        permit_remaining_minutes=0,
+        permit_remaining_balance=0,
         permit_balance_unit=None,
         zone_validity=(),
         reservations=(
@@ -1044,7 +1044,7 @@ async def test_service_get_status_response(hass: HomeAssistant) -> None:
     effective_range = _override_range_for_day(now, time(11, 0), time(12, 0))
     entry.runtime_data.coordinator.data = CoordinatorData(
         permit_id="permit1",
-        permit_remaining_minutes=90,
+        permit_remaining_balance=90,
         permit_balance_unit=None,
         zone_validity=(provider_range,),
         reservations=(),
@@ -1072,7 +1072,7 @@ async def test_service_get_status_response(hass: HomeAssistant) -> None:
     assert response["is_chargeable_now"] is False
     assert response["window_kind"] == "next"
     assert response["permit_id"] == "permit1"
-    assert response["remaining_minutes"] == EXPECTED_REMAINING_MINUTES
+    assert response["remaining_balance"] == EXPECTED_REMAINING_MINUTES
     assert response["stale"] is False
     assert response["provider_windows_today"] == [
         {
@@ -1101,7 +1101,7 @@ async def test_service_get_status_stale(hass: HomeAssistant) -> None:
     )
     entry.runtime_data.coordinator.data = CoordinatorData(
         permit_id="permit1",
-        permit_remaining_minutes=30,
+        permit_remaining_balance=30,
         permit_balance_unit=None,
         zone_validity=(window,),
         reservations=(),
@@ -1157,7 +1157,7 @@ async def test_service_get_status_stale_recomputes_consistent_windows(
     )
     entry.runtime_data.coordinator.data = CoordinatorData(
         permit_id="permit1",
-        permit_remaining_minutes=45,
+        permit_remaining_balance=45,
         permit_balance_unit=None,
         zone_validity=(provider_range,),
         reservations=(),

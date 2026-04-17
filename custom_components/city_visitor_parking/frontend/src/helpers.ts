@@ -271,6 +271,7 @@ export const isHassRunning = (
 export const formatBalanceLabel = (
   remainingMinutes: number,
   balanceUnit: string | null,
+  localize: (key: string) => string,
 ): { text: string; icon: string } => {
   const isMonetary =
     balanceUnit !== null && balanceUnit !== "TIMES" && balanceUnit !== "MINUTE";
@@ -296,8 +297,13 @@ export const formatBalanceLabel = (
   const totalMins = Math.round(remainingMinutes);
   const hours = Math.floor(totalMins / 60);
   const mins = totalMins % 60;
-  return {
-    text: hours > 0 ? `${hours}u ${mins}m` : `${mins}m`,
-    icon: "mdi:clock-outline",
-  };
+  const h = localize("unit.hours");
+  const m = localize("unit.minutes");
+  const text =
+    hours > 0 && mins > 0
+      ? `${hours}${h} ${mins}${m}`
+      : hours > 0
+        ? `${hours}${h}`
+        : `${mins}${m}`;
+  return { text, icon: "mdi:progress-clock" };
 };
