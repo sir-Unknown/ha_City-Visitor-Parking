@@ -1,2 +1,0 @@
-frontend:
-  - "custom_components/city_visitor_parking/frontend/**"
