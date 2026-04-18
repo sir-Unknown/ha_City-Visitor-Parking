@@ -131,21 +131,42 @@ jobs:
         run: |
           python3 - <<'PYEOF'
           import json, tomllib, sys, pathlib
+          from packaging.requirements import Requirement
 
           manifest = json.loads(pathlib.Path("custom_components/city_visitor_parking/manifest.json").read_text())
           with open("pyproject.toml", "rb") as f:
               pyproject = tomllib.load(f)
 
-          manifest_pkg = next((r for r in manifest["requirements"] if r.lower().startswith("pycityvisitorparking==")), None)
-          deps = pyproject.get("project", {}).get("dependencies", [])
-          pyproject_pkg = next((d for d in deps if d.lower().startswith("pycityvisitorparking==")), None)
+          def find_pycvp(deps):
+              for d in deps:
+                  try:
+                      req = Requirement(d)
+                  except Exception:
+                      continue
+                  if req.name.lower() == "pycityvisitorparking":
+                      return req
+              return None
 
-          if manifest_pkg is None or pyproject_pkg is None:
+          manifest_req = find_pycvp(manifest["requirements"])
+          pyproject_req = find_pycvp(pyproject.get("project", {}).get("dependencies", []))
+
+          if manifest_req is None or pyproject_req is None:
+              print("::warning::pycityvisitorparking not found in requirements — skipping sync check.")
+              sys.exit(0)
+
+          if manifest_req.url or pyproject_req.url:
               print("::warning::Non-PyPI pycityvisitorparking requirement — skipping sync check.")
               sys.exit(0)
 
-          manifest_ver = manifest_pkg.split("==")[1]
-          pyproject_ver = pyproject_pkg.split("==")[1]
+          def eq_version(req, source):
+              versions = [s.version for s in req.specifier if s.operator == "=="]
+              if not versions:
+                  print(f"::error::{source}: pycityvisitorparking must use == pinning, got: {req}")
+                  sys.exit(1)
+              return versions[0]
+
+          manifest_ver = eq_version(manifest_req, "manifest.json")
+          pyproject_ver = eq_version(pyproject_req, "pyproject.toml")
 
           print(f"manifest.json  : {manifest_ver}")
           print(f"pyproject.toml : {pyproject_ver}")
