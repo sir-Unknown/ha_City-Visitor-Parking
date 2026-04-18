@@ -5,10 +5,11 @@ from __future__ import annotations
 import inspect
 import logging
 import time
-from collections.abc import Callable, Mapping
+from collections.abc import Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING, Final, Protocol, cast
 
+import voluptuous as vol
 from homeassistant.components.http import StaticPathConfig
 from homeassistant.components.lovelace.const import CONF_RESOURCE_TYPE_WS, LOVELACE_DATA
 from homeassistant.components.lovelace.resources import ResourceStorageCollection
@@ -33,6 +34,7 @@ from .client import async_create_client
 from .const import (
     CONF_API_URL,
     CONF_BASE_URL,
+    CONF_DEMO_MODE,
     CONF_FREE_DATES,
     CONF_GUI_URL,
     CONF_MUNICIPALITY,
@@ -60,16 +62,6 @@ if TYPE_CHECKING:
 _LOGGER = logging.getLogger(__name__)
 
 
-class _ConfigValidation(Protocol):
-    """Protocol for config validation helpers we rely on."""
-
-    def config_entry_only_config_schema(
-        self, domain: str
-    ) -> Callable[[ConfigType], ConfigType]:
-        """Return a config schema for config entry only integrations."""
-        raise NotImplementedError
-
-
 class _ResourceStorage(Protocol):
     """Protocol for Lovelace resource storage helpers we rely on."""
 
@@ -94,16 +86,23 @@ class _ResourceStorage(Protocol):
         raise NotImplementedError
 
 
-_config_entry_only_schema = cast(
-    "_ConfigValidation", cv
-).config_entry_only_config_schema
-CONFIG_SCHEMA: Final[Callable[[ConfigType], ConfigType]] = _config_entry_only_schema(
-    DOMAIN
+CONFIG_SCHEMA: Final = vol.Schema(
+    {
+        vol.Optional(DOMAIN): vol.Schema(
+            {
+                vol.Optional(CONF_DEMO_MODE, default=False): cv.boolean,
+            }
+        )
+    },
+    extra=vol.ALLOW_EXTRA,
 )
 
 
-async def async_setup(hass: HomeAssistant, _config: ConfigType) -> bool:
+async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     """Set up the City visitor parking integration."""
+    domain_config = config.get(DOMAIN) or {}
+    hass.data.setdefault(DOMAIN, {})
+    hass.data[DOMAIN][CONF_DEMO_MODE] = domain_config.get(CONF_DEMO_MODE, False)
     ha_cvp_version, pycvp_version = await async_get_versions(hass)
     _LOGGER.debug(
         "%s",

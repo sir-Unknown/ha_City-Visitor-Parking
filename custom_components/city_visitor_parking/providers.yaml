@@ -412,3 +412,21 @@ zwolle:
   base_url: "https://parkeerloket.zwolle.nl"
   gui_url: "https://parkeerloket.zwolle.nl/DVSPortal/"
   api_url: "/DVSWebAPI/api"
+
+#######################################################################
+# DEMO PROVIDERS
+# Requires `city_visitor_parking:\n  demo: true` in configuration.yaml.
+# No real credentials needed — returns fixed data for testing.
+#######################################################################
+
+den_haag_demo:
+  municipality_name: Den Haag Demo
+  provider_id: demo
+
+eindhoven_demo:
+  municipality_name: Eindhoven Demo
+  provider_id: demo
+
+groningen_demo:
+  municipality_name: Groningen Demo
+  provider_id: demo
