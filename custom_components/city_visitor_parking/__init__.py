@@ -25,6 +25,7 @@ from homeassistant.exceptions import (
     ConfigEntryError,
     ConfigEntryNotReady,
 )
+from homeassistant.helpers import config_validation as cv
 from homeassistant.setup import async_when_setup
 from pycityvisitorparking import AuthError, NetworkError
 from pycityvisitorparking.exceptions import PyCityVisitorParkingError
@@ -89,7 +90,7 @@ CONFIG_SCHEMA: Final = vol.Schema(
     {
         vol.Optional(DOMAIN): vol.Schema(
             {
-                vol.Optional(CONF_DEMO_MODE, default=False): bool,
+                vol.Optional(CONF_DEMO_MODE, default=False): cv.boolean,
             }
         )
     },
@@ -101,7 +102,7 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     """Set up the City visitor parking integration."""
     domain_config = config.get(DOMAIN) or {}
     hass.data.setdefault(DOMAIN, {})
-    hass.data[DOMAIN][CONF_DEMO_MODE] = bool(domain_config.get(CONF_DEMO_MODE, False))
+    hass.data[DOMAIN][CONF_DEMO_MODE] = domain_config.get(CONF_DEMO_MODE, False)
     ha_cvp_version, pycvp_version = await async_get_versions(hass)
     _LOGGER.debug(
         "%s",
