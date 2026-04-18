@@ -292,10 +292,9 @@ jobs:
                   raise ValueError("No pycityvisitorparking requirement found to replace")
               data["requirements"] = new_reqs
           elif pycvp_pypi:
-              new_reqs = [re.sub(r'pycityvisitorparking==\S+', f'pycityvisitorparking=={pycvp_pypi}', r) for r in data["requirements"]]
-              if new_reqs == data["requirements"]:
+              if not any(re.search(r'pycityvisitorparking==\S+', r, re.IGNORECASE) for r in data["requirements"]):
                   raise ValueError("No pycityvisitorparking==... requirement found to replace")
-              data["requirements"] = new_reqs
+              data["requirements"] = [re.sub(r'pycityvisitorparking==\S+', f'pycityvisitorparking=={pycvp_pypi}', r, flags=re.IGNORECASE) for r in data["requirements"]]
           # Derive a human-readable version label for the release notes
           pycvp_req = next((r for r in data["requirements"] if re.search(r'pycityvisitorparking', r, re.IGNORECASE)), "")
           sha_match = re.search(r'[a-f0-9]{40}', pycvp_req)
