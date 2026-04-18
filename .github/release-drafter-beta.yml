@@ -46,7 +46,7 @@ categories:
     labels:
       - "documentation"
 template: |
-  <h1><img src="https://github.com/sir-Unknown/ha_City-Visitor-Parking/blob/main/custom_components/city_visitor_parking/brand/icon@2x.png" alt="City Visitor Parking" height="80" valign="middle"> City Visitor Parking</h1>
+  <h1><img src="https://raw.githubusercontent.com/sir-Unknown/ha_City-Visitor-Parking/main/custom_components/city_visitor_parking/brand/icon@2x.png" alt="City Visitor Parking" height="80" valign="middle"> City Visitor Parking</h1>
 
   <br>
 
