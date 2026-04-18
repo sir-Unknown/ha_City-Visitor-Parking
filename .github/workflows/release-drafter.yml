@@ -63,7 +63,7 @@ jobs:
         if: github.event.pull_request.base.ref == 'main'
         uses: release-drafter/release-drafter@139054aeaa9adc52ab36ddf67437541f039b88e2 # v7.1.1
         with:
-          disable-releaser: true
+          dry-run: true
         env:
           GITHUB_TOKEN: ${{ github.token }}
 
@@ -72,7 +72,7 @@ jobs:
         uses: release-drafter/release-drafter@139054aeaa9adc52ab36ddf67437541f039b88e2 # v7.1.1
         with:
           config-name: release-drafter-testing.yml
-          disable-releaser: true
+          dry-run: true
         env:
           GITHUB_TOKEN: ${{ github.token }}
 
