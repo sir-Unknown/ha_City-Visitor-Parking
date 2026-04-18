@@ -130,20 +130,22 @@ jobs:
       - name: Check pycityvisitorparking version sync (manifest.json vs pyproject.toml)
         run: |
           python3 - <<'PYEOF'
-          import json, re, sys, pathlib
+          import json, tomllib, sys, pathlib
 
           manifest = json.loads(pathlib.Path("custom_components/city_visitor_parking/manifest.json").read_text())
-          pyproject = pathlib.Path("pyproject.toml").read_text()
+          with open("pyproject.toml", "rb") as f:
+              pyproject = tomllib.load(f)
 
           manifest_pkg = next((r for r in manifest["requirements"] if r.lower().startswith("pycityvisitorparking==")), None)
-          pyproject_match = re.search(r'(?i)pycityvisitorparking==(\S+)"', pyproject)
+          deps = pyproject.get("project", {}).get("dependencies", [])
+          pyproject_pkg = next((d for d in deps if d.lower().startswith("pycityvisitorparking==")), None)
 
-          if manifest_pkg is None or pyproject_match is None:
+          if manifest_pkg is None or pyproject_pkg is None:
               print("::warning::Non-PyPI pycityvisitorparking requirement — skipping sync check.")
               sys.exit(0)
 
           manifest_ver = manifest_pkg.split("==")[1]
-          pyproject_ver = pyproject_match.group(1)
+          pyproject_ver = pyproject_pkg.split("==")[1]
 
           print(f"manifest.json  : {manifest_ver}")
           print(f"pyproject.toml : {pyproject_ver}")
