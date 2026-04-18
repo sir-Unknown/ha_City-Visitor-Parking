@@ -18,7 +18,7 @@ test = [
   "pytest==9.0.0",
   "pytest-asyncio==1.3.0",
   "pytest-cov==7.0.0",
-  "pytest-homeassistant-custom-component==0.13.322", # TODO: when bumping, re-check allow-ghsas in dependency-review.yml for stale exceptions
+  "pytest-homeassistant-custom-component==0.13.324", # TODO: when bumping, re-check allow-ghsas in dependency-review.yml for stale exceptions
   "freezegun==1.5.2",
 ]
 perf = [

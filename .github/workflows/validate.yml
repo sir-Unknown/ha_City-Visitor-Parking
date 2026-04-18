@@ -1,3 +1,7 @@
+#
+# Validates code quality, integration metadata, release policy, and frontend
+# assets. The jobs are kept separate so required checks stay easy to scan in the
+# GitHub UI.
 name: Validate
 
 on:
@@ -28,8 +32,8 @@ concurrency:
 permissions: {}
 
 jobs:
-  ruff:
-    name: Ruff (lint/format)
+  python_quality:
+    name: Python quality
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -52,8 +56,8 @@ jobs:
         run: uv run --python "$(sed -n 's/^requires-python = \">=\\([0-9][0-9.]*\\)\"$/\\1/p' pyproject.toml)" --only-group dev ruff format --check .
 
   hassfest:
-    name: Hassfest validation
-    needs: [ruff]
+    name: Integration metadata (Hassfest)
+    needs: [python_quality]
     if: ${{ github.ref_name != 'testing' && !(contains(github.ref_name, '-beta') || contains(github.ref_name, '-rc') || contains(github.ref_name, '-alpha')) }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -68,8 +72,8 @@ jobs:
         uses: home-assistant/actions/hassfest@f6f29a7ee3fa0eccadf3620a7b9ee00ab54ec03b # master
 
   hacs:
-    name: HACS validation
-    needs: [ruff]
+    name: Integration metadata (HACS)
+    needs: [python_quality]
     if: ${{ github.ref_name != 'testing' && !(contains(github.ref_name, '-beta') || contains(github.ref_name, '-rc') || contains(github.ref_name, '-alpha')) }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -87,9 +91,9 @@ jobs:
         env:
           REPOSITORY_REF: ${{ github.event_name == 'pull_request' && github.head_ref || github.ref_name }}
 
-  tests:
-    name: Pytest
-    needs: [ruff]
+  python_tests:
+    name: Python tests
+    needs: [python_quality]
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
@@ -113,8 +117,8 @@ jobs:
           PYTHONPATH: ${{ github.workspace }}
         run: uv run pytest tests/components/city_visitor_parking --cov=custom_components.city_visitor_parking --cov-report=term-missing
 
-  manifest-version:
-    name: Manifest Python package version
+  release_policy:
+    name: Release policy
     if: ${{ github.ref_name != 'testing' && !(contains(github.ref_name, '-beta') || contains(github.ref_name, '-rc') || contains(github.ref_name, '-alpha')) }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -235,8 +239,8 @@ jobs:
             fi
           fi
 
-  frontend:
-    name: Frontend build
+  frontend_quality:
+    name: Frontend quality
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:

@@ -2,14 +2,12 @@
 # Advisory Database. Fails on findings with severity >= moderate and posts a
 # summary comment on the PR when issues are found.
 #
-# Note: allow-ghsas contains temporary exceptions for packages pinned by
-# homeassistant==2026.4.1 that cannot be updated until upstream HA updates:
+# Note: allow-ghsas contains temporary exceptions for packages pinned by the
+# current pytest-homeassistant-custom-component / Home Assistant dependency set
+# that cannot yet be updated cleanly in this repository.
+# Remove these exceptions as soon as upstream releases unblock the pins:
 #   GHSA-752w-5fwx-jx9f  PyJWT <= 2.11.0           (high)
-#   GHSA-p423-j2cm-9vmq  cryptography >= 45, < 46.0.7 (medium)
-#   GHSA-m959-cc7f-wv43  cryptography < 46.0.6      (low)
-#   GHSA-whj4-6x5x-4v2j  pillow >= 10.3.0, < 12.2.0 (high)
 #   GHSA-6w46-j5rx-g56g  pytest < 9.0.3             (medium) — pinned by pytest-homeassistant-custom-component
-#   GHSA-pjjw-68hj-v9mw  uv <= 0.11.5               (low)
 name: "Dependency review"
 on:
   workflow_dispatch:
@@ -52,5 +50,5 @@ jobs:
           head-ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
           comment-summary-in-pr: on-failure
           fail-on-severity: moderate
-          allow-ghsas: GHSA-752w-5fwx-jx9f,GHSA-p423-j2cm-9vmq,GHSA-m959-cc7f-wv43,GHSA-whj4-6x5x-4v2j,GHSA-6w46-j5rx-g56g,GHSA-pjjw-68hj-v9mw
+          allow-ghsas: GHSA-752w-5fwx-jx9f,GHSA-6w46-j5rx-g56g
           retry-on-snapshot-warnings: true
