@@ -1,37 +1,12 @@
-documentation:
-  - changed-files:
-      - any-glob-to-any-file:
-          - "**/*.md"
-
 python:
   - changed-files:
       - any-glob-to-any-file:
           - "custom_components/**"
-
-enhancement:
-  - changed-files:
-      - any-glob-to-any-file:
-          - "custom_components/city_visitor_parking/frontend/**"
 
 frontend:
   - changed-files:
       - any-glob-to-any-file:
           - "custom_components/city_visitor_parking/frontend/**"
 
-tests:
-  - changed-files:
-      - any-glob-to-any-file:
-          - "tests/**"
-
 testing:
   - head-branch: ["testing"]
-
-ci:
-  - changed-files:
-      - any-glob-to-any-file:
-          - ".github/workflows/**"
-
-maintenance:
-  - changed-files:
-      - any-glob-to-any-file:
-          - ".github/**"

@@ -1,0 +1,74 @@
+---
+# Assigns exactly one release-category label based on the conventional commit
+# prefix in the PR title (e.g. "feat:" → enhancement, "fix:" → bugfix).
+# This replaces file-path-based assignment of category labels so that a PR
+# touching tests/, .github/, and *.md is not placed in every changelog section.
+name: Conventional commit label
+
+# yamllint disable-line rule:truthy
+on:
+  pull_request_target: # zizmor: ignore[dangerous-triggers] This workflow only assigns labels and does not check out or run PR code.
+    types:
+      - opened
+      - edited
+      - reopened
+      - synchronize
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  label:
+    name: Assign category label
+    runs-on: ubuntu-latest
+    steps:
+      - name: Assign label from conventional commit prefix
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          CATEGORY_LABELS="breaking-change bugfix documentation enhancement refactor performance new-feature maintenance ci dependencies tests"
+
+          # Breaking change: <type>[(<scope>)]!: anchored at the start of the title.
+          # Using grep rather than a case glob to avoid matching "!:" mid-title
+          # (e.g. "chore: explain the !: token" must not become breaking-change).
+          if echo "$PR_TITLE" | grep -qE '^[a-z]+(\([^)]+\))?!:'; then
+            LABEL="breaking-change"
+          else
+            case "$PR_TITLE" in
+              "feat:"*|feat"("*"):"*)        LABEL="enhancement" ;;
+              "fix:"*|fix"("*"):"*)          LABEL="bugfix" ;;
+              "refactor:"*|refactor"("*"):"*) LABEL="refactor" ;;
+              "perf:"*|perf"("*"):"*)        LABEL="performance" ;;
+              "test:"*|"tests:"*|test"("*"):"*|tests"("*"):"*) LABEL="tests" ;;
+              "docs:"*|"doc:"*|docs"("*"):"*|doc"("*"):"*) LABEL="documentation" ;;
+              "chore:"*|chore"("*"):"*)      LABEL="maintenance" ;;
+              "ci:"*|ci"("*"):"*)            LABEL="ci" ;;
+              "build:"*|build"("*"):"*)      LABEL="maintenance" ;;
+              "deps:"*|deps"("*"):"*)        LABEL="dependencies" ;;
+              *)                             LABEL="" ;;
+            esac
+          fi
+
+          if [ -z "$LABEL" ]; then
+            echo "No conventional commit prefix recognised in: $PR_TITLE"
+            exit 0
+          fi
+
+          echo "Assigning label: $LABEL"
+
+          # Remove all other category labels that may have been set previously
+          for l in $CATEGORY_LABELS; do
+            if [ "$l" != "$LABEL" ]; then
+              gh pr edit "$PR_NUMBER" --repo "$REPO" --remove-label "$l" 2>/dev/null || true
+            fi
+          done
+
+          gh pr edit "$PR_NUMBER" --repo "$REPO" --add-label "$LABEL"
