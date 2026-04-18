@@ -1,8 +1,15 @@
 # Maintains a draft GitHub Release that is kept up-to-date with every push to
-# main or testing that touches custom_components/. The draft is populated using
-# the rules in .github/release-drafter.yml (categories, version bump strategy,
-# etc.). When a release is ready, the draft is manually published which triggers
-# the release.yml workflow to build and upload the release asset.
+# main or testing that touches custom_components/. Pull request labeling is
+# handled separately by dedicated PR-safe workflows; this workflow only updates
+# release drafts. The draft is populated using the rules in
+# .github/release-drafter.yml (categories, version bump strategy, etc.). When a
+# release is ready, the draft is manually published which triggers the
+# release.yml workflow to build and upload the release asset.
+#
+# Responsibility split:
+#   - pr-labeling.yml sets and validates PR labels.
+#   - This workflow turns merged PR metadata into draft releases.
+#   - release.yml builds and uploads assets only after a release is published.
 name: Release Drafter
 
 # yamllint disable-line rule:truthy
@@ -13,17 +20,10 @@ on:
       - testing
     paths:
       - custom_components/**
-  pull_request:
-    types:
-      - opened
-      - reopened
-      - synchronize
-    paths:
-      - .github/**
-      - blueprints/**
-      - tests/**
-      - "**/*.md"
-      - custom_components/**
+      - .github/release-drafter.yml
+      - .github/release-drafter-beta.yml
+      - .github/release-drafter-testing.yml
+      - .github/workflows/release-drafter.yml
   workflow_dispatch:
     inputs:
       prerelease:
@@ -51,38 +51,12 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  autolabel_pull_requests:
-    name: autolabel_pull_requests
-    if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      pull-requests: write
-    steps:
-      - name: Run Release Drafter autolabeler (main)
-        if: github.event.pull_request.base.ref == 'main'
-        uses: release-drafter/release-drafter@139054aeaa9adc52ab36ddf67437541f039b88e2 # v7.1.1
-        with:
-          dry-run: true
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-
-      - name: Run Release Drafter autolabeler (testing)
-        if: github.event.pull_request.base.ref == 'testing'
-        uses: release-drafter/release-drafter@139054aeaa9adc52ab36ddf67437541f039b88e2 # v7.1.1
-        with:
-          config-name: release-drafter-testing.yml
-          dry-run: true
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-
   update_release_draft:
     name: update_release_draft
-    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     permissions:
       contents: write
-      pull-requests: write # Required to read PR titles/labels and apply autolabeler labels.
+      pull-requests: read
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2

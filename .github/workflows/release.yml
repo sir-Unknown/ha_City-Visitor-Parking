@@ -6,6 +6,11 @@
 #   1. Verify that the Validate workflow passed on the release commit.
 #   2. Detect whether custom_components/ changed since the previous release.
 #   3. Build the frontend, assemble the zip, and upload it to the release.
+#
+# Responsibility split:
+#   - pr-labeling.yml manages PR labels.
+#   - release-drafter.yml prepares release drafts and notes.
+#   - This workflow builds the release artifact for an already-published release.
 name: Release
 
 on:

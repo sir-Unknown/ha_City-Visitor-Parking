@@ -1,0 +1,117 @@
+---
+# Centralizes all pull request labeling behavior in one pull_request_target
+# workflow. Path labels are informational, exactly one category label drives
+# changelog/release categorization, and a final verification step enforces that
+# the PR ends up with a valid category label.
+#
+# Responsibility split:
+#   - This workflow sets and validates PR labels.
+#   - release-drafter.yml consumes those labels for release notes only.
+#   - release.yml builds assets only for published releases.
+name: PR labeling
+
+# yamllint disable-line rule:truthy
+on:
+  pull_request_target: # zizmor: ignore[dangerous-triggers] This workflow only labels PRs and validates labels; it does not check out or run PR code.
+    types:
+      - opened
+      - edited
+      - reopened
+      - synchronize
+      - labeled
+      - unlabeled
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  path_labels:
+    name: Apply path labels
+    if: github.event.action != 'edited' && github.event.action != 'labeled' && github.event.action != 'unlabeled'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Run labeler
+        uses: actions/labeler@634933edcd8ababfe52f92936142cc22ac488b1b # v6.0.1
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          sync-labels: true
+
+  category_label:
+    name: Assign category label
+    if: github.event.action != 'labeled' && github.event.action != 'unlabeled'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Assign label from conventional commit prefix
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          CATEGORY_LABELS="breaking-change bugfix documentation enhancement refactor performance new-feature maintenance ci dependencies tests"
+
+          # Breaking change: <type>[(<scope>)]!: anchored at the start of the title.
+          # Using grep rather than a case glob to avoid matching "!:" mid-title
+          # (e.g. "chore: explain the !: token" must not become breaking-change).
+          if echo "$PR_TITLE" | grep -qE '^[a-z]+(\([^)]+\))?!:'; then
+            LABEL="breaking-change"
+          else
+            case "$PR_TITLE" in
+              "feat:"*|feat"("*"):"*)          LABEL="enhancement" ;;
+              "fix:"*|fix"("*"):"*)            LABEL="bugfix" ;;
+              "refactor:"*|refactor"("*"):"*)  LABEL="refactor" ;;
+              "perf:"*|perf"("*"):"*)          LABEL="performance" ;;
+              "test:"*|"tests:"*|test"("*"):"*|tests"("*"):"*) LABEL="tests" ;;
+              "docs:"*|"doc:"*|docs"("*"):"*|doc"("*"):"*) LABEL="documentation" ;;
+              "chore:"*|chore"("*"):"*)        LABEL="maintenance" ;;
+              "ci:"*|ci"("*"):"*)              LABEL="ci" ;;
+              "build:"*|build"("*"):"*)        LABEL="maintenance" ;;
+              "deps:"*|deps"("*"):"*)          LABEL="dependencies" ;;
+              *)                               LABEL="" ;;
+            esac
+          fi
+
+          if [ -z "$LABEL" ]; then
+            echo "No conventional commit prefix recognised in: $PR_TITLE"
+            exit 0
+          fi
+
+          echo "Assigning label: $LABEL"
+
+          # Remove all other category labels that may have been set previously.
+          for l in $CATEGORY_LABELS; do
+            if [ "$l" != "$LABEL" ]; then
+              gh pr edit "$PR_NUMBER" --repo "$REPO" --remove-label "$l" 2>/dev/null || true
+            fi
+          done
+
+          gh pr edit "$PR_NUMBER" --repo "$REPO" --add-label "$LABEL"
+
+  validate_labels:
+    name: Verify labels
+    needs: [path_labels, category_label]
+    if: always() && !cancelled() && !contains(needs.*.result, 'failure')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Verify PR has a valid label
+        uses: jesusvasquez333/verify-pr-label-action@657d111bbbe13e22bbd55870f1813c699bde1401 # v1.4.0
+        with:
+          pull-request-number: "${{ github.event.pull_request.number }}"
+          github-token: "${{ secrets.GITHUB_TOKEN }}"
+          valid-labels: >-
+            breaking-change, bugfix, documentation, enhancement, refactor,
+            performance, new-feature, maintenance, ci, dependencies, tests
+          disable-reviews: true

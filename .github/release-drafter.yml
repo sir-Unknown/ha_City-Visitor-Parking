@@ -17,17 +17,6 @@ exclude-contributors:
 sort-direction: ascending
 include-paths:
   - "custom_components/"
-autolabeler:
-  - label: "documentation"
-    files:
-      - "**/*.md"
-      - "blueprints/**"
-  - label: "tests"
-    files:
-      - "tests/**"
-  - label: "maintenance"
-    files:
-      - ".github/**"
 categories:
   - title: "🚨 Breaking changes"
     labels:

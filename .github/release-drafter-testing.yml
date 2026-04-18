@@ -45,17 +45,6 @@ categories:
   - title: "📚 Documentation"
     labels:
       - "documentation"
-autolabeler:
-  - label: "documentation"
-    files:
-      - "**/*.md"
-      - "blueprints/**"
-  - label: "tests"
-    files:
-      - "tests/**"
-  - label: "maintenance"
-    files:
-      - ".github/**"
 template: |
   This integration is free and open source. If it saves you a trip to the parking portal, a beer is always appreciated! 🍺 <iframe src="https://github.com/sponsors/sir-Unknown/button" title="Sponsor sir-Unknown" height="32" width="114" style="border: 0; border-radius: 6px;"></iframe>
 
