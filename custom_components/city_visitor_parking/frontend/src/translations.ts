@@ -3,6 +3,9 @@ import type { LocalizeFunc, LocalizeTarget, TranslationObject } from "./types";
 
 const DEFAULT_LANGUAGE = "en";
 const BASE_URL = new URL(".", import.meta.url).toString().replace(/\/$/, "");
+// Extract the cache-busting version from the bundle URL (e.g. "?v=1234") so
+// translation files loaded after an integration update are never served stale.
+const BUNDLE_VERSION = new URL(import.meta.url).searchParams.get("v") ?? "";
 const translationsCache = new Map<string, TranslationObject>();
 const translationsInFlight = new Map<string, Promise<void>>();
 const translationLookupCache = new Map<string, Map<string, string>>();
@@ -43,8 +46,9 @@ const fetchTranslations = async (
   baseUrl: string,
   language: string,
 ): Promise<TranslationObject | null> => {
+  const versionSuffix = BUNDLE_VERSION ? `?v=${BUNDLE_VERSION}` : "";
   const response = await fetch(
-    `${baseUrl}/translations/${language}.json`,
+    `${baseUrl}/translations/${language}.json${versionSuffix}`,
   ).catch(() => null);
   if (!response || !response.ok) return null;
   try {
