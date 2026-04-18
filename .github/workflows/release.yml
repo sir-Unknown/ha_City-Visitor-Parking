@@ -228,8 +228,8 @@ jobs:
             IS_BETA=true
           fi
 
-          COMMIT=$(echo "$RELEASE_BODY" | grep -oE '\*\*Commit:\*\* `?([a-f0-9]{40})`?' | grep -oE '[a-f0-9]{40}')
-          PYPI=$(echo "$RELEASE_BODY" | grep -oE '\*\*PyPI:\*\* `?([^` \n]+)`?' | sed 's/\*\*PyPI:\*\* //; s/`//g')
+          COMMIT=$(echo "$RELEASE_BODY" | grep -oE '\*\*Commit:\*\* `?([a-f0-9]{40})`?' | grep -oE '[a-f0-9]{40}') || true
+          PYPI=$(echo "$RELEASE_BODY" | grep -oE '\*\*PyPI:\*\* `?([^` \n]+)`?' | sed 's/\*\*PyPI:\*\* //; s/`//g') || true
 
           # Ignore placeholder values
           echo "$COMMIT" | grep -qiE '^(FILL_IN|$)' && COMMIT=""
