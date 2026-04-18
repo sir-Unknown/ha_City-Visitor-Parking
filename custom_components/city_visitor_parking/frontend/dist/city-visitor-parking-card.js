@@ -590,6 +590,7 @@ var i6 = e4(class extends i5 {
 // src/translations.ts
 var DEFAULT_LANGUAGE = "en";
 var BASE_URL = new URL(".", import.meta.url).toString().replace(/\/$/, "");
+var BUNDLE_VERSION = new URL(import.meta.url).searchParams.get("v") ?? "";
 var translationsCache = /* @__PURE__ */ new Map();
 var translationsInFlight = /* @__PURE__ */ new Map();
 var translationLookupCache = /* @__PURE__ */ new Map();
@@ -607,8 +608,9 @@ var getLanguage = (target) => {
   return targetLang || globalHass?.language || globalHass?.locale?.language || document.documentElement.lang || getStoredLanguage() || navigator.language || DEFAULT_LANGUAGE;
 };
 var fetchTranslations = async (baseUrl, language) => {
+  const versionSuffix = BUNDLE_VERSION ? `?v=${BUNDLE_VERSION}` : "";
   const response = await fetch(
-    `${baseUrl}/translations/${language}.json`
+    `${baseUrl}/translations/${language}.json${versionSuffix}`
   ).catch(() => null);
   if (!response || !response.ok) return null;
   try {
