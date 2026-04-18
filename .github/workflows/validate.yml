@@ -127,6 +127,32 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Check pycityvisitorparking version sync (manifest.json vs pyproject.toml)
+        run: |
+          python3 - <<'PYEOF'
+          import json, re, sys, pathlib
+
+          manifest = json.loads(pathlib.Path("custom_components/city_visitor_parking/manifest.json").read_text())
+          pyproject = pathlib.Path("pyproject.toml").read_text()
+
+          manifest_pkg = next((r for r in manifest["requirements"] if r.lower().startswith("pycityvisitorparking==")), None)
+          pyproject_match = re.search(r'(?i)pycityvisitorparking==(\S+)"', pyproject)
+
+          if manifest_pkg is None or pyproject_match is None:
+              print("::warning::Non-PyPI pycityvisitorparking requirement — skipping sync check.")
+              sys.exit(0)
+
+          manifest_ver = manifest_pkg.split("==")[1]
+          pyproject_ver = pyproject_match.group(1)
+
+          print(f"manifest.json  : {manifest_ver}")
+          print(f"pyproject.toml : {pyproject_ver}")
+
+          if manifest_ver != pyproject_ver:
+              print(f"::error::pycityvisitorparking version mismatch: manifest.json={manifest_ver}, pyproject.toml={pyproject_ver}. Keep these in sync.")
+              sys.exit(1)
+          PYEOF
+
       - name: Check pycityvisitorparking version in manifest.json
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -162,7 +188,6 @@ jobs:
           echo "Latest on PyPI : $LATEST"
           echo "In manifest.json: $MANIFEST"
           if [ "$LATEST" != "$MANIFEST" ]; then
-            echo "::warning::manifest.json uses pycityvisitorparking==$MANIFEST but latest release is $LATEST."
             if [ -n "$PR_NUMBER" ]; then
               EXISTING=$(gh api "repos/$REPO/pulls/$PR_NUMBER/reviews" \
                 --jq '[.[] | select(.state == "CHANGES_REQUESTED" and .user.login == "github-actions[bot]")] | length')
@@ -174,6 +199,8 @@ jobs:
           Please update \`requirements\` in \`manifest.json\` before merging."
               fi
             fi
+            echo "::error::manifest.json uses pycityvisitorparking==$MANIFEST but latest release on PyPI is $LATEST."
+            exit 1
           else
             if [ -n "$PR_NUMBER" ]; then
               gh api "repos/$REPO/pulls/$PR_NUMBER/reviews" \
