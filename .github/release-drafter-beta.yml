@@ -7,9 +7,27 @@ exclude-labels:
   - "skip-changelog"
   - "duplicate"
   - "invalid"
+exclude-contributors:
+  - "sir-Unknown"
+  - "dependabot[bot]"
+  - "renovate[bot]"
+  - "github-actions[bot]"
+  - "codex[bot]"
+  - "claude[bot]"
 sort-direction: ascending
 include-paths:
   - "custom_components/"
+autolabeler:
+  - label: "documentation"
+    files:
+      - "**/*.md"
+      - "blueprints/**"
+  - label: "tests"
+    files:
+      - "tests/**"
+  - label: "maintenance"
+    files:
+      - ".github/**"
 categories:
   - title: "🚨 Breaking changes"
     labels:
@@ -39,10 +57,27 @@ categories:
     labels:
       - "documentation"
 template: |
+  This integration is free and open source. If it saves you a trip to the parking portal, a beer is always appreciated! 🍺 <iframe src="https://github.com/sponsors/sir-Unknown/button" title="Sponsor sir-Unknown" height="32" width="114" style="border: 0; border-radius: 6px;"></iframe>
+
+  _Beheer bezoekersparkeervergunningen van [Nederlandse gemeenten](https://github.com/sir-Unknown/ha_City-Visitor-Parking#supported-municipalities) vanuit Home Assistant. [Nederlandse documentatie](https://github.com/sir-Unknown/ha_City-Visitor-Parking/wiki/nl/Home)._
+
+  _Manage Dutch municipality visitor parking permits directly from Home Assistant. This integration lets you start, update, and end visitor parking sessions without having to open the municipal parking portal. Keep your favorite license plates at hand, see at a glance whether parking is paid or free, and automate your visitor parking with Home Assistant automations and scripts._
+
+  _The integration supports a growing number of [Dutch municipalities](https://github.com/sir-Unknown/ha_City-Visitor-Parking#supported-municipalities) and connects to their parking systems. Is your municipality not listed? You can request support or contribute — for more information: [EN](https://github.com/sir-Unknown/ha_City-Visitor-Parking/wiki/en/add-municipalities) | [NL](https://github.com/sir-Unknown/ha_City-Visitor-Parking/wiki/nl/gemeenten-toevoegen)_
+
+  > [!IMPORTANT]
+  > This integration is under active development — thank you for using it and for your patience! Features may occasionally break, and new versions can sometimes introduce regressions. It is possible that a parking session is not correctly started, updated, or ended.
+  >
+  > Please always verify that your session is active through the official parking portal. The maintainer and all contributors cannot be held responsible for incorrectly registered visitor parking sessions or any fines that may result.
+  >
+  > This integration is built almost entirely with the help of AI agents, primarily ChatGPT and Claude.
+
   > [!WARNING]
   > **This is a beta pre-release.**
   > It may contain incomplete features or minor regressions.
   > **Use with caution in production Home Assistant environments.**
+
+  ---
 
   ## 🔗 pyCityVisitorParking
 
@@ -55,6 +90,10 @@ template: |
 
   $CHANGES
 
+  ## 👥 Contributors
+
+  $CONTRIBUTORS
+
   ## 📦 Installation
 
   In HACS, go to **City Visitor Parking** → **⋮** → **Redownload** → select this version from the version dropdown.
@@ -63,6 +102,23 @@ template: |
 
   If something breaks, reinstall the latest stable release the same way: **HACS** → **City Visitor Parking** → **⋮** → **Redownload** → select the stable version.
 
+  ## 📚 Documentation
+
+  See the [Wiki](https://github.com/sir-Unknown/ha_City-Visitor-Parking/wiki) for setup instructions and configuration options.
+
+  - [Installation](https://github.com/sir-Unknown/ha_City-Visitor-Parking/wiki/en/Installation)
+  - [Configuration](https://github.com/sir-Unknown/ha_City-Visitor-Parking/wiki/en/Configuration)
+  - [Lovelace cards](https://github.com/sir-Unknown/ha_City-Visitor-Parking/wiki/en/Lovelace-Cards)
+  - [Services](https://github.com/sir-Unknown/ha_City-Visitor-Parking/wiki/en/Services)
+  - [Blueprints](https://github.com/sir-Unknown/ha_City-Visitor-Parking/wiki/en/Blueprints)
+  - [Troubleshooting](https://github.com/sir-Unknown/ha_City-Visitor-Parking/wiki/en/Troubleshooting)
+
   ## 🐛 Reporting issues
 
+  Before opening an issue, download the diagnostics file via **Settings** → **Devices & services** → **City Visitor Parking** → **⋮** → **Download diagnostics**, and attach it to your report.
+
   [![Open an issue](https://img.shields.io/badge/Report%20a%20bug-red?logo=github)](https://github.com/sir-Unknown/ha_City-Visitor-Parking/issues/new)
+
+  Include the release version, a description of the problem, relevant logs, and the diagnostics file if available.
+
+  [![Full changelog](https://img.shields.io/badge/Full%20changelog-blue?logo=github)](https://github.com/sir-Unknown/ha_City-Visitor-Parking/compare/$PREVIOUS_TAG...v$RESOLVED_VERSION)
