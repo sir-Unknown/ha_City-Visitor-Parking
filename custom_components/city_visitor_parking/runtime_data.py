@@ -34,3 +34,4 @@ class CityVisitorParkingRuntimeData:
     auto_end_state: AutoEndState
     operating_time_overrides: OperatingTimeOverrides
     free_dates: str
+    free_weekdays: list[str]

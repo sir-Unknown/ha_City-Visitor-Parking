@@ -319,4 +319,5 @@ def _runtime(
         auto_end_state=AutoEndState(),
         operating_time_overrides={},
         free_dates="",
+        free_weekdays=[],
     )

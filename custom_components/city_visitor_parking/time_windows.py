@@ -8,7 +8,12 @@ from typing import cast
 
 from homeassistant.util import dt as dt_util
 
-from .const import CONF_FREE_DATES, CONF_OPERATING_TIME_OVERRIDES, WEEKDAY_KEYS
+from .const import (
+    CONF_FREE_DATES,
+    CONF_FREE_WEEKDAYS,
+    CONF_OPERATING_TIME_OVERRIDES,
+    WEEKDAY_KEYS,
+)
 from .helpers import normalize_override_windows, parse_comma_separated
 from .models import TimeRange
 
@@ -32,10 +37,12 @@ def current_or_next_window_with_overrides(
     """Return the current or next chargeable window, honoring overrides."""
     overrides = options.get(CONF_OPERATING_TIME_OVERRIDES)
     free_dates_raw = options.get(CONF_FREE_DATES)
+    free_weekdays_raw = options.get(CONF_FREE_WEEKDAYS)
     has_free_dates = isinstance(free_dates_raw, str) and bool(free_dates_raw.strip())
     has_overrides = isinstance(overrides, Mapping) and bool(overrides)
+    has_free_weekdays = isinstance(free_weekdays_raw, list) and bool(free_weekdays_raw)
 
-    if not has_free_dates and not has_overrides:
+    if not has_free_dates and not has_overrides and not has_free_weekdays:
         return current_or_next_window(zone_validity, now)
 
     windows: list[TimeRange] = []
@@ -46,9 +53,9 @@ def current_or_next_window_with_overrides(
         )
 
     if not windows:
-        # When free_dates are configured an empty result may be intentional —
-        # do not fall back to unfiltered provider windows in that case.
-        if has_free_dates:
+        # When free_dates or free_weekdays are configured an empty result may be
+        # intentional — do not fall back to unfiltered provider windows.
+        if has_free_dates or has_free_weekdays:
             return None
         return current_or_next_window(zone_validity, now)
 
@@ -74,6 +81,11 @@ def windows_for_today(
                 return []
 
     local_day = WEEKDAY_KEYS[local_now.weekday()]
+
+    # Return no chargeable windows when today is a configured free weekday.
+    free_weekdays_raw = options.get(CONF_FREE_WEEKDAYS)
+    if isinstance(free_weekdays_raw, list) and local_day in free_weekdays_raw:
+        return []
 
     overrides = options.get(CONF_OPERATING_TIME_OVERRIDES)
     if not isinstance(overrides, Mapping):

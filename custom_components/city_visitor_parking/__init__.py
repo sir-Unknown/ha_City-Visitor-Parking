@@ -36,6 +36,7 @@ from .const import (
     CONF_BASE_URL,
     CONF_DEMO_MODE,
     CONF_FREE_DATES,
+    CONF_FREE_WEEKDAYS,
     CONF_GUI_URL,
     CONF_MUNICIPALITY,
     CONF_OPERATING_TIME_OVERRIDES,
@@ -195,6 +196,7 @@ async def async_setup_entry(
         time.perf_counter() - refresh_started,
     )
 
+    raw_free_weekdays = entry.options.get(CONF_FREE_WEEKDAYS, [])
     entry.runtime_data = CityVisitorParkingRuntimeData(
         client=client,
         provider=provider,
@@ -204,6 +206,9 @@ async def async_setup_entry(
         auto_end_state=auto_end_state,
         operating_time_overrides=_normalize_operating_time_overrides(entry.options),
         free_dates=str(entry.options.get(CONF_FREE_DATES, "")),
+        free_weekdays=list(raw_free_weekdays)
+        if isinstance(raw_free_weekdays, list)
+        else [],
     )
 
     entry.async_on_unload(entry.add_update_listener(_async_update_listener))
@@ -290,9 +295,14 @@ async def _async_update_listener(
     runtime: CityVisitorParkingRuntimeData = entry.runtime_data
     overrides = _normalize_operating_time_overrides(entry.options)
     free_dates = str(entry.options.get(CONF_FREE_DATES, ""))
+    raw_free_weekdays = entry.options.get(CONF_FREE_WEEKDAYS, [])
+    free_weekdays = (
+        list(raw_free_weekdays) if isinstance(raw_free_weekdays, list) else []
+    )
     overrides_changed = overrides != runtime.operating_time_overrides
     free_dates_changed = free_dates != runtime.free_dates
-    if overrides_changed or free_dates_changed:
+    free_weekdays_changed = free_weekdays != runtime.free_weekdays
+    if overrides_changed or free_dates_changed or free_weekdays_changed:
         # Reload so the coordinator recomputes availability with new windows.
         await hass.config_entries.async_reload(entry.entry_id)
 

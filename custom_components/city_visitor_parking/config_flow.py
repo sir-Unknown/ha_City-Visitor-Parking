@@ -33,6 +33,7 @@ from .const import (
     CONF_BASE_URL,
     CONF_DEMO_MODE,
     CONF_FREE_DATES,
+    CONF_FREE_WEEKDAYS,
     CONF_GUI_URL,
     CONF_MUNICIPALITY,
     CONF_OPERATING_TIME_OVERRIDES,
@@ -452,7 +453,7 @@ class CityVisitorParkingOptionsFlow(config_entries.OptionsFlow):
             section_input = user_input.get(SECTION_OPERATING_TIMES)
             if not isinstance(section_input, Mapping):
                 section_input = {}
-            overrides = _build_overrides(
+            overrides, free_weekdays = _build_overrides(
                 cast("Mapping[str, object]", section_input),
                 errors,
             )
@@ -471,6 +472,7 @@ class CityVisitorParkingOptionsFlow(config_entries.OptionsFlow):
                 data={
                     CONF_AUTO_END: cast("bool", user_input[CONF_AUTO_END]),
                     CONF_FREE_DATES: free_dates,
+                    CONF_FREE_WEEKDAYS: free_weekdays,
                     CONF_OPERATING_TIME_OVERRIDES: overrides,
                 },
             )
@@ -491,6 +493,11 @@ class CityVisitorParkingOptionsFlow(config_entries.OptionsFlow):
             if isinstance(raw_auto_end, bool):
                 defaults[CONF_AUTO_END] = raw_auto_end
 
+        raw_free_weekdays = self._config_entry.options.get(CONF_FREE_WEEKDAYS, [])
+        free_weekdays: list[str] = (
+            list(raw_free_weekdays) if isinstance(raw_free_weekdays, list) else []
+        )
+
         free_dates_default = str(self._config_entry.options.get(CONF_FREE_DATES, ""))
         if user_input is not None:
             free_dates_section = user_input.get(SECTION_FREE_DATES, {})
@@ -501,14 +508,14 @@ class CityVisitorParkingOptionsFlow(config_entries.OptionsFlow):
                 if isinstance(raw, str):
                     free_dates_default = raw
 
-        expanded_times = _should_expand_overrides(overrides, user_input)
+        expanded_times = _should_expand_overrides(overrides, free_weekdays, user_input)
         expanded_free = bool(free_dates_default.strip())
 
         schema: dict[object, object] = {
             vol.Required(CONF_AUTO_END, default=defaults[CONF_AUTO_END]): cv.boolean,
         }
 
-        day_schema = _build_day_schema(overrides, user_input)
+        day_schema = _build_day_schema(overrides, free_weekdays, user_input)
         schema[vol.Required(SECTION_OPERATING_TIMES)] = section(
             vol.Schema(day_schema), {"collapsed": not expanded_times}
         )
@@ -535,18 +542,23 @@ def _build_unique_id(provider: ProviderConfig, permit_id: str) -> str:
 
 def _build_overrides(
     user_input: Mapping[str, object], errors: dict[str, str]
-) -> dict[str, list[dict[str, str]]]:
-    """Build operating time overrides from user input."""
+) -> tuple[dict[str, list[dict[str, str]]], list[str]]:
+    """Build operating time overrides and free weekdays from user input."""
     overrides: dict[str, list[dict[str, str]]] = {}
+    free_weekdays: list[str] = []
     for day in WEEKDAY_KEYS:
+        free_key = _day_free_key(day)
+        if user_input.get(free_key) is True:
+            free_weekdays.append(day)
+            continue
         day_key = _day_windows_key(day)
         windows = _parse_time_windows(user_input.get(day_key), errors)
         if errors:
-            return {}
+            return {}, []
         if not windows:
             continue
         overrides[day] = windows
-    return overrides
+    return overrides, free_weekdays
 
 
 async def _async_load_providers(hass: HomeAssistant) -> dict[str, ProviderConfig]:
@@ -659,13 +671,21 @@ def _day_windows_key(day: str) -> str:
     return f"{WEEKDAY_LABELS[day]}_chargeable_windows"
 
 
+def _day_free_key(day: str) -> str:
+    """Return the field key for a weekday's free parking checkbox."""
+    return f"{WEEKDAY_LABELS[day]}_free_parking"
+
+
 def _should_expand_overrides(
-    overrides: Mapping[str, object], user_input: dict[str, object] | None
+    overrides: Mapping[str, object],
+    free_weekdays: list[str],
+    user_input: dict[str, object] | None,
 ) -> bool:
     """Return True when the overrides section should be expanded."""
-    for day in WEEKDAY_KEYS:
-        if normalize_override_windows(overrides.get(day)):
-            return True
+    if free_weekdays or any(
+        normalize_override_windows(overrides.get(day)) for day in WEEKDAY_KEYS
+    ):
+        return True
     if user_input is None:
         return False
     section_input = user_input.get(SECTION_OPERATING_TIMES, {})
@@ -673,14 +693,18 @@ def _should_expand_overrides(
         return False
     section_input = cast("Mapping[str, object]", section_input)
     for day in WEEKDAY_KEYS:
-        raw_value = section_input.get(_day_windows_key(day))
-        if isinstance(raw_value, str) and raw_value.strip():
+        raw_free = section_input.get(_day_free_key(day))
+        if isinstance(raw_free, bool) and raw_free:
+            return True
+        raw_windows = section_input.get(_day_windows_key(day))
+        if isinstance(raw_windows, str) and raw_windows.strip():
             return True
     return False
 
 
 def _build_day_schema(
     overrides: Mapping[str, object],
+    free_weekdays: list[str],
     user_input: dict[str, object] | None,
 ) -> dict[object, object]:
     """Build the schema for weekday override inputs."""
@@ -693,14 +717,29 @@ def _build_day_schema(
 
     for day in WEEKDAY_KEYS:
         day_key = _day_windows_key(day)
-        default_windows = _format_override_windows(overrides.get(day))
+        free_key = _day_free_key(day)
+
+        # Determine whether free parking is active for this day.
+        is_free = day in free_weekdays
         if section_input is not None:
+            raw_free = section_input.get(free_key)
+            if isinstance(raw_free, bool):
+                is_free = raw_free
+
+        day_schema[vol.Optional(free_key, default=is_free)] = selector.BooleanSelector()
+
+        # Build the time windows field; always shown, ignored on save when free.
+        default_windows = (
+            "" if is_free else _format_override_windows(overrides.get(day))
+        )
+        if section_input is not None and not is_free:
             raw_value = section_input.get(day_key, default_windows)
             if isinstance(raw_value, str):
                 default_windows = raw_value
         day_schema[vol.Optional(day_key, default=default_windows)] = (
             selector.TextSelector(selector.TextSelectorConfig())
         )
+
     return day_schema
 
 
