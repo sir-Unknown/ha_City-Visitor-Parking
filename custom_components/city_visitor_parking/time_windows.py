@@ -8,7 +8,12 @@ from typing import cast
 
 from homeassistant.util import dt as dt_util
 
-from .const import CONF_FREE_DATES, CONF_OPERATING_TIME_OVERRIDES, WEEKDAY_KEYS
+from .const import (
+    CONF_FREE_DATES,
+    CONF_FREE_WEEKDAYS,
+    CONF_OPERATING_TIME_OVERRIDES,
+    WEEKDAY_KEYS,
+)
 from .helpers import normalize_override_windows, parse_comma_separated
 from .models import TimeRange
 
@@ -32,23 +37,39 @@ def current_or_next_window_with_overrides(
     """Return the current or next chargeable window, honoring overrides."""
     overrides = options.get(CONF_OPERATING_TIME_OVERRIDES)
     free_dates_raw = options.get(CONF_FREE_DATES)
+    free_weekdays_raw = options.get(CONF_FREE_WEEKDAYS)
     has_free_dates = isinstance(free_dates_raw, str) and bool(free_dates_raw.strip())
     has_overrides = isinstance(overrides, Mapping) and bool(overrides)
+    has_free_weekdays = isinstance(free_weekdays_raw, list) and bool(free_weekdays_raw)
 
-    if not has_free_dates and not has_overrides:
+    if not has_free_dates and not has_overrides and not has_free_weekdays:
         return current_or_next_window(zone_validity, now)
 
     windows: list[TimeRange] = []
-    # Look ahead one week to apply weekday overrides and free dates.
-    for offset in range(7):
+    # Look ahead 8 days so the same weekday next week is always included,
+    # covering the case where all other 6 weekdays are marked as free.
+    for offset in range(8):
         windows.extend(
             windows_for_today(zone_validity, options, now + timedelta(days=offset))
         )
 
     if not windows:
-        # When free_dates are configured an empty result may be intentional —
-        # do not fall back to unfiltered provider windows in that case.
-        if has_free_dates:
+        if has_free_dates or has_free_weekdays:
+            # Lookahead found nothing; scan zone_validity directly so sparse or
+            # seasonal windows beyond the 8-day horizon are still found.
+            for block in sorted(zone_validity, key=lambda b: b.start):
+                if block.end <= now:
+                    continue
+                # Probe each calendar day in the block; block.start may be a
+                # free day while later days in the same block are chargeable.
+                probe = max(block.start, now)
+                probe = probe.replace(hour=0, minute=0, second=0, microsecond=0)
+                while probe < block.end:
+                    candidate = windows_for_today(zone_validity, options, probe)
+                    result = current_or_next_window(candidate, now)
+                    if result is not None:
+                        return result
+                    probe += timedelta(days=1)
             return None
         return current_or_next_window(zone_validity, now)
 
@@ -74,6 +95,11 @@ def windows_for_today(
                 return []
 
     local_day = WEEKDAY_KEYS[local_now.weekday()]
+
+    # Return no chargeable windows when today is a configured free weekday.
+    free_weekdays_raw = options.get(CONF_FREE_WEEKDAYS)
+    if isinstance(free_weekdays_raw, list) and local_day in free_weekdays_raw:
+        return []
 
     overrides = options.get(CONF_OPERATING_TIME_OVERRIDES)
     if not isinstance(overrides, Mapping):

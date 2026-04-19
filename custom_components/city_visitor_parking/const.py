@@ -23,6 +23,7 @@ CONF_DESCRIPTION: Final = "description"
 CONF_OPERATING_TIME_OVERRIDES: Final = "operating_time_overrides"
 CONF_AUTO_END: Final = "auto_end_reservation_when_free"
 CONF_FREE_DATES: Final = "free_dates"
+CONF_FREE_WEEKDAYS: Final = "free_weekdays"
 
 ATTR_LICENSE_PLATE: Final = "license_plate"
 ATTR_NAME: Final = "name"

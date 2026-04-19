@@ -1307,6 +1307,7 @@ def _create_entry_with_device(
         auto_end_state=AutoEndState(),
         operating_time_overrides={},
         free_dates="",
+        free_weekdays=[],
     )
     entry.runtime_data = runtime
 
