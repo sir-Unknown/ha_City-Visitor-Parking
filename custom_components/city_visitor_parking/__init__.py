@@ -42,6 +42,7 @@ from .const import (
     CONF_OPERATING_TIME_OVERRIDES,
     CONF_PERMIT_ID,
     CONF_PROVIDER_ID,
+    CONF_RESOLVED_LOGIN_PARAMS,
     DOMAIN,
     PLATFORMS,
     WEEKDAY_KEYS,
@@ -155,17 +156,18 @@ async def async_setup_entry(
         await provider.login(
             username=entry.data[CONF_USERNAME],
             password=entry.data[CONF_PASSWORD],
-            # Passes the stored permit_id as product_id (2park) to prevent
-            # _detect_product() from picking the wrong product when multiple
-            # config entries share the same provider.
-            # TODO: also persist and pass `location` (2park) so _detect_product()
-            # is skipped entirely instead of just filtered.
-            product_id=entry.data.get(CONF_PERMIT_ID),
-            # TODO: pass permit_media_type_id=entry.data.get(CONF_PERMIT_ID) to
-            # avoid the extra _fetch_permit_media_type_id() API call on every
-            # restart for dvsportal/the_hague providers.
+            # Passes the permit_id so providers can skip auto-detection when
+            # multiple config entries share the same provider.
+            permit_id=entry.data.get(CONF_PERMIT_ID),
+            # Passes previously resolved params back to skip redundant API calls
+            # on restart (e.g. location for 2park, permit_media_type_id for dvsportal).
+            **entry.data.get(CONF_RESOLVED_LOGIN_PARAMS, {}),
         )
     except AuthError as err:
+        if entry.data.get(CONF_RESOLVED_LOGIN_PARAMS):
+            hass.config_entries.async_update_entry(
+                entry, data={**entry.data, CONF_RESOLVED_LOGIN_PARAMS: {}}
+            )
         raise ConfigEntryAuthFailed from err
     except NetworkError as err:
         raise ConfigEntryNotReady from err
@@ -177,6 +179,12 @@ async def async_setup_entry(
             entry.title,
             entry.data.get(CONF_PERMIT_ID),
             time.perf_counter() - login_started,
+        )
+
+    resolved = getattr(provider, "resolved_login_params", {})
+    if resolved != entry.data.get(CONF_RESOLVED_LOGIN_PARAMS):
+        hass.config_entries.async_update_entry(
+            entry, data={**entry.data, CONF_RESOLVED_LOGIN_PARAMS: resolved}
         )
 
     auto_end_state = AutoEndState()

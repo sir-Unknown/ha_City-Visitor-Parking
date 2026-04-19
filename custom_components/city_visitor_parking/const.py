@@ -18,6 +18,7 @@ CONF_BASE_URL: Final = "base_url"
 CONF_API_URL: Final = "api_url"
 CONF_GUI_URL: Final = "gui_url"
 CONF_PERMIT_ID: Final = "permit_id"
+CONF_RESOLVED_LOGIN_PARAMS: Final = "resolved_login_params"
 CONF_DESCRIPTION: Final = "description"
 
 CONF_OPERATING_TIME_OVERRIDES: Final = "operating_time_overrides"
