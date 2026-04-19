@@ -54,9 +54,16 @@ def current_or_next_window_with_overrides(
         )
 
     if not windows:
-        # When free_dates or free_weekdays are configured an empty result may be
-        # intentional — do not fall back to unfiltered provider windows.
         if has_free_dates or has_free_weekdays:
+            # Lookahead found nothing; scan zone_validity directly so sparse or
+            # seasonal windows beyond the 8-day horizon are still found.
+            for block in sorted(zone_validity, key=lambda b: b.start):
+                if block.end <= now:
+                    continue
+                candidate = windows_for_today(zone_validity, options, block.start)
+                result = current_or_next_window(candidate, now)
+                if result is not None:
+                    return result
             return None
         return current_or_next_window(zone_validity, now)
 
