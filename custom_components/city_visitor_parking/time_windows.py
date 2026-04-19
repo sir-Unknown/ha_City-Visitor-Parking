@@ -46,8 +46,9 @@ def current_or_next_window_with_overrides(
         return current_or_next_window(zone_validity, now)
 
     windows: list[TimeRange] = []
-    # Look ahead one week to apply weekday overrides and free dates.
-    for offset in range(7):
+    # Look ahead 8 days so the same weekday next week is always included,
+    # covering the case where all other 6 weekdays are marked as free.
+    for offset in range(8):
         windows.extend(
             windows_for_today(zone_validity, options, now + timedelta(days=offset))
         )

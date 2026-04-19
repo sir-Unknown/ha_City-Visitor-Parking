@@ -153,8 +153,9 @@ def test_current_or_next_window_free_date_no_overrides_returns_none() -> None:
     assert window is None
 
 
-def test_current_or_next_window_free_date_with_overrides_returns_none() -> None:
-    """free_dates suppresses the window even when day overrides are also set."""
+def test_current_or_next_window_free_date_with_overrides_finds_next_week() -> None:
+    """free_dates suppresses today; the same-weekday override next week is found."""
+    # 2025-12-25 is a Thursday; the next Thursday is 2026-01-01 (offset 7).
     now = datetime(2025, 12, 25, 10, 0, tzinfo=UTC)
     zone_validity = _make_zone(now)
     options = {
@@ -164,4 +165,5 @@ def test_current_or_next_window_free_date_with_overrides_returns_none() -> None:
 
     window = current_or_next_window_with_overrides(zone_validity, options, now)
 
-    assert window is None
+    assert window is not None
+    assert window.start.date() == datetime(2026, 1, 1, tzinfo=UTC).date()
