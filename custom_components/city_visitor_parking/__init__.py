@@ -156,10 +156,9 @@ async def async_setup_entry(
         await provider.login(
             username=entry.data[CONF_USERNAME],
             password=entry.data[CONF_PASSWORD],
-            # Passes the stored permit_id as product_id (2park) to prevent
-            # _detect_product() from picking the wrong product when multiple
-            # config entries share the same provider.
-            product_id=entry.data.get(CONF_PERMIT_ID),
+            # Passes the permit_id so providers can skip auto-detection when
+            # multiple config entries share the same provider.
+            permit_id=entry.data.get(CONF_PERMIT_ID),
             # Passes previously resolved params back to skip redundant API calls
             # on restart (e.g. location for 2park, permit_media_type_id for dvsportal).
             **entry.data.get(CONF_RESOLVED_LOGIN_PARAMS, {}),
