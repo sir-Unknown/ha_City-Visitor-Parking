@@ -20,7 +20,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Release tag to process (e.g. v1.0.0-testing.1)"
+        description: "Release tag to process (e.g. v1.0.0b1 or v1.0.0-testing.1)"
         required: true
         type: string
 
@@ -217,15 +217,26 @@ jobs:
             echo "RELEASE_BODY_EOF"
           } >> "$GITHUB_OUTPUT"
       - name: Extract pyCityVisitorParking ref from release body
-        if: contains(needs.validate.outputs.tag, '-testing.') || contains(needs.validate.outputs.tag, '-beta.')
         id: pycvp
         env:
           RELEASE_BODY: ${{ steps.release_body.outputs.body }}
           RELEASE_TAG: ${{ needs.validate.outputs.tag }}
         run: |
           IS_BETA=false
-          if echo "$RELEASE_TAG" | grep -q '\-beta\.'; then
+          IS_TESTING=false
+
+          if echo "$RELEASE_TAG" | grep -qE '^v[0-9]+\.[0-9]+\.[0-9]+b[0-9]+(\+.*)?$'; then
             IS_BETA=true
+          fi
+
+          if echo "$RELEASE_TAG" | grep -q '\-testing\.'; then
+            IS_TESTING=true
+          fi
+
+          if [ "$IS_BETA" != "true" ] && [ "$IS_TESTING" != "true" ]; then
+            echo "commit=" >> "$GITHUB_OUTPUT"
+            echo "pypi=" >> "$GITHUB_OUTPUT"
+            exit 0
           fi
 
           COMMIT=$(echo "$RELEASE_BODY" | grep -oE '\*\*Commit:\*\* `?([a-f0-9]{40})`?' | grep -oE '[a-f0-9]{40}') || true
