@@ -164,6 +164,10 @@ async def async_setup_entry(
             **entry.data.get(CONF_RESOLVED_LOGIN_PARAMS, {}),
         )
     except AuthError as err:
+        if entry.data.get(CONF_RESOLVED_LOGIN_PARAMS):
+            hass.config_entries.async_update_entry(
+                entry, data={**entry.data, CONF_RESOLVED_LOGIN_PARAMS: {}}
+            )
         raise ConfigEntryAuthFailed from err
     except NetworkError as err:
         raise ConfigEntryNotReady from err
@@ -177,7 +181,7 @@ async def async_setup_entry(
             time.perf_counter() - login_started,
         )
 
-    resolved = provider.resolved_login_params
+    resolved = getattr(provider, "resolved_login_params", {})
     if resolved != entry.data.get(CONF_RESOLVED_LOGIN_PARAMS):
         hass.config_entries.async_update_entry(
             entry, data={**entry.data, CONF_RESOLVED_LOGIN_PARAMS: resolved}
