@@ -60,10 +60,16 @@ def current_or_next_window_with_overrides(
             for block in sorted(zone_validity, key=lambda b: b.start):
                 if block.end <= now:
                     continue
-                candidate = windows_for_today(zone_validity, options, block.start)
-                result = current_or_next_window(candidate, now)
-                if result is not None:
-                    return result
+                # Probe each calendar day in the block; block.start may be a
+                # free day while later days in the same block are chargeable.
+                probe = max(block.start, now)
+                probe = probe.replace(hour=0, minute=0, second=0, microsecond=0)
+                while probe < block.end:
+                    candidate = windows_for_today(zone_validity, options, probe)
+                    result = current_or_next_window(candidate, now)
+                    if result is not None:
+                        return result
+                    probe += timedelta(days=1)
             return None
         return current_or_next_window(zone_validity, now)
 
