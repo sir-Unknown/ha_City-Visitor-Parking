@@ -89,17 +89,17 @@
               "monday_free_parking": "Vergunning is niet actief op maandag; parkeren is gratis.",
               "monday_chargeable_windows": "Betaaltijden voor maandag, bijvoorbeeld 09:00-13:00, 14:00-17:30. Laat leeg om de standaard betaaltijden van de provider te gebruiken. Als vrij parkeren is ingeschakeld, wordt de invoer in dit veld genegeerd.",
               "tuesday_free_parking": "Vergunning is niet actief op dinsdag; parkeren is gratis.",
-              "tuesday_chargeable_windows": "Betaaltijden voor dinsdag, bijvoorbeeld 09:00-13:00, 14:00-17:30. Laat leeg om de standaard betaaltijden van de provider te gebruiken.",
+              "tuesday_chargeable_windows": "Betaaltijden voor dinsdag, bijvoorbeeld 09:00-13:00, 14:00-17:30. Laat leeg om de standaard betaaltijden van de provider te gebruiken. Als vrij parkeren is ingeschakeld, wordt de invoer in dit veld genegeerd.",
               "wednesday_free_parking": "Vergunning is niet actief op woensdag; parkeren is gratis.",
-              "wednesday_chargeable_windows": "Betaaltijden voor woensdag, bijvoorbeeld 09:00-13:00, 14:00-17:30. Laat leeg om de standaard betaaltijden van de provider te gebruiken.",
+              "wednesday_chargeable_windows": "Betaaltijden voor woensdag, bijvoorbeeld 09:00-13:00, 14:00-17:30. Laat leeg om de standaard betaaltijden van de provider te gebruiken. Als vrij parkeren is ingeschakeld, wordt de invoer in dit veld genegeerd.",
               "thursday_free_parking": "Vergunning is niet actief op donderdag; parkeren is gratis.",
-              "thursday_chargeable_windows": "Betaaltijden voor donderdag, bijvoorbeeld 09:00-13:00, 14:00-17:30. Laat leeg om de standaard betaaltijden van de provider te gebruiken.",
+              "thursday_chargeable_windows": "Betaaltijden voor donderdag, bijvoorbeeld 09:00-13:00, 14:00-17:30. Laat leeg om de standaard betaaltijden van de provider te gebruiken. Als vrij parkeren is ingeschakeld, wordt de invoer in dit veld genegeerd.",
               "friday_free_parking": "Vergunning is niet actief op vrijdag; parkeren is gratis.",
-              "friday_chargeable_windows": "Betaaltijden voor vrijdag, bijvoorbeeld 09:00-13:00, 14:00-17:30. Laat leeg om de standaard betaaltijden van de provider te gebruiken.",
+              "friday_chargeable_windows": "Betaaltijden voor vrijdag, bijvoorbeeld 09:00-13:00, 14:00-17:30. Laat leeg om de standaard betaaltijden van de provider te gebruiken. Als vrij parkeren is ingeschakeld, wordt de invoer in dit veld genegeerd.",
               "saturday_free_parking": "Vergunning is niet actief op zaterdag; parkeren is gratis.",
-              "saturday_chargeable_windows": "Betaaltijden voor zaterdag, bijvoorbeeld 09:00-13:00, 14:00-17:30. Laat leeg om de standaard betaaltijden van de provider te gebruiken.",
+              "saturday_chargeable_windows": "Betaaltijden voor zaterdag, bijvoorbeeld 09:00-13:00, 14:00-17:30. Laat leeg om de standaard betaaltijden van de provider te gebruiken. Als vrij parkeren is ingeschakeld, wordt de invoer in dit veld genegeerd.",
               "sunday_free_parking": "Vergunning is niet actief op zondag; parkeren is gratis.",
-              "sunday_chargeable_windows": "Betaaltijden voor zondag, bijvoorbeeld 09:00-13:00, 14:00-17:30. Laat leeg om de standaard betaaltijden van de provider te gebruiken."
+              "sunday_chargeable_windows": "Betaaltijden voor zondag, bijvoorbeeld 09:00-13:00, 14:00-17:30. Laat leeg om de standaard betaaltijden van de provider te gebruiken. Als vrij parkeren is ingeschakeld, wordt de invoer in dit veld genegeerd."
             }
           },
           "free_parking_dates": {
