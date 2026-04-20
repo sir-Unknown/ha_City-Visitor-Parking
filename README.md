@@ -20,8 +20,6 @@
 > Looking for English documentation? See: [wiki/en/Home](https://github.com/sir-Unknown/ha_City-Visitor-Parking/wiki/en/Home)<br>
 > Looking for Dutch documentation? See: [wiki/nl/Home](https://github.com/sir-Unknown/ha_City-Visitor-Parking/wiki/nl/Home)
 
----
-
 ## About this integration
 
 With **City Visitor Parking**, you can manage visitor parking permits for supported Dutch municipalities directly from Home Assistant.
