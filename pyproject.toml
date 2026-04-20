@@ -6,20 +6,20 @@ dependencies = ["pycityvisitorparking==0.5.24"]
 
 [dependency-groups]
 dev = [
-  "mypy==1.20.0",
+  "mypy==1.20.1",
   "pre-commit==4.5.1",
-  "pymicro-vad==1.0.1",
+  "pymicro-vad==2.0.1",
   "pyright==1.1.408",
-  "ruff==0.15.10",
+  "ruff==0.15.11",
   "types-PyYAML==6.0.12.20260408",
-  "zizmor==1.23.1",
+  "zizmor==1.24.0",
 ]
 test = [
-  "pytest==9.0.0",
+  "pytest==9.0.3",
   "pytest-asyncio==1.3.0",
-  "pytest-cov==7.0.0",
+  "pytest-cov==7.1.0",
   "pytest-homeassistant-custom-component==0.13.324", # TODO: when bumping, re-check allow-ghsas in dependency-review.yml for stale exceptions
-  "freezegun==1.5.2",
+  "freezegun==1.5.5",
 ]
 perf = [
   "isal==1.8.0",
