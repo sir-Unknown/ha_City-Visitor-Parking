@@ -45,7 +45,8 @@ jobs:
 
   category_label:
     name: Assign category label
-    if: github.event.action != 'labeled' && github.event.action != 'unlabeled'
+    needs: [path_labels]
+    if: always() && !cancelled() && needs.path_labels.result != 'failure' && github.event.action != 'labeled' && github.event.action != 'unlabeled'
     runs-on: ubuntu-latest
     permissions:
       contents: read
