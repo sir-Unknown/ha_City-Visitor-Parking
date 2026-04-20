@@ -64,7 +64,7 @@ jobs:
           persist-credentials: false
 
       - name: Run Release Drafter (stable)
-        if: github.ref_name == 'main' && inputs.prerelease == ''
+        if: github.ref_name == 'main' && (inputs.prerelease == 'stable' || inputs.prerelease == '')
         uses: release-drafter/release-drafter@5de93583980a40bd78603b6dfdcda5b4df377b32 # v7.2.0
         with:
           version: ${{ inputs.version }}
