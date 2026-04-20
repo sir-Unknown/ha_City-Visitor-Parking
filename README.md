@@ -3,13 +3,11 @@
   <br>
   City Visitor Parking
   <br>
-  <sub><span style="font-size: 0.7em;">Visitor Parking</span></sub>
+  <sub><span style="font-size: 0.7em;">Beheer bezoekersparkeren in Home Assistant</span></sub>
 </h1>
 
 <p align="center">
-  Manage Dutch municipality visitor parking permits directly from Home Assistant.
-  <br>
-  Start, update, and stop visitor parking sessions without opening the municipal portal.
+  <sub>This integration is free and open source. If it saves you a trip to the parking portal, a beer is always appreciated! 🍺</sub>
 </p>
 
 <p align="center">
