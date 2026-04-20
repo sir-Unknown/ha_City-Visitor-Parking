@@ -1,20 +1,56 @@
-<h1><img src="custom_components/city_visitor_parking/brand/icon.png" alt="City Visitor Parking" height="40" valign="middle"> City Visitor Parking <a href="https://my.home-assistant.io/redirect/hacs_repository/?owner=sir-Unknown&repository=ha_City-Visitor-Parking&category=integration"><img src="https://my.home-assistant.io/badges/hacs_repository.svg" alt="Open in HACS" height="28" align="right"></a></h1>
-<p><em>Beheer bezoekersparkeervergunningen van Nederlandse gemeenten vanuit Home Assistant. <a href="https://github.com/sir-Unknown/ha_City-Visitor-Parking/wiki/nl/Home">Nederlandse documentatie</a>.</em></p>
+<h1 align="center">
+  <img src="https://raw.githubusercontent.com/sir-Unknown/ha_City-Visitor-Parking/main/custom_components/city_visitor_parking/brand/icon@2x.png" alt="City Visitor Parking" height="80">
+  <br>
+  City Visitor Parking
+  <br>
+  <sub><span style="font-size: 0.7em;">Visitor Parking</span></sub>
+</h1>
 
-Manage Dutch municipality visitor parking permits directly from Home Assistant. This integration lets you start, update, and end visitor parking sessions without having to open the municipal parking portal. Keep your favorite license plates at hand, see at a glance whether parking is paid or free, and automate your visitor parking with Home Assistant automations and scripts.
+<p align="center">
+  Manage Dutch municipality visitor parking permits directly from Home Assistant.
+  <br>
+  Start, update, and stop visitor parking sessions without opening the municipal portal.
+</p>
 
-The integration supports a growing number of [Dutch municipalities](#supported-municipalities) and connects to their parking systems.
+<p align="center">
+  <a href="https://github.com/sponsors/sir-Unknown">
+    <img src="https://img.shields.io/badge/Buy%20me%20a%20beer-111111?style=for-the-badge&logo=buymeacoffee&logoColor=ffdd00" alt="Buy me a beer">
+  </a>
+</p>
 
-<br>
+> [!TIP]
+> Looking for English documentation? See: [wiki/en/Home](https://github.com/sir-Unknown/ha_City-Visitor-Parking/wiki/en/Home)<br>
+> Looking for Dutch documentation? See: [wiki/nl/Home](https://github.com/sir-Unknown/ha_City-Visitor-Parking/wiki/nl/Home)
+
+---
+
+## About this integration
+
+With **City Visitor Parking**, you can manage visitor parking permits for supported Dutch municipalities directly from Home Assistant.
+
+With this integration, you can:
+
+- start, update, and stop a parking session
+- quickly select a saved license plate
+- instantly see whether parking is paid or free
+- automate visitor parking using Home Assistant automations and scripts
+
+This means you no longer have to manually log in to the municipal parking portal every time.
+
+---
+
+## Important
 
 > [!IMPORTANT]
-> This integration is under active development — thank you for using it and for your patience! Features may occasionally break, and new versions can sometimes introduce regressions. It is possible that a parking session is not correctly started, updated, or ended.
+> This integration is under active development. As a result, some features may occasionally stop working correctly, and new versions may introduce regressions.
 >
-> Please always verify that your session is active through the official parking portal. The maintainer and all contributors cannot be held responsible for incorrectly registered visitor parking sessions or any fines that may result.
+> Always verify in the official parking portal that a session has been started, updated, or stopped correctly.
 >
-> This integration is built almost entirely with the help of AI agents, primarily ChatGPT and Claude.
+> The maintainer and contributors cannot be held responsible for incorrectly registered parking sessions or any resulting fines.
+>
+> This integration was developed largely with the help of AI agents, primarily ChatGPT and Claude.
 
-<br>
+---
 
 ## Screenshots
 
@@ -22,12 +58,16 @@ The integration supports a growing number of [Dutch municipalities](#supported-m
 
 More screenshots: [wiki/en/Lovelace-Cards](https://github.com/sir-Unknown/ha_City-Visitor-Parking/wiki/en/Lovelace-Cards)
 
+---
+
 ## Supported municipalities
+
+The integration supports a growing number of Dutch municipalities and connects to their visitor parking systems.
 
 <details>
 <summary><strong>Show supported municipalities</strong></summary>
 
-| Municipality     |                                                                                         |
+| Municipality     | Portal                                                                                  |
 | ---------------- | --------------------------------------------------------------------------------------- |
 | Amstelveen       | [mijn.2park.nl](https://mijn.2park.nl/)                                                 |
 | Nijmegen         | [parkeerproducten.nijmegen.nl](https://parkeerproducten.nijmegen.nl/DVSPortal/)         |
@@ -87,25 +127,46 @@ More screenshots: [wiki/en/Lovelace-Cards](https://github.com/sir-Unknown/ha_Cit
 
 </details>
 
-## Requesting support for additional municipalities
+---
 
-Is your municipality not listed? Please [open an issue](https://github.com/sir-Unknown/ha_City-Visitor-Parking/issues/new) to request support. Note that adding a new municipality requires active collaboration: you will be asked to provide diagnostic logging and, if needed, give the maintainer temporary access to your parking portal account to investigate how the system works.
+## Is your municipality missing?
+
+If your municipality is not listed yet, you can request support through GitHub Issues:
+
+- [Request support](https://github.com/sir-Unknown/ha_City-Visitor-Parking/issues/new)
+
+Adding support for a new municipality requires active collaboration. You may be asked to:
+
+- provide diagnostic logging
+- give temporary access to your parking portal account for investigation
+
+More information:
+
+- [Add municipalities (EN)](https://github.com/sir-Unknown/ha_City-Visitor-Parking/wiki/en/add-municipalities)
+- [Gemeenten toevoegen (NL)](https://github.com/sir-Unknown/ha_City-Visitor-Parking/wiki/nl/gemeenten-toevoegen)
+
+---
 
 ## Documentation
 
-- English: [wiki/en/Home](https://github.com/sir-Unknown/ha_City-Visitor-Parking/wiki/en/Home)
-- Nederlands: [wiki/nl/Home](https://github.com/sir-Unknown/ha_City-Visitor-Parking/wiki/nl/Home)
-- Library: [pyCityVisitorParking](https://github.com/sir-Unknown/pyCityVisitorParking)
-- Library README: [pyCityVisitorParking README](https://github.com/sir-Unknown/pyCityVisitorParking#readme)
-- PyPI: [pycityvisitorparking](https://pypi.org/project/pycityvisitorparking/)
+### English
 
-Quick links:
+- [Home](https://github.com/sir-Unknown/ha_City-Visitor-Parking/wiki/en/Home)
+- [Installation](https://github.com/sir-Unknown/ha_City-Visitor-Parking/wiki/en/Installation)
+- [Configuration](https://github.com/sir-Unknown/ha_City-Visitor-Parking/wiki/en/Configuration)
+- [Lovelace Cards](https://github.com/sir-Unknown/ha_City-Visitor-Parking/wiki/en/Lovelace-Cards)
+- [Services](https://github.com/sir-Unknown/ha_City-Visitor-Parking/wiki/en/Services)
+- [Blueprints](https://github.com/sir-Unknown/ha_City-Visitor-Parking/wiki/en/Blueprints)
+- [Troubleshooting](https://github.com/sir-Unknown/ha_City-Visitor-Parking/wiki/en/Troubleshooting)
+- [Privacy](https://github.com/sir-Unknown/ha_City-Visitor-Parking/wiki/en/Privacy)
+- [Examples](https://github.com/sir-Unknown/ha_City-Visitor-Parking/wiki/en/Examples)
 
-- Installation: [wiki/en/Installation](https://github.com/sir-Unknown/ha_City-Visitor-Parking/wiki/en/Installation)
-- Configuration: [wiki/en/Configuration](https://github.com/sir-Unknown/ha_City-Visitor-Parking/wiki/en/Configuration)
-- Lovelace cards: [wiki/en/Lovelace-Cards](https://github.com/sir-Unknown/ha_City-Visitor-Parking/wiki/en/Lovelace-Cards)
-- Services: [wiki/en/Services](https://github.com/sir-Unknown/ha_City-Visitor-Parking/wiki/en/Services)
-- Blueprints: [wiki/en/Blueprints](https://github.com/sir-Unknown/ha_City-Visitor-Parking/wiki/en/Blueprints)
-- Troubleshooting: [wiki/en/Troubleshooting](https://github.com/sir-Unknown/ha_City-Visitor-Parking/wiki/en/Troubleshooting)
-- Privacy: [wiki/en/Privacy](https://github.com/sir-Unknown/ha_City-Visitor-Parking/wiki/en/Privacy)
-- Examples: [wiki/en/Examples](https://github.com/sir-Unknown/ha_City-Visitor-Parking/wiki/en/Examples)
+### Nederlands
+
+- [Home](https://github.com/sir-Unknown/ha_City-Visitor-Parking/wiki/nl/Home)
+
+### Library
+
+- [pyCityVisitorParking](https://github.com/sir-Unknown/pyCityVisitorParking)
+- [README](https://github.com/sir-Unknown/pyCityVisitorParking#readme)
+- [PyPI: pycityvisitorparking](https://pypi.org/project/pycityvisitorparking/)
