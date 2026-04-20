@@ -26,6 +26,8 @@ permissions:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  # Keep label-mutation runs from cancelling each other mid-update. Label
+  # changes emitted by this workflow can trigger follow-up validation runs.
   cancel-in-progress: false
 
 jobs:

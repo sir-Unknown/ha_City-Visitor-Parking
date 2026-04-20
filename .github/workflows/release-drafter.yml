@@ -27,12 +27,12 @@ on:
   workflow_dispatch:
     inputs:
       prerelease:
-        description: "Pre-release type (beta or testing). Leave empty for a stable draft."
+        description: "Release type."
         required: false
-        default: ""
+        default: "stable"
         type: choice
         options:
-          - ""
+          - stable
           - beta
           - testing
       version:

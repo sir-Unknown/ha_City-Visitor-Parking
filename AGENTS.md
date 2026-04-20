@@ -2,29 +2,41 @@
 
 ## 1) Purpose
 
-This repository contains a Home Assistant custom integration that wraps the async library `pycityvisitorparking` to manage Dutch municipal visitor parking in a consistent, Home Assistant–native way.
+This repository contains a Home Assistant custom integration that wraps the async library `pycityvisitorparking` to manage Dutch municipal visitor parking in a consistent, Home Assistant-native way.
 
 Key goals:
 
-- HA-native UX: config flow, options flow, reauth, diagnostics, translations.
+- HA-native UX: config flow, options flow, reauth, diagnostics, translations, services, and frontend behavior.
 - Strict async behavior and reliable runtime operation.
-- Generic HA surface: avoid provider-specific concepts/fields.
+- Generic HA surface: avoid provider-specific concepts, fields, and user-facing terminology.
+- Provider-specific API behavior, parsing logic, request quirks, and municipality-specific backend handling MUST live in `pycityvisitorparking`, not in this integration.
 - HACS-installable, but architected and implemented as if it were an official Home Assistant integration to make future migration straightforward.
 
-## 2) Official-compatibility requirements
+## 2) Current Repo Shape
 
-Treat this repository as “official-ready”:
+Treat this repository as four connected surfaces that must stay aligned:
+
+- Python Home Assistant integration code in `custom_components/city_visitor_parking/`
+- A custom frontend bundle in `custom_components/city_visitor_parking/frontend/`
+- A websocket API layer used by the frontend and tests
+- GitHub automation for validation, labeling, release drafting, dependency review, and release packaging
+
+Changes in one surface often require follow-up updates in the others.
+
+## 3) Official-compatibility requirements
+
+Treat this repository as "official-ready":
 
 - Follow Home Assistant Core integration patterns and conventions.
 - No HACS-specific runtime shortcuts; HACS is only a distribution channel.
 - Use standard `manifest.json` requirements and hassfest-friendly translations and schemas.
 - Avoid brittle assumptions about file paths, working directories, or runtime environment.
 - Keep module naming and responsibilities aligned with official integrations:
-  - `const.py`, `config_flow.py`, `coordinator.py`, `services.py`, `diagnostics.py`, `sensor.py`.
+  - `const.py`, `config_flow.py`, `coordinator.py`, `services.py`, `diagnostics.py`, `sensor.py`
 
 Document any migration steps in project docs when needed.
 
-## 2.1) HA Core and HA Frontend compatibility
+## 3.1) HA Core and HA Frontend compatibility
 
 Treat Home Assistant Core and Home Assistant Frontend as the compatibility baseline for implementation style, testing, copy, and review workflow.
 
@@ -32,305 +44,419 @@ Treat Home Assistant Core and Home Assistant Frontend as the compatibility basel
 
 - Prefer patterns used by mature Gold/Platinum-quality Home Assistant integrations when choosing structure, naming, or error handling.
 - Keep tests fully typed where practical; test function parameters SHOULD use concrete type annotations.
-- Do not rewrite commit history after review has started; avoid amend/squash/rebase once feedback is in progress unless explicitly requested.
+- Do not rewrite commit history after review has started; avoid amend, squash, or rebase once feedback is in progress unless explicitly requested.
+- Pull request titles MUST follow the repository's standard conventional format, using a recognized prefix such as `feat:`, `fix:`, `docs:`, `chore:`, `refactor:`, `perf:`, `ci:`, `deps:`, `test:`, or `tests:` so CI label automation can categorize the PR correctly.
 
 ### HA Frontend alignment
 
 - User-facing text MUST be localization-friendly, concise, and consistent with Home Assistant terminology.
 - Prefer Home Assistant wording conventions:
-  - use “add” / “remove” for attaching or detaching existing items,
-  - use “create” / “delete” for creating or permanently removing items.
-- Frontend assets, cards, dialogs, and configuration UX MUST follow Home Assistant frontend expectations for accessibility, responsive behavior, error states, and internationalization.
+  - use "add" / "remove" for attaching or detaching existing items
+  - use "create" / "delete" for creating or permanently removing items
+- Frontend assets, cards, dialogs, editors, and configuration UX MUST follow Home Assistant frontend expectations for accessibility, responsive behavior, error states, and internationalization.
 - Avoid hardcoded UI copy when translation keys or shared wording patterns are appropriate.
 
 ### Compatibility rule
 
 - If a local repository convention conflicts with HA Core or HA Frontend conventions, resolve it in favor of the option that is most likely to remain acceptable in an eventual Home Assistant Core migration.
 
-## 3) Quality scale target
+## 4) Quality scale target
 
-- Maintain:
-  - `custom_components/city_visitor_parking/quality_scale.yaml` (rule-by-rule, implemented/exempt)
+- Maintain `custom_components/city_visitor_parking/quality_scale.yaml` rule-by-rule with implemented or exempt status.
 
 If any rule is not implemented, document an explicit exemption and rationale.
 
-## 4) Releases & versioning (GitHub Releases required)
+The integration currently targets the quality level declared in `custom_components/city_visitor_parking/manifest.json`. Keep code, tests, docs, diagnostics, and CI aligned with that declared target.
+
+## 5) Releases & versioning
 
 - Versions MUST come from GitHub Releases.
 - For every version bump:
-  - update `manifest.json` `version` to the new release version,
-  - publish a GitHub Release (not just a tag),
-  - use a tag name matching the integration version (recommend: `v1.2.3`).
+  - update `custom_components/city_visitor_parking/manifest.json` `version` to the new release version
+  - publish a GitHub Release, not just a tag
+  - use a tag name matching the integration version, preferably `v1.2.3`
 
-## 5) CI requirements (must use these actions)
+Release automation and release notes MUST stay aligned with:
 
-### HACS validation
+- `.github/release-drafter.yml`
+- `.github/workflows/release-drafter.yml`
+- `.github/workflows/release.yml`
 
-- Add a workflow that runs HACS validation using `hacs/action`.
-- Category MUST be `integration`.
-- Trigger on push, pull_request, schedule (daily), workflow_dispatch.
+## 6) CI requirements
 
-### hassfest
+The repository currently relies on GitHub Actions workflows for validation, labeling, release drafting, dependency review, and release packaging. Treat these workflows as part of the product surface, not as incidental tooling.
 
-- Add a workflow that runs hassfest using `home-assistant/actions/hassfest@master`.
-- Must checkout the repository first.
-- Trigger on push, pull_request, schedule (daily).
+### Required validation areas
 
-### Tests and lint/format
+- HACS validation using `hacs/action`
+- Hassfest validation using `home-assistant/actions/hassfest`
+- Python quality checks
+- Python tests
+- Frontend quality checks
+- Release policy validation
+- Dependency review
+- PR labeling and release categorization
 
-- Add pytest workflow using HA test helpers.
-- Add lint/format workflow with one consistent toolchain.
+### Current repo workflow expectations
 
-## 6) Hard rules (no exceptions)
+- Python development and CI use `uv` with dependency groups from `pyproject.toml`.
+- Frontend development and CI use the bundle under `custom_components/city_visitor_parking/frontend/`.
+- Treat PR labeling, Release Drafter, dependency review, and release packaging workflows as part of the maintained repository surface.
+
+## 7) Hard rules
 
 ### Async & I/O
 
-- Async-only. No blocking calls.
-- Do not perform HTTP directly; only `pycityvisitorparking` uses aiohttp.
-- Always inject HA’s shared aiohttp session into `pycityvisitorparking.Client`. Never close injected sessions.
+- Async-only. No blocking calls in integration runtime code.
+- Do not perform HTTP directly from integration modules; only `pycityvisitorparking` uses aiohttp for provider communication.
+- Always inject Home Assistant's shared aiohttp session into `pycityvisitorparking.Client`.
+- Never close injected HA-managed sessions.
+
+### Provider abstraction
+
+- Do not add hardcoded provider-specific logic, provider-specific API branching, municipality-specific hacks, or provider-specific field handling in the Home Assistant integration.
+- If behavior is specific to one provider or municipality, it MUST be implemented in `pycityvisitorparking` and exposed through a generic integration-facing contract.
+- The integration may select a configured provider, but it MUST NOT become the place where provider quirks are embedded.
 
 ### Privacy & security
 
 - Never log credentials, tokens, raw license plates, or other PII.
-- Mask plates if they ever appear outside the library boundary (e.g., AB\*\*\*12).
+- Mask plates if they ever appear outside the library boundary, for example `AB***12`.
 - Diagnostics MUST redact sensitive data.
+- Error messages, service exceptions, websocket errors, and logs MUST avoid leaking PII.
 
 ### Code quality
 
-- Docstrings required for all public modules/classes/functions.
-- Add inline comments for non-obvious logic (flow branching, validation, time handling, fallback updates, routing).
-- Prefer typing throughout; use a typed config entry alias for `entry.runtime_data`.
+- Docstrings required for all public modules, classes, and functions.
+- Add inline comments for non-obvious logic such as flow branching, validation, time handling, fallback updates, routing, frontend resource registration, or websocket contract handling.
+- Prefer typing throughout.
+- Use a typed config entry alias for `entry.runtime_data`.
 
-## 7) Provider mapping via providers.yaml
+## 8) Development workflow
+
+### Branch workflow
+
+- Treat `dev` as the default working branch for day-to-day changes and small fixes.
+- Use a dedicated feature branch only for larger, clearly scoped change sets, especially when work spans multiple maintained surfaces such as backend, frontend, websocket API, docs, or CI.
+- Do not put partial, half-reviewed, or long-running multi-commit work directly on `dev` when isolated review would be safer or clearer.
+- Keep feature branches focused on one clustered change set and do not use long-lived catch-all branches for unrelated work.
+- Feature branches SHOULD use a conventional prefix such as `feat/`, `fix/`, `refactor/`, `docs/`, `ci/`, `deps/`, `test/`, or `tests/`.
+- Do not add agent-related prefixes or suffixes such as `[codex]`, `[agent]`, or similar markers in branch names, commit titles, or pull request titles.
+- Keep feature branches current with `dev` as needed, but do not rewrite shared history once review is in progress unless explicitly requested.
+- After a feature branch is merged, delete it on GitHub and clean up the local branch as soon as it is no longer needed unless there is an explicit reason to keep it temporarily.
+
+### Python workflow
+
+Use `uv` for local Python commands and dependency resolution.
+
+Preferred commands:
+
+- `uv run --only-group dev ruff check .`
+- `uv run --only-group dev ruff format --check .`
+- `uv sync --group test --no-install-project`
+- `uv run pytest tests/components/city_visitor_parking`
+
+### Frontend workflow
+
+Frontend code lives in `custom_components/city_visitor_parking/frontend/`.
+
+If frontend files change, run:
+
+- `yarn install`
+- `yarn build`
+- `yarn lint`
+- `yarn test`
+
+If frontend output or frontend translation assets are expected by runtime code, confirm they remain compatible with the backend registration logic in `custom_components/city_visitor_parking/__init__.py`.
+
+## 9) Dependency policy
+
+### Version alignment
+
+- Keep `pycityvisitorparking` pinned consistently in both:
+  - `pyproject.toml`
+  - `custom_components/city_visitor_parking/manifest.json`
+
+### CI-sensitive dependency changes
+
+- Be careful when bumping Home Assistant test dependencies.
+- `pytest-homeassistant-custom-component` may pin compatible versions of `pytest`, `pytest-cov`, and related packages.
+- Do not accept dependency bumps that make the `uv` dependency graph unsatisfiable in CI.
+- If dependency review has temporary advisory exceptions, remove them as soon as upstream constraints allow.
+
+### Dependency automation
+
+- Keep `.github/dependabot.yml` aligned with real repository constraints.
+- If a dependency must stay pinned for CI compatibility, document that in config comments and avoid allowing automated PRs to repeatedly propose broken combinations.
+
+## 10) Provider mapping via providers.yaml
 
 ### Source of truth
 
-- `custom_components/city_visitor_parking/providers.yaml` maps municipality → provider configuration.
-- Load it via `importlib.resources` (no filesystem assumptions).
+- `custom_components/city_visitor_parking/providers.yaml` maps municipality to provider configuration.
+- Load it via `importlib.resources`; do not depend on filesystem-relative assumptions.
 
 ### Config flow dropdown
 
-- Config flow MUST present a municipality dropdown built from `providers.yaml`, plus “Other”.
-- If a known municipality is selected, the provider config must be applied automatically (no provider dropdown shown).
-- If “Other” is selected, prompt for manual entry:
-  - provider_id (dropdown from `pycityvisitorparking.Client.list_providers()`)
-  - municipality_name
-  - base_url
-  - api_url
-- Manual provider configs are stored in config entry data only and must not be persisted back to YAML.
+- Config flow MUST present a municipality dropdown built from `providers.yaml`, plus `Other`.
+- If a known municipality is selected, the provider config must be applied automatically.
+- If `Other` is selected, prompt for manual entry:
+  - `provider_id` from `pycityvisitorparking.Client.list_providers()`
+  - `municipality_name`
+  - `base_url`
+  - `api_url`
+- Manual provider configs are stored in config entry data only and must not be written back to YAML.
 
-## 8) Config entry lifecycle
+## 11) Config entry lifecycle
 
 ### Config flow requirements
 
 Recommended steps:
 
-1. Select municipality (dropdown + “Other”)
-2. If “Other”: enter manual municipality/provider config
+1. Select municipality
+2. If `Other`, enter manual municipality/provider config
 3. Enter credentials
 4. Validate connection/login with a safe test call
-5. Fetch permits and select permit_id
+5. Fetch permits and select `permit_id`
 6. Optional description
 
 ### Entry identity & title
 
 - Set a stable `unique_id` and prevent duplicates.
-- Preferred unique_id strategy: include provider_id + permit_id (non-PII) if stable.
+- Preferred `unique_id` strategy: include `provider_id` and `permit_id` if stable and non-PII.
 - Entry title MUST be unique and follow:
-  - `"{description} - {permit_id}"` if description provided
-  - else `"{municipality_name} - {permit_id}"`
+  - `"{description} - {permit_id}"` if description is provided
+  - otherwise `"{municipality_name} - {permit_id}"`
 
 ### Setup/unload
 
 - `async_setup_entry` creates runtime objects and stores them in `entry.runtime_data`.
-- `async_unload_entry` unloads platforms and releases only internal resources created by the integration (never HA’s aiohttp session).
+- `async_unload_entry` unloads platforms and releases only resources owned by the integration.
+- Never close Home Assistant-owned shared resources.
 
 ### Reauthentication
 
-- Auth failures during setup or coordinator updates must raise `ConfigEntryAuthFailed` to trigger reauth.
+- Auth failures during setup or coordinator updates must raise `ConfigEntryAuthFailed`.
 - Implement `async_step_reauth` linked to the existing entry to update credentials and revalidate.
 
-## 9) Options flow (7-day operating time overrides + auto-end)
+## 12) Options flow
 
-- Options flow MUST support per-weekday overrides for operating times (7 days).
+### Time overrides
+
+- Options flow MUST support per-weekday overrides for operating times across all 7 days.
 - Store overrides in `entry.options`.
-- Default is “no override” (use library/provider-derived chargeable windows).
-- Validate day entries; if both start and end exist, enforce end > start.
+- Default is no override, meaning provider or library-derived chargeable windows are used.
+- Validate each day entry; if both start and end exist, enforce `end > start`.
 
 ### Auto-end reservation when free
 
-- Add option: `auto_end_reservation_when_free` (boolean, default false).
-- When enabled, automatically end an active reservation early if the permit zone is currently not chargeable (“free”) according to computed `permit.zone_availability`.
-- Must be scoped to the single config entry.
-- Must implement safeguards:
-  - track reservation_ids already auto-ended/attempted
-  - cooldown to avoid repeated attempts and log spam
+- Add option `auto_end_reservation_when_free` as a boolean, default `false`.
+- When enabled, automatically end an active reservation early if the permit zone is currently not chargeable according to computed `permit.zone_availability`.
+- Scope this behavior to the single config entry only.
+- Implement safeguards:
+  - track reservation IDs already auto-ended or attempted
+  - use cooldowns to avoid repeated attempts and log spam
   - never act when there is no active reservation
 
-## 10) Runtime data & coordinator
+## 13) Runtime data & coordinator
 
-- Use a `DataUpdateCoordinator` with a conservative interval to fetch:
-  - selected permit (and its zone_validity)
-  - reservations
-  - favorites
-- Error handling:
-  - Temporary/network issues → raise `UpdateFailed` (preserve last-known-good; avoid log spam)
-  - Auth issues → raise `ConfigEntryAuthFailed`
+Use a `DataUpdateCoordinator` with a conservative interval to fetch:
 
-Runtime objects to keep in `entry.runtime_data` (typed):
+- selected permit and its `zone_validity`
+- reservations
+- favorites
+
+Error handling:
+
+- Temporary or network issues must raise `UpdateFailed`
+- Auth issues must raise `ConfigEntryAuthFailed`
+
+Runtime objects in `entry.runtime_data` should include:
 
 - `pycityvisitorparking.Client`
 - selected provider instance
 - coordinator
-- any derived state needed by entities/services
+- any derived state needed by entities, services, websocket handlers, or frontend support
 
-## 11) Entities (minimum required set)
+### Frontend and websocket contract
+
+- Treat `custom_components/city_visitor_parking/websocket_api.py`, `custom_components/city_visitor_parking/payloads.py`, and `custom_components/city_visitor_parking/frontend/src/types.ts` as one contract surface.
+- When changing payload fields or semantics, update backend payload builders, websocket handlers, frontend TypeScript types, and related tests together.
+- Frontend registration, generated assets, Lovelace resource synchronization, and websocket response shapes must remain compatible with runtime setup in `custom_components/city_visitor_parking/__init__.py`.
+
+## 14) Entities
 
 Expose at least these sensors. All entities MUST:
 
 - have a stable `unique_id`
 - set `_attr_has_entity_name = True`
-- use `translation_key` (no hardcoded names)
-- avoid PII in state/attributes
+- use `translation_key`
+- avoid PII in state and attributes
 
 ### Required sensors
 
-1. **Active reservations count**
+1. `active_reservations`
 
-- Entity key: `active_reservations`
-- State: integer count of reservations active “now”
-- Derived from coordinator reservations using UTC-aware comparisons.
+- State: integer count of reservations active now
 
-2. **Remaining time (H:mm)**
+2. `remaining_time`
 
-- Entity key: `remaining_time`
-- State: `H:mm` (hours no leading zero; minutes 2 digits)
-- Remaining time until the earliest `end_time` among active reservations.
-- If none active: state MUST be `0:00` and attribute `has_active_reservation=false`.
-- Attributes (non-PII only):
-  - `remaining_seconds` (int)
-  - `active_reservations` (int)
-  - `next_end_time` (UTC ISO8601) when available
-- Never expose raw license plates.
+- State: `H:mm`
+- If none active: `0:00`
+- Attribute `has_active_reservation=false`
+- Non-PII attributes only
 
-3. **Permit zone validity (permit.zone_validity)**
+3. `permit_zone_validity`
 
-- Entity key: `permit_zone_validity`
-- State: integer = number of chargeable validity blocks currently known.
+- State: integer count of chargeable validity blocks
+- Attribute `zone_validity` with UTC ISO8601 blocks
+
+4. `permit_zone_availability`
+
+- State: `chargeable` or `free`
+- Derived from chargeable-only validity plus overrides
 - Attributes:
-  - `zone_validity`: list of `{start, end}` blocks in UTC ISO8601.
-- Must be chargeable-only (no free windows). Do not add provider-specific fields.
+  - `is_chargeable_now`
+  - `next_change_time`
+  - `windows_today`
 
-4. **Permit zone availability (permit.zone_availability)**
+5. `favorites`
 
-- Entity key: `permit_zone_availability`
-- State: `chargeable` / `free` (stable enum values).
-- Computed from chargeable-only `zone_validity` plus 7-day overrides.
-- Attributes (non-PII):
-  - `is_chargeable_now` (bool)
-  - `next_change_time` (UTC ISO8601) if available
-  - `windows_today`: list of `{start, end}` UTC ISO8601
-- Do not add provider-specific fields.
-
-5. **Favorites count**
-
-- Entity key: `favorites`
-- State: integer count of favorites.
+- State: integer count of favorites
 
 ### Stability requirements
 
-- Avoid frequent state churn; coordinator interval should be conservative.
-- Use `always_update=False` where possible and only write state changes when values truly change.
+- Avoid frequent state churn.
+- Use `always_update=False` where possible.
+- Only write state changes when values truly change.
 
 ### Multi-entry separation
 
-- Create exactly one Device per config entry and attach all entities to it with `device_info`.
-- Use device identifiers that include the entry identity, e.g. `(DOMAIN, entry.entry_id)` or `(DOMAIN, f"{provider_id}:{permit_id}")`.
-- Derive each entity’s `unique_id` from `entry.unique_id` plus a fixed suffix:
-  - `${entry.unique_id}:active_reservations`, `${entry.unique_id}:remaining_time`,
-    `${entry.unique_id}:permit_zone_validity`, `${entry.unique_id}:permit_zone_availability`,
-    `${entry.unique_id}:favorites`.
-- Keep the config entry title unique so HA groups entities cleanly per configured municipality/permit.
+- Create exactly one device per config entry.
+- Attach all entities to that device using `device_info`.
+- Use identifiers based on the entry identity.
+- Derive each entity `unique_id` from `entry.unique_id` plus a fixed suffix.
 
-## 12) Services — routing for multiple configured entries
+## 15) Services
 
 Home Assistant services are domain-wide, so routing is mandatory when multiple config entries exist.
 
 ### Routing rule
 
 - Every service MUST target exactly one entry.
-- The service schema MUST require `device_id` (preferred) as the routing target.
-- The handler MUST map `device_id` → config entry and then use that entry’s runtime objects (`entry.runtime_data`).
+- The service schema MUST require `device_id` as the routing target.
+- The handler MUST map `device_id` to the config entry and use that entry's runtime objects.
 
 ### Failure handling
 
-- If `device_id` cannot be resolved to an entry, or the entry is not loaded:
-  - raise `ServiceValidationError` using translation keys (generic message, no PII).
+- If `device_id` cannot be resolved, or the entry is not loaded:
+  - raise `ServiceValidationError` using translation keys
 - Never broadcast a service call across all entries.
 
 ### Required services
 
 All services are domain-scoped and require `device_id`:
 
-- `start_reservation` (device_id + start_time + end_time + license_plate)
-- `update_reservation` (device_id + reservation_id + at least one changed field)
-- `end_reservation` (device_id + reservation_id)
-- `add_favorite` (device_id + license_plate)
-- `update_favorite` (device_id + favorite_id + changed fields)
-- `remove_favorite` (device_id + favorite_id)
+- `start_reservation`
+- `update_reservation`
+- `end_reservation`
+- `add_favorite`
+- `update_favorite`
+- `remove_favorite`
 
 ### Validation rules
 
-- `start_reservation`: require start_time and end_time; enforce end_time > start_time; no defaults.
-- `update_reservation`: require reservation_id and at least one changed field; validate times when both provided; enforce end_time > start_time.
-- `end_reservation`: require reservation_id (maps to cancel).
-- Favorites: validate required identifiers and plate rules as applicable.
-- Invalid input must raise `ServiceValidationError` using translation keys.
-- Operational failures must raise `HomeAssistantError` using translation keys.
-- Never include PII in messages.
+- `start_reservation` requires `start_time`, `end_time`, and `license_plate`
+- `update_reservation` requires `reservation_id` and at least one changed field
+- `end_reservation` requires `reservation_id`
+- Validate time ordering when both times are present
+- Invalid input must raise `ServiceValidationError`
+- Operational failures must raise `HomeAssistantError`
+- Never include PII in messages
 
-### Update fallback behavior
+### Fallback behavior
 
-- If the library/provider does not support native reservation updates, implement a documented fallback (e.g., cancel + start) only when enough data is provided to do so safely.
-- Never perform a partial destructive fallback without required information.
+- If the library or provider does not support native reservation updates, only use a destructive fallback when enough information is present to do so safely.
+- Never perform partial destructive fallback behavior without the required data.
 
-### Testing
+## 16) Translations & i18n
 
-- Add tests with two config entries to ensure each service call executes only against the targeted entry/provider/permit.
-
-## 13) Translations & i18n
-
-- English is canonical; Dutch is required.
-- Provide:
+- English is canonical.
+- Dutch is required.
+- Maintain:
   - `strings.json`
   - `translations/en.json`
   - `translations/nl.json`
-- Adding another language is drop-in: `translations/<bcp47>.json`.
-- Translate config flow steps/errors, options, services fields/errors, and entity names.
 
-## 14) Diagnostics
+Also keep frontend translation assets aligned where applicable.
 
-- Implement `diagnostics.py` and redact sensitive fields (credentials/tokens/raw plates).
-- Include helpful non-PII troubleshooting data: provider_id, municipality, permit_id, polling interval, last update status.
+Translate:
 
-## 15) Testing policy (no live calls)
+- config flow steps and errors
+- options
+- services fields and errors
+- entity names
+- frontend strings and editors where applicable
+
+## 17) Diagnostics
+
+- Implement diagnostics in `diagnostics.py`.
+- Redact credentials, tokens, raw plates, and other sensitive fields.
+- Include helpful non-PII troubleshooting data such as:
+  - `provider_id`
+  - municipality
+  - `permit_id`
+  - polling interval
+  - last update status
+
+## 18) Testing policy
 
 - Tests must not call real municipal services.
-- Use pytest + HA test helpers; mock `pycityvisitorparking` and aiohttp.
+- Use pytest plus Home Assistant test helpers.
+- Mock `pycityvisitorparking` and aiohttp.
 
-Minimum required tests:
+Minimum expected coverage includes:
 
-- Config flow: dropdown from providers.yaml (+ “Other”), known city auto-maps, Other manual fields, success + permit selection + title formatting, invalid_auth/cannot_connect/unknown, reauth success/failure.
-- Multi-entry: two entries → two devices; entities attach correctly; unique_ids derived from entry.unique_id.
-- Options: 7-day overrides save/load + validation; auto_end toggle save/load.
-- Services: routing with 2 entries targets only the selected device/entry; validation rules; update fallback behavior.
-- Coordinator/runtime: when auto_end enabled and zone becomes free while a reservation is active:
-  - end is called once (guard + cooldown), not repeatedly.
-- Entity: permit_zone_availability correctness from zone_validity + overrides.
-- Coordinator: auth failures trigger ConfigEntryAuthFailed; network failures handled without log spam.
-- Translations: en/nl exist and parse.
+- config flow
+- reauth flow
+- options flow
+- multi-entry behavior
+- services routing and validation
+- coordinator behavior
+- entity behavior
+- websocket API behavior
+- diagnostics redaction
+- translations parsing
+- frontend contract behavior where backend payload shape matters
 
-## 16) Documentation
+### Frontend-aware testing rule
 
-- README: installation (HACS/manual), UI setup, options, services reference, troubleshooting, privacy notes.
-- MIGRATION.md: concrete steps to migrate the integration into Home Assistant Core.
+If a backend change affects frontend payloads, websocket responses, config entry exposure, or translations used by the frontend, add or update the corresponding tests.
+
+## 19) PR, labeling, and release-drafter conventions
+
+- Pull request titles MUST use a recognized conventional prefix.
+- PRs are expected to end up with exactly one release category label used by PR labeling and Release Drafter.
+- Keep `.github/workflows/pr-labeling.yml`, `.github/release-drafter.yml`, and `.github/workflows/release-drafter.yml` aligned with real title and label conventions.
+- If a workflow change alters categorization behavior, update the documentation and PR expectations with it.
+
+## 20) Documentation
+
+Maintain these docs as part of the integration surface:
+
+- `README.md`
+- `MIGRATION.md`
+- wiki pages when they are part of the maintained user or developer workflow
+- release-drafter and release-policy documentation when behavior changes
+
+README should cover:
+
+- installation
+- UI setup
+- options
+- services reference
+- frontend expectations if relevant
+- troubleshooting
+- privacy notes
+
+MIGRATION.md should describe concrete steps to move the integration into Home Assistant Core.
