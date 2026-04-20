@@ -18,20 +18,20 @@ on:
       - edited
       - reopened
       - synchronize
-      - labeled
-      - unlabeled
 
 permissions:
   contents: read
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
-  cancel-in-progress: false
+  # Only the newest labeling run matters for a PR; cancel stale reruns so
+  # checks do not appear to hang when the PR is updated repeatedly.
+  cancel-in-progress: true
 
 jobs:
   path_labels:
     name: Apply path labels
-    if: github.event.action != 'edited' && github.event.action != 'labeled' && github.event.action != 'unlabeled'
+    if: github.event.action != 'edited'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -45,7 +45,6 @@ jobs:
 
   category_label:
     name: Assign category label
-    if: github.event.action != 'labeled' && github.event.action != 'unlabeled'
     runs-on: ubuntu-latest
     permissions:
       contents: read
