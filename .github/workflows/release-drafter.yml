@@ -84,8 +84,8 @@ jobs:
           else
             MANIFEST_VERSION=$(jq -r '.version' custom_components/city_visitor_parking/manifest.json | sed 's/-.*//')
             if [ "${MANIFEST_VERSION}" = "0.0.0" ]; then
-              BASE=$(gh release list --limit 1000 --json tagName,isPrerelease \
-                --jq '[.[] | select(.isPrerelease == false) | .tagName] | first' \
+              BASE=$(gh release list --limit 1000 --json tagName,isPrerelease,isDraft \
+                --jq '[.[] | select(.isPrerelease == false and .isDraft == false) | .tagName] | first' \
                 | sed 's/^v//')
             else
               BASE="${MANIFEST_VERSION}"
@@ -126,8 +126,8 @@ jobs:
           else
             MANIFEST_VERSION=$(jq -r '.version' custom_components/city_visitor_parking/manifest.json | sed 's/-.*//')
             if [ "${MANIFEST_VERSION}" = "0.0.0" ]; then
-              BASE=$(gh release list --limit 1000 --json tagName,isPrerelease \
-                --jq '[.[] | select(.isPrerelease == false) | .tagName] | first' \
+              BASE=$(gh release list --limit 1000 --json tagName,isPrerelease,isDraft \
+                --jq '[.[] | select(.isPrerelease == false and .isDraft == false) | .tagName] | first' \
                 | sed 's/^v//')
             else
               BASE="${MANIFEST_VERSION}"
