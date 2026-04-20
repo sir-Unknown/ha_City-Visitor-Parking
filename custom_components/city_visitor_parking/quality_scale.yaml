@@ -1,3 +1,6 @@
+# Internal quality tracking for this custom integration.
+# This file is used to track alignment with Home Assistant quality-scale rules
+# where applicable, but it should not be read as an official core-tier claim.
 rules:
   # Bronze
   action-setup: done

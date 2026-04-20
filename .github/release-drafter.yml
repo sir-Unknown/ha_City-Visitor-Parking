@@ -76,20 +76,21 @@ template: |
   <br>
 
   > [!TIP]
-  > Beheer bezoekersparkeervergunningen van [Nederlandse gemeenten](https://github.com/sir-Unknown/ha_City-Visitor-Parking#supported-municipalities) vanuit Home Assistant. Voor meer informatie bekijk de [Nederlandse documentatie](https://github.com/sir-Unknown/ha_City-Visitor-Parking/wiki/nl/Home).
+  > Looking for English documentation? See: [wiki/en/Home](https://github.com/sir-Unknown/ha_City-Visitor-Parking/wiki/en/Home)
+  > Looking for Dutch documentation? See: [wiki/nl/Home](https://github.com/sir-Unknown/ha_City-Visitor-Parking/wiki/nl/Home)
   <br>
 
-  Manage Dutch municipality visitor parking permits directly from Home Assistant. This integration lets you start, update, and end visitor parking sessions without having to open the municipal parking portal. Keep your favorite license plates at hand, see at a glance whether parking is paid or free, and automate your visitor parking with Home Assistant automations and scripts.
+  With **City Visitor Parking**, you can manage visitor parking permits for supported Dutch municipalities directly from Home Assistant. This integration lets you start, update, and stop parking sessions without having to open the municipal parking portal. Keep your favorite license plates at hand, see at a glance whether parking is paid or free, and automate your visitor parking with Home Assistant automations and scripts.
 
   The integration supports a growing number of [Dutch municipalities](https://github.com/sir-Unknown/ha_City-Visitor-Parking#supported-municipalities) and connects to their parking systems. Is your municipality not listed? You can request support or contribute — for more information: [EN](https://github.com/sir-Unknown/ha_City-Visitor-Parking/wiki/en/add-municipalities) | [NL](https://github.com/sir-Unknown/ha_City-Visitor-Parking/wiki/nl/gemeenten-toevoegen)
   <br>
 
   > [!IMPORTANT]
-  > This integration is under active development — thank you for using it and for your patience! Features may occasionally break, and new versions can sometimes introduce regressions. It is possible that a parking session is not correctly started, updated, or ended.
+  > This integration is under active development. As a result, some features may occasionally stop working correctly, and new versions may introduce regressions. It is possible that a parking session is not correctly started, updated, or stopped.
   >
-  > Please always verify that your session is active through the official parking portal. The maintainer and all contributors cannot be held responsible for incorrectly registered visitor parking sessions or any fines that may result.
+  > Always verify in the official parking portal that a session has been started, updated, or stopped correctly. The maintainer and contributors cannot be held responsible for incorrectly registered parking sessions or any resulting fines.
   >
-  > This integration is built almost entirely with the help of AI agents, primarily ChatGPT and Claude.
+  > This integration was developed largely with the help of AI agents, primarily ChatGPT and Claude.
 
   ---
 
