@@ -9,7 +9,6 @@
   "integration_type": "service",
   "iot_class": "cloud_polling",
   "issue_tracker": "https://github.com/sir-Unknown/ha_City-Visitor-Parking/issues",
-  "quality_scale": "platinum",
   "requirements": ["pycityvisitorparking==0.5.24"],
   "version": "0.0.0"
 }
