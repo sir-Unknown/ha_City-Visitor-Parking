@@ -84,9 +84,20 @@ jobs:
           else
             MANIFEST_VERSION=$(jq -r '.version' custom_components/city_visitor_parking/manifest.json | sed 's/-.*//')
             if [ "${MANIFEST_VERSION}" = "0.0.0" ]; then
-              BASE=$(gh release list --limit 1000 --json tagName,isPrerelease,isDraft \
-                --jq '[.[] | select(.isPrerelease == false and .isDraft == false) | .tagName] | first' \
+              STABLE_DRAFT=$(gh release list --limit 1000 --json tagName,isPrerelease,isDraft \
+                --jq '[.[] | select(.isPrerelease == false and .isDraft == true) | .tagName] | first' \
                 | sed 's/^v//')
+              if [ -n "${STABLE_DRAFT}" ]; then
+                BASE="${STABLE_DRAFT}"
+              else
+                LAST_STABLE=$(gh release list --limit 1000 --json tagName,isPrerelease,isDraft \
+                  --jq '[.[] | select(.isPrerelease == false and .isDraft == false) | .tagName] | first' \
+                  | sed 's/^v//')
+                MAJOR=$(echo "${LAST_STABLE}" | cut -d. -f1)
+                MINOR=$(echo "${LAST_STABLE}" | cut -d. -f2)
+                PATCH=$(echo "${LAST_STABLE}" | cut -d. -f3)
+                BASE="${MAJOR}.${MINOR}.$((PATCH + 1))"
+              fi
             else
               BASE="${MANIFEST_VERSION}"
             fi
