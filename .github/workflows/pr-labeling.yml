@@ -47,7 +47,8 @@ jobs:
 
   category_label:
     name: Assign category label
-    if: github.event.action != 'labeled' && github.event.action != 'unlabeled'
+    needs: [path_labels]
+    if: always() && !cancelled() && needs.path_labels.result != 'failure' && github.event.action != 'labeled' && github.event.action != 'unlabeled'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -56,6 +57,7 @@ jobs:
       - name: Assign label from conventional commit prefix
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
           PR_TITLE: ${{ github.event.pull_request.title }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           REPO: ${{ github.repository }}
@@ -80,6 +82,15 @@ jobs:
               "build:"*|build"("*"):"*)        LABEL="maintenance" ;;
               "deps:"*|deps"("*"):"*)          LABEL="dependencies" ;;
               *)                               LABEL="" ;;
+            esac
+          fi
+
+          # Dependabot PR titles do not follow this repository's conventional
+          # title format, but they still need a release category label so the
+          # verification step and Release Drafter stay green.
+          if [ -z "$LABEL" ] && [ "$PR_AUTHOR" = "dependabot[bot]" -o "$PR_AUTHOR" = "app/dependabot" ]; then
+            case "$PR_TITLE" in
+              "Bump "*|"bump "*) LABEL="dependencies" ;;
             esac
           fi
 
