@@ -18,6 +18,8 @@ on:
       - edited
       - reopened
       - synchronize
+      - labeled
+      - unlabeled
 
 permissions:
   contents: read
@@ -31,7 +33,7 @@ concurrency:
 jobs:
   path_labels:
     name: Apply path labels
-    if: github.event.action != 'edited'
+    if: github.event.action != 'edited' && github.event.action != 'labeled' && github.event.action != 'unlabeled'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -45,6 +47,7 @@ jobs:
 
   category_label:
     name: Assign category label
+    if: github.event.action != 'labeled' && github.event.action != 'unlabeled'
     runs-on: ubuntu-latest
     permissions:
       contents: read
