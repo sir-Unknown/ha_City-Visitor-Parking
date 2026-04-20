@@ -26,9 +26,9 @@ permissions:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
-  # Only the newest labeling run matters for a PR; cancel stale reruns so
-  # checks do not appear to hang when the PR is updated repeatedly.
-  cancel-in-progress: true
+  # Keep label-mutation runs from cancelling each other mid-update. Label
+  # changes emitted by this workflow can trigger follow-up validation runs.
+  cancel-in-progress: false
 
 jobs:
   path_labels:
