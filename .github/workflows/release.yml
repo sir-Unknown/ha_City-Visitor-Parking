@@ -225,7 +225,7 @@ jobs:
           IS_BETA=false
           IS_TESTING=false
 
-          if echo "$RELEASE_TAG" | grep -qE '^v[0-9]+\.[0-9]+\.[0-9]+b[0-9]+(\+.*)?$'; then
+          if echo "$RELEASE_TAG" | grep -qE '^v[0-9]+\.[0-9]+\.[0-9]+-beta\.[0-9]+(\+.*)?$'; then
             IS_BETA=true
           fi
 
