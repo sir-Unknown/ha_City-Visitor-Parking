@@ -27,12 +27,12 @@ on:
   workflow_dispatch:
     inputs:
       prerelease:
-        description: "Pre-release type (beta or testing). Leave empty for a stable draft."
+        description: "Release type."
         required: false
-        default: ""
+        default: "stable"
         type: choice
         options:
-          - ""
+          - stable
           - beta
           - testing
       version:
@@ -64,7 +64,7 @@ jobs:
           persist-credentials: false
 
       - name: Run Release Drafter (stable)
-        if: github.ref_name == 'main' && inputs.prerelease == ''
+        if: github.ref_name == 'main' && (inputs.prerelease == 'stable' || inputs.prerelease == '')
         uses: release-drafter/release-drafter@139054aeaa9adc52ab36ddf67437541f039b88e2 # v7.1.1
         with:
           version: ${{ inputs.version }}
