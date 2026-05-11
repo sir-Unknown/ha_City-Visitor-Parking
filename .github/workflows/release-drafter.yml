@@ -65,7 +65,7 @@ jobs:
 
       - name: Run Release Drafter (stable)
         if: github.ref_name == 'main' && (inputs.prerelease == 'stable' || inputs.prerelease == '')
-        uses: release-drafter/release-drafter@5de93583980a40bd78603b6dfdcda5b4df377b32 # v7.2.0
+        uses: release-drafter/release-drafter@563bf132657a13ded0b01fcb723c5a58cdd824e2 # v7.2.1
         with:
           version: ${{ inputs.version }}
         env:
@@ -116,7 +116,7 @@ jobs:
 
       - name: Run Release Drafter (beta pre-release)
         if: github.ref_name == 'main' && inputs.prerelease == 'beta'
-        uses: release-drafter/release-drafter@5de93583980a40bd78603b6dfdcda5b4df377b32 # v7.2.0
+        uses: release-drafter/release-drafter@563bf132657a13ded0b01fcb723c5a58cdd824e2 # v7.2.1
         with:
           config-name: release-drafter-beta.yml
           prerelease: true
@@ -158,7 +158,7 @@ jobs:
 
       - name: Run Release Drafter (pre-release)
         if: github.ref_name == 'testing'
-        uses: release-drafter/release-drafter@5de93583980a40bd78603b6dfdcda5b4df377b32 # v7.2.0
+        uses: release-drafter/release-drafter@563bf132657a13ded0b01fcb723c5a58cdd824e2 # v7.2.1
         with:
           config-name: release-drafter-testing.yml
           prerelease: true
