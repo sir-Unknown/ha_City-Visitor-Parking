@@ -104,6 +104,7 @@ The integration supports a growing number of Dutch municipalities and connects t
 | Harderwijk       | [mijn.2park.nl](https://mijn.2park.nl/)                                                 |
 | Vlissingen       | [parkeren.vlissingen.nl](https://parkeren.vlissingen.nl/DVSPortal/)                     |
 | Harlingen        | [parkeervergunningen.harlingen.nl](https://parkeervergunningen.harlingen.nl/DVSPortal/) |
+| Hoorn            | [parkeren.hoorn.nl](https://parkeren.hoorn.nl/DVSPortal/)                               |
 | Waadhoeke        | [parkeren.waadhoeke.nl](https://parkeren.waadhoeke.nl/DVSPortal/)                       |
 | Heemstede        | [parkeren.heemstede.nl](https://parkeren.heemstede.nl/DVSPortal/)                       |
 | Waalwijk         | [parkeren.waalwijk.nl](https://parkeren.waalwijk.nl/DVSPortal/)                         |
