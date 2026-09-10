@@ -10,14 +10,20 @@ from typing import TYPE_CHECKING, Protocol, cast
 from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.util import dt as dt_util
-from pycityvisitorparking import AuthError, NetworkError
-from pycityvisitorparking.exceptions import PyCityVisitorParkingError
+from pycityvisitorparking import AuthError, NetworkError, ProviderError
+from pycityvisitorparking.exceptions import (
+    PyCityVisitorParkingError,
+    RateLimitError,
+    ServiceUnavailableError,
+)
 
+from .auth import async_provider_login, has_stored_credentials
 from .const import (
     AUTO_END_COOLDOWN,
     CONF_AUTO_END,
     DEFAULT_UPDATE_INTERVAL,
     IDLE_UPDATE_INTERVAL,
+    RELOGIN_COOLDOWN,
     TRANSITION_BUFFER,
     TRANSITION_LOOKAHEAD,
 )
@@ -36,12 +42,13 @@ from .version import async_get_versions, build_log_block
 if TYPE_CHECKING:
     from collections.abc import Iterable, Mapping
 
-    from homeassistant.config_entries import ConfigEntry
     from homeassistant.core import HomeAssistant
     from pycityvisitorparking import Favorite as ProviderFavorite
     from pycityvisitorparking import Permit
     from pycityvisitorparking import Reservation as ProviderReservation
     from pycityvisitorparking.provider.base import BaseProvider as ProviderProtocol
+
+    from .runtime_data import CityVisitorParkingConfigEntry
 else:
 
     class ProviderProtocol(Protocol):
@@ -74,7 +81,7 @@ class CityVisitorParkingCoordinator(DataUpdateCoordinator[CoordinatorData]):
         hass: HomeAssistant,
         *,
         provider: ProviderProtocol,
-        config_entry: ConfigEntry,
+        config_entry: CityVisitorParkingConfigEntry,
         permit_id: str,
         auto_end_state: AutoEndState,
     ) -> None:
@@ -91,6 +98,8 @@ class CityVisitorParkingCoordinator(DataUpdateCoordinator[CoordinatorData]):
         self._permit_id: str = permit_id
         self._auto_end_state: AutoEndState = auto_end_state
         self._unavailable_logged: bool = False
+        self._entry: CityVisitorParkingConfigEntry = config_entry
+        self._last_relogin: datetime | None = None
 
     async def _async_update_data(self) -> CoordinatorData:
         """Fetch data from the API and normalize it."""
@@ -103,7 +112,7 @@ class CityVisitorParkingCoordinator(DataUpdateCoordinator[CoordinatorData]):
             )
 
             started = time.perf_counter()
-            permit, reservations, favorites = await self._provider.fetch_all()
+            permit, reservations, favorites = await self._async_fetch_all()
             _LOGGER.debug(
                 "Provider %s fetch_all duration: %.3fs — reservations=%s favorites=%s",
                 self._entry_title,
@@ -212,6 +221,56 @@ class CityVisitorParkingCoordinator(DataUpdateCoordinator[CoordinatorData]):
 
         await self._async_maybe_auto_end(data)
         return data
+
+    async def _async_fetch_all(
+        self,
+    ) -> tuple[Permit, list[ProviderReservation], list[ProviderFavorite]]:
+        """Fetch provider data, recovering once from an expired provider session.
+
+        The session established at setup is not refreshed anywhere else, so it
+        eventually expires while the entry keeps running. The library retries a
+        request once after re-authenticating, but only when the provider answers
+        with an explicit auth status; a provider that reports an expired session
+        as a generic server error instead keeps the dead session in place and
+        every following update fails until the entry is reloaded by hand.
+
+        Reloading only helps because it logs in again, so do exactly that here
+        and retry the fetch once. Failures that a new session cannot fix are
+        re-raised untouched: a ``NetworkError`` never reached the provider, and
+        rate-limit or maintenance responses would only be made worse by adding a
+        login to the next poll.
+        """
+        try:
+            return await self._provider.fetch_all()
+        except RateLimitError, ServiceUnavailableError:
+            raise
+        except (AuthError, ProviderError) as err:
+            if not self._may_relogin():
+                raise
+            _LOGGER.debug(
+                "Update for %s failed with %s; re-authenticating and retrying once",
+                self._entry_title,
+                type(err).__name__,
+            )
+            # An AuthError raised here means the stored credentials themselves
+            # are rejected, which _async_update_data turns into a reauth flow.
+            await self._async_relogin()
+            return await self._provider.fetch_all()
+
+    def _may_relogin(self) -> bool:
+        """Return whether an automatic re-login may be attempted right now."""
+        if not has_stored_credentials(self._entry):
+            return False
+        if self._last_relogin is None:
+            return True
+        return dt_util.utcnow() - self._last_relogin >= RELOGIN_COOLDOWN
+
+    async def _async_relogin(self) -> None:
+        """Re-authenticate the provider with the credentials on the entry."""
+        # Recorded before the attempt so a login that fails or hangs still
+        # spaces out the next one.
+        self._last_relogin = dt_util.utcnow()
+        await async_provider_login(self.hass, self._entry, self._provider)
 
     async def _async_maybe_auto_end(self, data: CoordinatorData) -> None:
         """Auto-end reservations when the zone becomes free."""

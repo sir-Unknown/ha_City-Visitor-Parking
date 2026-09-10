@@ -61,6 +61,18 @@ class CityVisitorParkingEntity(
         }
         self._update_from_coordinator()
 
+    @property
+    def available(self) -> bool:
+        """Return if entity is available.
+
+        These entities extend ``BaseCoordinatorEntity`` so they can drive their
+        own ``async_update``, and that base class — unlike ``CoordinatorEntity``
+        — does not derive availability from the coordinator. Without this the
+        sensors keep reporting the last successful values while every update
+        fails, which hides an outage instead of surfacing it.
+        """
+        return self.coordinator.last_update_success
+
     def _update_from_coordinator(self) -> None:
         """Update entity state from coordinator data. Override in subclasses."""
 
