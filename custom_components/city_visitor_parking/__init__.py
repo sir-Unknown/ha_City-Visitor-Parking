@@ -13,13 +13,7 @@ import voluptuous as vol
 from homeassistant.components.http import StaticPathConfig
 from homeassistant.components.lovelace.const import CONF_RESOURCE_TYPE_WS, LOVELACE_DATA
 from homeassistant.components.lovelace.resources import ResourceStorageCollection
-from homeassistant.const import (
-    CONF_ID,
-    CONF_PASSWORD,
-    CONF_TYPE,
-    CONF_URL,
-    CONF_USERNAME,
-)
+from homeassistant.const import CONF_ID, CONF_TYPE, CONF_URL
 from homeassistant.exceptions import (
     ConfigEntryAuthFailed,
     ConfigEntryError,
@@ -30,6 +24,7 @@ from homeassistant.setup import async_when_setup
 from pycityvisitorparking import AuthError, NetworkError
 from pycityvisitorparking.exceptions import PyCityVisitorParkingError
 
+from .auth import async_provider_login
 from .client import async_create_client
 from .const import (
     CONF_API_URL,
@@ -42,7 +37,6 @@ from .const import (
     CONF_OPERATING_TIME_OVERRIDES,
     CONF_PERMIT_ID,
     CONF_PROVIDER_ID,
-    CONF_RESOLVED_LOGIN_PARAMS,
     DOMAIN,
     PLATFORMS,
     WEEKDAY_KEYS,
@@ -151,41 +145,14 @@ async def async_setup_entry(
         pycvp_version=pycvp_version,
     )
     _install_zone_validity_logging(provider)
-    login_started = time.perf_counter()
     try:
-        await provider.login(
-            username=entry.data[CONF_USERNAME],
-            password=entry.data[CONF_PASSWORD],
-            # Passes the permit_id so providers can skip auto-detection when
-            # multiple config entries share the same provider.
-            permit_id=entry.data.get(CONF_PERMIT_ID),
-            # Passes previously resolved params back to skip redundant API calls
-            # on restart (e.g. location for 2park, permit_media_type_id for dvsportal).
-            **entry.data.get(CONF_RESOLVED_LOGIN_PARAMS, {}),
-        )
+        await async_provider_login(hass, entry, provider)
     except AuthError as err:
-        if entry.data.get(CONF_RESOLVED_LOGIN_PARAMS):
-            hass.config_entries.async_update_entry(
-                entry, data={**entry.data, CONF_RESOLVED_LOGIN_PARAMS: {}}
-            )
         raise ConfigEntryAuthFailed from err
     except NetworkError as err:
         raise ConfigEntryNotReady from err
     except PyCityVisitorParkingError as err:
         raise ConfigEntryError from err
-    finally:
-        _LOGGER.debug(
-            "Provider login duration for %s (permit %s): %.3fs",
-            entry.title,
-            entry.data.get(CONF_PERMIT_ID),
-            time.perf_counter() - login_started,
-        )
-
-    resolved = getattr(provider, "resolved_login_params", {})
-    if resolved != entry.data.get(CONF_RESOLVED_LOGIN_PARAMS):
-        hass.config_entries.async_update_entry(
-            entry, data={**entry.data, CONF_RESOLVED_LOGIN_PARAMS: resolved}
-        )
 
     auto_end_state = AutoEndState()
     coordinator = CityVisitorParkingCoordinator(

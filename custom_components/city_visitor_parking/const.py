@@ -68,6 +68,15 @@ rather than landing exactly on it.  A small buffer compensates for scheduling ji
 and ensures the poll happens before — not after — the transition moment.
 """
 
+RELOGIN_COOLDOWN: Final = timedelta(minutes=15)
+"""Minimum time between automatic re-login attempts after a failed update.
+
+The provider session obtained at setup does not live forever, so the coordinator
+re-authenticates itself when an update fails in a way that a fresh session could
+plausibly fix. This cooldown keeps a provider-side outage — which fails every
+update for hours — from turning into one login attempt per poll.
+"""
+
 AUTO_END_COOLDOWN: Final = timedelta(minutes=10)
 
 WEEKDAY_KEYS: Final[list[str]] = [

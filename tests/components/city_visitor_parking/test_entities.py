@@ -521,3 +521,18 @@ def test_sensor_helpers() -> None:
     assert (
         current_or_next_window([window], datetime(2025, 1, 1, 9, 0, tzinfo=UTC)) is None
     )
+
+
+async def test_entity_availability_follows_coordinator() -> None:
+    """Entities must go unavailable when coordinator updates keep failing."""
+    coordinator = MagicMock()
+    coordinator.async_add_listener.return_value = lambda: None
+    entry = _create_entry("provider:permit1:city")
+
+    entity = CityVisitorParkingEntity(coordinator, entry, "base")
+
+    coordinator.last_update_success = True
+    assert entity.available is True
+
+    coordinator.last_update_success = False
+    assert entity.available is False
