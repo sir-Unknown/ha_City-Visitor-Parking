@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from homeassistant.components.sensor import SensorDeviceClass
+from homeassistant.components.sensor import SensorDeviceClass, SensorStateClass
 from homeassistant.const import EntityCategory, UnitOfTime
 from homeassistant.util import dt as dt_util
 
@@ -55,7 +55,8 @@ class ActiveReservationsSensor(CityVisitorParkingEntity):
 
     _entity_key = "active_reservations"
     _attr_translation_key: str | None = "active_reservations"
-
+    _attr_state_class: SensorStateClass | None = SensorStateClass.MEASUREMENT
+    
     def _update_from_coordinator(self) -> None:
         """Update the sensor from coordinator data."""
         self._attr_native_value = len(self.coordinator.data.active_reservations)
@@ -66,7 +67,8 @@ class FutureReservationsSensor(CityVisitorParkingEntity):
 
     _entity_key = "future_reservations"
     _attr_translation_key: str | None = "future_reservations"
-
+    _attr_state_class: SensorStateClass | None = SensorStateClass.MEASUREMENT
+    
     def _update_from_coordinator(self) -> None:
         """Update the sensor from coordinator data."""
         now = dt_util.utcnow()
@@ -250,6 +252,7 @@ class FavoritesSensor(CityVisitorParkingEntity):
 
     _entity_key = "favorites"
     _attr_translation_key: str | None = "favorites"
+    _attr_state_class: SensorStateClass | None = SensorStateClass.MEASUREMENT
 
     def _update_from_coordinator(self) -> None:
         """Update the sensor from coordinator data."""
