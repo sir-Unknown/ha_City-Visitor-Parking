@@ -17,7 +17,7 @@
 </p>
 
 > [!TIP]
-> Looking for English or documentation? See the [wiki](https://github.com/sir-Unknown/ha_City-Visitor-Parking/wiki)
+> Looking for English or Dutch documentation? See the [wiki](https://github.com/sir-Unknown/ha_City-Visitor-Parking/wiki)
 
 ## About this integration
 
