@@ -66,7 +66,7 @@ Treat Home Assistant Core and Home Assistant Frontend as the compatibility basel
 
 If any rule is not implemented, document an explicit exemption and rationale.
 
-The integration currently targets the quality level declared in `custom_components/city_visitor_parking/manifest.json`. Keep code, tests, docs, diagnostics, and CI aligned with that declared target.
+Progress is tracked in `custom_components/city_visitor_parking/quality_scale.yaml`. It is an internal tracking file and MUST NOT be presented as an official quality-scale claim. `manifest.json` declares no `quality_scale`. Keep code, tests, docs, diagnostics, and CI aligned with the rules marked `done` in that file.
 
 ## 5) Releases & versioning
 
@@ -286,43 +286,20 @@ Runtime objects in `entry.runtime_data` should include:
 
 ## 14) Entities
 
-Expose at least these sensors. All entities MUST:
+Entities are defined in `custom_components/city_visitor_parking/sensor.py`; the sensor keys are listed in `async_setup_entry` and in the `entity` section of `translations/en.json`. Those are the source of truth, not this file. All entities MUST:
 
 - have a stable `unique_id`
 - set `_attr_has_entity_name = True`
 - use `translation_key`
 - avoid PII in state and attributes
 
-### Required sensors
+### Sensor rules
 
-1. `active_reservations`
-
-- State: integer count of reservations active now
-
-2. `remaining_time`
-
-- State: `H:mm`
-- If none active: `0:00`
-- Attribute `has_active_reservation=false`
-- Non-PII attributes only
-
-3. `permit_zone_validity`
-
-- State: integer count of chargeable validity blocks
-- Attribute `zone_validity` with UTC ISO8601 blocks
-
-4. `permit_zone_availability`
-
-- State: `chargeable` or `free`
-- Derived from chargeable-only validity plus overrides
-- Attributes:
-  - `is_chargeable_now`
-  - `next_change_time`
-  - `windows_today`
-
-5. `favorites`
-
-- State: integer count of favorites
+- Count sensors (active reservations, future reservations, favorites) MUST be integers with `SensorStateClass.MEASUREMENT` so Home Assistant records statistics and draws graphs.
+- The remaining balance sensor follows the permit balance unit (duration in hours, `times`, or a currency). Its device class and unit are set dynamically in `_update_from_coordinator`. Do not give it `MEASUREMENT` together with the `MONETARY` device class; Home Assistant only allows `TOTAL` for monetary sensors.
+- Timestamp sensors use `SensorDeviceClass.TIMESTAMP` and have no `state_class`.
+- Availability is derived from chargeable-only validity plus the user's weekday overrides. The state is `chargeable` or `free`.
+- A new sensor MUST update `sensor.py`, both translation files, the entity tests, and the wiki entities/sensors page. Attribute names are part of the user-visible contract, so do not rename them silently.
 
 ### Stability requirements
 
@@ -353,16 +330,12 @@ Home Assistant services are domain-wide, so routing is mandatory when multiple c
   - raise `ServiceValidationError` using translation keys
 - Never broadcast a service call across all entries.
 
-### Required services
+### Service contract
 
-All services are domain-scoped and require `device_id`:
-
-- `start_reservation`
-- `update_reservation`
-- `end_reservation`
-- `add_favorite`
-- `update_favorite`
-- `remove_favorite`
+- `custom_components/city_visitor_parking/services.yaml` and `services.py` are the source of truth for the available services; do not duplicate the list here or in other docs without a reason.
+- Every service, including read-only response services, is domain-scoped and requires `device_id`.
+- Every new or changed service MUST update `services.yaml`, both translation files, the services tests, and the wiki Services page that `README.md` links to.
+- Read-only response services (for example `list_reservations` and `list_favorites`) may return raw license plates to the caller, because that data is the response. They MUST NOT log plates or put them in error messages.
 
 ### Validation rules
 
@@ -384,9 +357,10 @@ All services are domain-scoped and require `device_id`:
 - English is canonical.
 - Dutch is required.
 - Maintain:
-  - `strings.json`
   - `translations/en.json`
   - `translations/nl.json`
+
+There is no `strings.json`; `translations/en.json` is the canonical source that hassfest validates.
 
 Also keep frontend translation assets aligned where applicable.
 
