@@ -9,7 +9,7 @@ from datetime import date, time
 from importlib import resources
 from typing import Final, cast
 
-import voluptuous as vol
+import probatio as vol
 import yaml
 from homeassistant import config_entries
 from homeassistant.const import CONF_PASSWORD, CONF_USERNAME

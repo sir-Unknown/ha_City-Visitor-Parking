@@ -18,7 +18,9 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 import custom_components.city_visitor_parking.coordinator as coord_module
 from custom_components.city_visitor_parking.const import (
     CONF_AUTO_END,
+    CONF_MUNICIPALITY,
     CONF_OPERATING_TIME_OVERRIDES,
+    CONF_PROVIDER_ID,
     DEFAULT_UPDATE_INTERVAL,
     DOMAIN,
     IDLE_UPDATE_INTERVAL,
@@ -771,6 +773,10 @@ def _create_entry(auto_end: bool) -> MockConfigEntry:
     """Create a mock entry with options."""
     return MockConfigEntry(
         domain=DOMAIN,
-        data={"permit_id": "permit"},
+        data={
+            "permit_id": "permit",
+            CONF_PROVIDER_ID: "provider",
+            CONF_MUNICIPALITY: "Municipality",
+        },
         options={CONF_AUTO_END: auto_end},
     )
