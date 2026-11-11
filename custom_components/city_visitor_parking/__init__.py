@@ -9,7 +9,7 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING, Final, Protocol, cast
 
-import voluptuous as vol
+import probatio as vol
 from homeassistant.components.http import StaticPathConfig
 from homeassistant.components.lovelace.const import CONF_RESOURCE_TYPE_WS, LOVELACE_DATA
 from homeassistant.components.lovelace.resources import ResourceStorageCollection
@@ -22,7 +22,10 @@ from homeassistant.exceptions import (
 from homeassistant.helpers import config_validation as cv
 from homeassistant.setup import async_when_setup
 from pycityvisitorparking import AuthError, NetworkError
-from pycityvisitorparking.exceptions import PyCityVisitorParkingError
+from pycityvisitorparking.exceptions import (
+    PyCityVisitorParkingError,
+    ServiceUnavailableError,
+)
 
 from .auth import async_provider_login
 from .client import async_create_client
@@ -149,7 +152,7 @@ async def async_setup_entry(
         await async_provider_login(hass, entry, provider)
     except AuthError as err:
         raise ConfigEntryAuthFailed from err
-    except NetworkError as err:
+    except (NetworkError, ServiceUnavailableError) as err:
         raise ConfigEntryNotReady from err
     except PyCityVisitorParkingError as err:
         raise ConfigEntryError from err

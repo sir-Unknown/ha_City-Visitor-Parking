@@ -19,7 +19,9 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 import custom_components.city_visitor_parking.coordinator as coord_module
 from custom_components.city_visitor_parking.const import (
     CONF_AUTO_END,
+    CONF_MUNICIPALITY,
     CONF_OPERATING_TIME_OVERRIDES,
+    CONF_PROVIDER_ID,
     DEFAULT_UPDATE_INTERVAL,
     DOMAIN,
     IDLE_UPDATE_INTERVAL,
@@ -773,7 +775,11 @@ def _idle_data(
 
 def _create_entry(auto_end: bool, *, credentials: bool = False) -> MockConfigEntry:
     """Create a mock entry with options, optionally carrying credentials."""
-    data: dict[str, Any] = {"permit_id": "permit"}
+    data: dict[str, Any] = {
+        "permit_id": "permit",
+        CONF_PROVIDER_ID: "provider",
+        CONF_MUNICIPALITY: "Municipality",
+    }
     if credentials:
         data |= {CONF_USERNAME: "user", CONF_PASSWORD: "secret"}
     return MockConfigEntry(

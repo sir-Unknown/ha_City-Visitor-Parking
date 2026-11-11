@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, cast
 from unittest.mock import AsyncMock, MagicMock
 
 from freezegun import freeze_time
-from homeassistant.components.sensor import SensorDeviceClass
+from homeassistant.components.sensor import SensorDeviceClass, SensorStateClass
 from homeassistant.const import UnitOfTime
 from homeassistant.util import dt as dt_util
 from pytest_homeassistant_custom_component.common import MockConfigEntry
@@ -77,6 +77,20 @@ async def test_entity_unique_id_and_device_info() -> None:
     assert device_info_two is not None
     assert (DOMAIN, entry_one.entry_id) in device_info_one["identifiers"]
     assert (DOMAIN, entry_two.entry_id) in device_info_two["identifiers"]
+
+
+async def test_count_sensors_use_measurement_state_class() -> None:
+    """Count sensors should be numeric measurements so HA records statistics."""
+    coordinator = _make_coordinator(_sample_data())
+    entry = _create_entry("provider:permit1:city")
+
+    for sensor_cls in (
+        ActiveReservationsSensor,
+        FutureReservationsSensor,
+        FavoritesSensor,
+    ):
+        sensor = sensor_cls(coordinator, entry)
+        assert sensor.state_class == SensorStateClass.MEASUREMENT
 
 
 async def test_entity_device_info_includes_configuration_url() -> None:

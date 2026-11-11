@@ -17,8 +17,7 @@
 </p>
 
 > [!TIP]
-> Looking for English documentation? See: [wiki/en/Home](https://github.com/sir-Unknown/ha_City-Visitor-Parking/wiki/en/Home)<br>
-> Looking for Dutch documentation? See: [wiki/nl/Home](https://github.com/sir-Unknown/ha_City-Visitor-Parking/wiki/nl/Home)
+> Looking for English or Dutch documentation? See the [wiki](https://github.com/sir-Unknown/ha_City-Visitor-Parking/wiki)
 
 ## About this integration
 
@@ -52,7 +51,7 @@ This means you no longer have to manually log in to the municipal parking portal
 
 ![City Visitor Parking](https://raw.githubusercontent.com/wiki/sir-Unknown/ha_City-Visitor-Parking/screenshots/card-reservering-twee-actief.png)
 
-More screenshots: [wiki/en/Lovelace-Cards](https://github.com/sir-Unknown/ha_City-Visitor-Parking/wiki/en/Lovelace-Cards)
+More screenshots: [wiki/en/Lovelace-Cards](https://github.com/sir-Unknown/ha_City-Visitor-Parking/wiki/lovelace-cards)
 
 ---
 
@@ -104,6 +103,7 @@ The integration supports a growing number of Dutch municipalities and connects t
 | Harderwijk       | [mijn.2park.nl](https://mijn.2park.nl/)                                                 |
 | Vlissingen       | [parkeren.vlissingen.nl](https://parkeren.vlissingen.nl/DVSPortal/)                     |
 | Harlingen        | [parkeervergunningen.harlingen.nl](https://parkeervergunningen.harlingen.nl/DVSPortal/) |
+| Hoorn            | [parkeren.hoorn.nl](https://parkeren.hoorn.nl/DVSPortal/)                               |
 | Waadhoeke        | [parkeren.waadhoeke.nl](https://parkeren.waadhoeke.nl/DVSPortal/)                       |
 | Heemstede        | [parkeren.heemstede.nl](https://parkeren.heemstede.nl/DVSPortal/)                       |
 | Waalwijk         | [parkeren.waalwijk.nl](https://parkeren.waalwijk.nl/DVSPortal/)                         |
@@ -138,8 +138,8 @@ Adding support for a new municipality requires active collaboration. You may be 
 
 More information:
 
-- [Add municipalities (EN)](https://github.com/sir-Unknown/ha_City-Visitor-Parking/wiki/en/add-municipalities)
-- [Gemeenten toevoegen (NL)](https://github.com/sir-Unknown/ha_City-Visitor-Parking/wiki/nl/gemeenten-toevoegen)
+- [Add municipalities (EN)](https://github.com/sir-Unknown/ha_City-Visitor-Parking/wiki/add-municipalities)
+- [Gemeenten toevoegen (NL)](https://github.com/sir-Unknown/ha_City-Visitor-Parking/wiki/gemeenten-toevoegen)
 
 ---
 
@@ -147,19 +147,24 @@ More information:
 
 ### English
 
-- [Home](https://github.com/sir-Unknown/ha_City-Visitor-Parking/wiki/en/Home)
-- [Installation](https://github.com/sir-Unknown/ha_City-Visitor-Parking/wiki/en/Installation)
-- [Configuration](https://github.com/sir-Unknown/ha_City-Visitor-Parking/wiki/en/Configuration)
-- [Lovelace Cards](https://github.com/sir-Unknown/ha_City-Visitor-Parking/wiki/en/Lovelace-Cards)
-- [Services](https://github.com/sir-Unknown/ha_City-Visitor-Parking/wiki/en/Services)
-- [Blueprints](https://github.com/sir-Unknown/ha_City-Visitor-Parking/wiki/en/Blueprints)
-- [Troubleshooting](https://github.com/sir-Unknown/ha_City-Visitor-Parking/wiki/en/Troubleshooting)
-- [Privacy](https://github.com/sir-Unknown/ha_City-Visitor-Parking/wiki/en/Privacy)
-- [Examples](https://github.com/sir-Unknown/ha_City-Visitor-Parking/wiki/en/Examples)
+- [Home](https://github.com/sir-Unknown/ha_City-Visitor-Parking/wiki/Home)
+- [Installation](https://github.com/sir-Unknown/ha_City-Visitor-Parking/wiki/Installation)
+- [Configuration](https://github.com/sir-Unknown/ha_City-Visitor-Parking/wiki/Configuration)
+- [Lovelace Cards](https://github.com/sir-Unknown/ha_City-Visitor-Parking/wiki/Lovelace-Cards)
+- [Services](https://github.com/sir-Unknown/ha_City-Visitor-Parking/wiki/Services)
+- [Blueprints](https://github.com/sir-Unknown/ha_City-Visitor-Parking/wiki/Blueprints)
+- [Troubleshooting](https://github.com/sir-Unknown/ha_City-Visitor-Parking/wiki/Troubleshooting)
+- [Privacy](https://github.com/sir-Unknown/ha_City-Visitor-Parking/wiki/Privacy)
+- [Examples](https://github.com/sir-Unknown/ha_City-Visitor-Parking/wiki/Examples)
 
 ### Nederlands
 
-- [Home](https://github.com/sir-Unknown/ha_City-Visitor-Parking/wiki/nl/Home)
+- [Home](https://github.com/sir-Unknown/ha_City-Visitor-Parking/wiki/Home)
+- [Installation](https://github.com/sir-Unknown/ha_City-Visitor-Parking/wiki/Installatie)
+- [Configuration](https://github.com/sir-Unknown/ha_City-Visitor-Parking/wiki/Configuratie)
+- [Services](https://github.com/sir-Unknown/ha_City-Visitor-Parking/wiki/Diensten)
+- [Troubleshooting](https://github.com/sir-Unknown/ha_City-Visitor-Parking/wiki/Probleemoplossing)
+- [Examples](https://github.com/sir-Unknown/ha_City-Visitor-Parking/wiki/Voorbeelden)
 
 ### Library
 
