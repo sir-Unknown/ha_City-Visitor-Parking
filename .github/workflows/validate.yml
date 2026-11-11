@@ -17,13 +17,10 @@ on:
       - "LICENSE"
       - ".gitignore"
       - ".github/dependabot.yml"
+  # No path filter on pull requests: this workflow provides required status
+  # checks, and a skipped workflow leaves them pending so the PR cannot merge.
   pull_request:
     branches: [main]
-    paths-ignore:
-      - "**/*.md"
-      - "LICENSE"
-      - ".gitignore"
-      - ".github/dependabot.yml"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
