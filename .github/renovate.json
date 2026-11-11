@@ -10,7 +10,7 @@
   ],
   "rebaseWhen": "behind-base-branch",
   "dependencyDashboard": true,
-  "labels": ["dependencies", "no-stale"],
+  "labels": ["dependencies"],
   "prHourlyLimit": 2,
   "prConcurrentLimit": 5,
   "lockFileMaintenance": {
