@@ -19,6 +19,7 @@ from homeassistant.exceptions import (
     ConfigEntryError,
     ConfigEntryNotReady,
 )
+from homeassistant.helpers import aiohttp_client
 from homeassistant.helpers import config_validation as cv
 from homeassistant.setup import async_when_setup
 from pycityvisitorparking import AuthError, NetworkError
@@ -138,7 +139,12 @@ async def async_setup_entry(
         gui_url=entry.data.get(CONF_GUI_URL),
     )
     ha_cvp_version, pycvp_version = await async_get_versions(hass)
-    client = await async_create_client(hass, provider_config)
+    # Dedicated session (own cookie jar) per entry: cookie-based provider logins
+    # of different accounts on the same host must not overwrite each other.
+    # Home Assistant detaches (closes) it when this entry is unloaded, fails
+    # setup, or HA stops; Client never closes an injected session itself.
+    session = aiohttp_client.async_create_clientsession(hass)
+    client = await async_create_client(provider_config, session)
     provider = await client.get_provider(
         provider_config.provider_id,
         base_url=provider_config.base_url,
