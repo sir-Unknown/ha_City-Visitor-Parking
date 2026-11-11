@@ -21,6 +21,7 @@ from homeassistant.exceptions import (
     ConfigEntryError,
     ConfigEntryNotReady,
 )
+from pycityvisitorparking.exceptions import ServiceUnavailableError
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 import custom_components.city_visitor_parking as init_module
@@ -69,6 +70,26 @@ async def test_async_setup_entry_network_error(
 
     provider = AsyncMock()
     provider.login.side_effect = pv_library.NetworkError
+    client = AsyncMock()
+    client.get_provider.return_value = provider
+
+    monkeypatch.setattr(
+        init_module, "async_create_client", AsyncMock(return_value=client)
+    )
+
+    with pytest.raises(ConfigEntryNotReady):
+        await init_module.async_setup_entry(hass, entry)
+
+
+async def test_async_setup_entry_service_unavailable(
+    hass: HomeAssistant, monkeypatch: MonkeyPatch
+) -> None:
+    """A provider outage should raise ConfigEntryNotReady so HA retries."""
+    entry = _create_entry()
+    entry.add_to_hass(hass)
+
+    provider = AsyncMock()
+    provider.login.side_effect = ServiceUnavailableError
     client = AsyncMock()
     client.get_provider.return_value = provider
 
