@@ -12,22 +12,21 @@ from pycityvisitorparking import AuthError
 from .const import CONF_PERMIT_ID, CONF_RESOLVED_LOGIN_PARAMS
 
 if TYPE_CHECKING:
+    from homeassistant.config_entries import ConfigEntry
     from homeassistant.core import HomeAssistant
     from pycityvisitorparking.provider.base import BaseProvider
-
-    from .runtime_data import CityVisitorParkingConfigEntry
 
 _LOGGER = logging.getLogger(__name__)
 
 
-def has_stored_credentials(entry: CityVisitorParkingConfigEntry) -> bool:
+def has_stored_credentials(entry: ConfigEntry) -> bool:
     """Return whether the entry carries credentials usable for a login."""
     return bool(entry.data.get(CONF_USERNAME)) and bool(entry.data.get(CONF_PASSWORD))
 
 
 async def async_provider_login(
     hass: HomeAssistant,
-    entry: CityVisitorParkingConfigEntry,
+    entry: ConfigEntry,
     provider: BaseProvider,
 ) -> None:
     """Authenticate a provider with the credentials stored on the config entry.

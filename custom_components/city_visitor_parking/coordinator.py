@@ -44,13 +44,12 @@ from .version import async_get_versions, build_log_block
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable, Iterable, Mapping
 
+    from homeassistant.config_entries import ConfigEntry
     from homeassistant.core import HomeAssistant
     from pycityvisitorparking import Favorite as ProviderFavorite
     from pycityvisitorparking import Permit
     from pycityvisitorparking import Reservation as ProviderReservation
     from pycityvisitorparking.provider.base import BaseProvider as ProviderProtocol
-
-    from .runtime_data import CityVisitorParkingConfigEntry
 else:
 
     class ProviderProtocol(Protocol):
@@ -83,7 +82,7 @@ class CityVisitorParkingCoordinator(DataUpdateCoordinator[CoordinatorData]):
         hass: HomeAssistant,
         *,
         provider: ProviderProtocol,
-        config_entry: CityVisitorParkingConfigEntry,
+        config_entry: ConfigEntry,
         permit_id: str,
         auto_end_state: AutoEndState,
     ) -> None:
@@ -100,7 +99,7 @@ class CityVisitorParkingCoordinator(DataUpdateCoordinator[CoordinatorData]):
         self._permit_id: str = permit_id
         self._auto_end_state: AutoEndState = auto_end_state
         self._unavailable_logged: bool = False
-        self._entry: CityVisitorParkingConfigEntry = config_entry
+        self._entry: ConfigEntry = config_entry
         self._last_relogin: datetime | None = None
         self._relogin_rejections: int = 0
 
