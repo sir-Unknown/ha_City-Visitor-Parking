@@ -320,9 +320,7 @@ class CityVisitorParkingNewReservationCard extends BaseLocalizedCard<CardConfig>
           (device: DeviceEntry) =>
             (device.identifiers ?? []).some(
               (identifier: [string, string]) => identifier[0] === DOMAIN,
-            ) &&
-            Array.isArray(device.config_entries) &&
-            device.config_entries.includes(entryId),
+            ) && device.config_entry_id === entryId,
         );
         const deviceId = match ? match.id : null;
         this._deviceId = deviceId;
@@ -1331,8 +1329,8 @@ class CityVisitorParkingNewReservationCard extends BaseLocalizedCard<CardConfig>
       const devices = await hass.callWS<DeviceEntry[]>({
         type: "config/device_registry/list",
       });
-      const domainDevices = filterDomainDevices(devices).filter((device) =>
-        (device.config_entries ?? []).includes(entryId),
+      const domainDevices = filterDomainDevices(devices).filter(
+        (device) => device.config_entry_id === entryId,
       );
       const byPlate = new Map<string, Array<{ start: Date; end: Date }>>();
       const results = await Promise.allSettled(

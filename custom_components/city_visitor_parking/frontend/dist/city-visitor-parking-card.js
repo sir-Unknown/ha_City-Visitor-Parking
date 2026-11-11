@@ -743,8 +743,7 @@ var fetchPermitEntries = async (hass) => hass.callWS({
 var resolvePermitLabelsByDevice = (devices, entryTitles) => {
   const labels = /* @__PURE__ */ new Map();
   for (const device of devices) {
-    const entryIds = Array.isArray(device.config_entries) ? device.config_entries : [];
-    const entryId = entryIds.find((id) => entryTitles.has(id)) ?? entryIds[0];
+    const entryId = device.config_entry_id;
     if (!entryId) continue;
     labels.set(device.id, entryTitles.get(entryId) ?? entryId);
   }
@@ -1550,7 +1549,7 @@ var CityVisitorParkingNewReservationCard = class extends BaseLocalizedCard {
       const match = devices.find(
         (device) => (device.identifiers ?? []).some(
           (identifier) => identifier[0] === DOMAIN
-        ) && Array.isArray(device.config_entries) && device.config_entries.includes(entryId)
+        ) && device.config_entry_id === entryId
       );
       const deviceId = match ? match.id : null;
       this._deviceId = deviceId;
@@ -2382,7 +2381,7 @@ var CityVisitorParkingNewReservationCard = class extends BaseLocalizedCard {
         type: "config/device_registry/list"
       });
       const domainDevices = filterDomainDevices(devices).filter(
-        (device) => (device.config_entries ?? []).includes(entryId)
+        (device) => device.config_entry_id === entryId
       );
       const byPlate = /* @__PURE__ */ new Map();
       const results = await Promise.allSettled(
@@ -2687,7 +2686,7 @@ var CityVisitorParkingActiveCard = class extends BaseLocalizedCard {
       let devices = await this._getDomainDevices();
       if (entryId) {
         devices = devices.filter(
-          (device) => (device.config_entries ?? []).includes(entryId)
+          (device) => device.config_entry_id === entryId
         );
       }
       if (!devices.length) {
