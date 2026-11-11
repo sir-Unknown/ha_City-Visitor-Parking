@@ -28,7 +28,10 @@ from homeassistant.exceptions import (
 from homeassistant.helpers import config_validation as cv
 from homeassistant.setup import async_when_setup
 from pycityvisitorparking import AuthError, NetworkError
-from pycityvisitorparking.exceptions import PyCityVisitorParkingError
+from pycityvisitorparking.exceptions import (
+    PyCityVisitorParkingError,
+    ServiceUnavailableError,
+)
 
 from .client import async_create_client
 from .const import (
@@ -169,7 +172,7 @@ async def async_setup_entry(
                 entry, data={**entry.data, CONF_RESOLVED_LOGIN_PARAMS: {}}
             )
         raise ConfigEntryAuthFailed from err
-    except NetworkError as err:
+    except (NetworkError, ServiceUnavailableError) as err:
         raise ConfigEntryNotReady from err
     except PyCityVisitorParkingError as err:
         raise ConfigEntryError from err
