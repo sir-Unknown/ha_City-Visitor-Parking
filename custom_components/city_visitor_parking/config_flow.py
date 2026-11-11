@@ -15,8 +15,8 @@ from homeassistant import config_entries
 from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.data_entry_flow import section
+from homeassistant.helpers import aiohttp_client, selector
 from homeassistant.helpers import config_validation as cv
-from homeassistant.helpers import selector
 from homeassistant.util import dt as dt_util
 from homeassistant.util import slugify
 from pycityvisitorparking import AuthError, NetworkError
@@ -333,8 +333,13 @@ class CityVisitorParkingConfigFlow(config_entries.ConfigFlow):
         error_key: str | None = None
         permit: object | None = None
         ha_cvp_version, pycvp_version = await async_get_versions(self.hass)
+        # Short-lived session with its own cookie jar; closed after the check.
+        # auto_cleanup=False: no entry owns it, so detach() it ourselves.
+        session = aiohttp_client.async_create_clientsession(
+            self.hass, auto_cleanup=False
+        )
         try:
-            client = await async_create_client(self.hass, self._provider_config)
+            client = await async_create_client(self._provider_config, session)
             provider = await client.get_provider(
                 self._provider_config.provider_id,
                 base_url=self._provider_config.base_url,
@@ -413,6 +418,8 @@ class CityVisitorParkingConfigFlow(config_entries.ConfigFlow):
                 ),
             )
             error_key = "unknown"
+        finally:
+            session.detach()
 
         if error_key is not None:
             errors["base"] = error_key

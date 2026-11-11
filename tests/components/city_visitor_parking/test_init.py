@@ -21,6 +21,7 @@ from homeassistant.exceptions import (
     ConfigEntryError,
     ConfigEntryNotReady,
 )
+from homeassistant.helpers import aiohttp_client
 from pycityvisitorparking.exceptions import ServiceUnavailableError
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
@@ -37,6 +38,7 @@ from custom_components.city_visitor_parking.const import (
 if TYPE_CHECKING:
     from types import ModuleType
 
+    from aiohttp import ClientSession
     from homeassistant.core import HomeAssistant
     from pytest import LogCaptureFixture, MonkeyPatch
 
@@ -495,3 +497,57 @@ async def _setup_entry(
     await init_module.async_setup_entry(hass, entry)
 
     return entry
+
+
+async def test_each_entry_gets_its_own_session_closed_on_unload(
+    hass: HomeAssistant, monkeypatch: MonkeyPatch
+) -> None:
+    """Entries must not share a session (cookie jar) and must close their own."""
+    sessions: list[ClientSession] = []
+
+    async def _fake_create_client(
+        _provider: object, session: ClientSession
+    ) -> AsyncMock:
+        sessions.append(session)
+        provider = AsyncMock()
+        provider.resolved_login_params = {}
+        provider.fetch_all.return_value = (
+            {"id": "permit", "zone_validity": []},
+            [],
+            [],
+        )
+        client = AsyncMock()
+        client.get_provider.return_value = provider
+        return client
+
+    monkeypatch.setattr(init_module, "async_create_client", _fake_create_client)
+
+    first_entry = _create_entry()
+    second_entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={**first_entry.data, CONF_PERMIT_ID: "permit2"},
+        unique_id="dvsportal:permit2:city",
+        title="City - permit2",
+    )
+    for entry in (first_entry, second_entry):
+        entry.add_to_hass(hass)
+        assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    first, second = sessions
+    assert first is not second
+    assert first.cookie_jar is not second.cookie_jar
+    assert first is not aiohttp_client.async_get_clientsession(hass)
+
+    # A reload replaces the session; the old one must not leak.
+    assert await hass.config_entries.async_reload(first_entry.entry_id)
+    await hass.async_block_till_done()
+    reloaded = sessions[2]
+    assert first.closed
+    assert not reloaded.closed
+    assert not second.closed
+
+    assert await hass.config_entries.async_unload(first_entry.entry_id)
+    assert reloaded.closed
+    assert not second.closed
+    assert not aiohttp_client.async_get_clientsession(hass).closed
