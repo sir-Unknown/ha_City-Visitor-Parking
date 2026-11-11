@@ -6,7 +6,7 @@ import logging
 import time
 from typing import TYPE_CHECKING, Final, cast
 
-import voluptuous as vol
+import probatio as vol
 from homeassistant import config_entries
 from homeassistant.components import websocket_api
 from homeassistant.const import ATTR_CONFIG_ENTRY_ID

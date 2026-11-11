@@ -7,7 +7,7 @@ import time
 from datetime import datetime, timedelta
 from typing import TYPE_CHECKING, Final, NoReturn, Protocol, cast
 
-import voluptuous as vol
+import probatio as vol
 from homeassistant import config_entries
 from homeassistant.const import ATTR_DEVICE_ID
 from homeassistant.core import SupportsResponse

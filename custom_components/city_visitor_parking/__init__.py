@@ -9,7 +9,7 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING, Final, Protocol, cast
 
-import voluptuous as vol
+import probatio as vol
 from homeassistant.components.http import StaticPathConfig
 from homeassistant.components.lovelace.const import CONF_RESOURCE_TYPE_WS, LOVELACE_DATA
 from homeassistant.components.lovelace.resources import ResourceStorageCollection
