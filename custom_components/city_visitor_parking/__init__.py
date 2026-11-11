@@ -5,7 +5,7 @@ from __future__ import annotations
 import inspect
 import logging
 import time
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING, Final, Protocol, cast
 
@@ -30,6 +30,7 @@ from pycityvisitorparking.exceptions import (
 
 from .auth import async_provider_login
 from .client import async_create_client
+from .config_flow import async_load_providers
 from .const import (
     CONF_API_URL,
     CONF_BASE_URL,
@@ -60,6 +61,11 @@ if TYPE_CHECKING:
     from .runtime_data import CityVisitorParkingConfigEntry
 
 _LOGGER = logging.getLogger(__name__)
+
+# Default api_url the catalog used before providers moved to the legacy path.
+_LEGACY_API_URL: Final = "/DVSWebAPI/api"
+# Minor config entry version that introduced the api_url migration.
+_API_URL_MIGRATION_MINOR_VERSION: Final = 2
 
 
 class _ResourceStorage(Protocol):
@@ -118,6 +124,59 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     await async_setup_services(hass)
     await async_setup_websocket(hass)
     return True
+
+
+async def async_migrate_entry(
+    hass: HomeAssistant, entry: CityVisitorParkingConfigEntry
+) -> bool:
+    """Migrate config entries to the current schema."""
+    if entry.version > 1:
+        # Entry written by a newer integration version; cannot downgrade.
+        return False
+
+    if entry.minor_version < _API_URL_MIGRATION_MINOR_VERSION:
+        # 1.1 -> 1.2: entries copy api_url from providers.yaml at creation, so
+        # catalog path corrections never reach existing entries.
+        providers = await async_load_providers(hass)
+        hass.config_entries.async_update_entry(
+            entry,
+            data=_migrate_legacy_api_url(entry.data, providers.values()),
+            minor_version=_API_URL_MIGRATION_MINOR_VERSION,
+        )
+    return True
+
+
+def _migrate_legacy_api_url(
+    data: Mapping[str, object], catalog: Iterable[ProviderConfig]
+) -> dict[str, object]:
+    """Replace the retired default api_url with the catalog value for the entry.
+
+    Only entries whose provider and base_url match a catalog entry and whose
+    stored api_url is exactly the retired default are touched, so manually
+    chosen paths are never overwritten.
+    """
+    migrated = dict(data)
+    if migrated.get(CONF_API_URL) != _LEGACY_API_URL:
+        return migrated
+
+    base_url = str(migrated.get(CONF_BASE_URL) or "").rstrip("/")
+    for provider in catalog:
+        if (
+            provider.provider_id == migrated.get(CONF_PROVIDER_ID)
+            and provider.base_url is not None
+            and provider.base_url.rstrip("/") == base_url
+            and provider.api_url
+            and provider.api_url != _LEGACY_API_URL
+        ):
+            _LOGGER.info(
+                "Migrating api_url for %s from %s to %s",
+                provider.municipality_name,
+                _LEGACY_API_URL,
+                provider.api_url,
+            )
+            migrated[CONF_API_URL] = provider.api_url
+            break
+    return migrated
 
 
 async def async_setup_entry(

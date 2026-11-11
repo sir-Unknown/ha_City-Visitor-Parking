@@ -74,7 +74,7 @@ class CityVisitorParkingConfigFlow(config_entries.ConfigFlow):
     """Handle a config flow for City visitor parking."""
 
     VERSION = 1
-    MINOR_VERSION = 1
+    MINOR_VERSION = 2
 
     def __init__(self) -> None:
         """Initialize the config flow."""
@@ -91,7 +91,7 @@ class CityVisitorParkingConfigFlow(config_entries.ConfigFlow):
         self, user_input: dict[str, object] | None = None
     ) -> config_entries.ConfigFlowResult:
         """Handle the initial step."""
-        self._providers = await _async_load_providers(self.hass)
+        self._providers = await async_load_providers(self.hass)
         errors: dict[str, str] = {}
 
         if user_input is None:
@@ -568,7 +568,7 @@ def _build_overrides(
     return overrides, free_weekdays
 
 
-async def _async_load_providers(hass: HomeAssistant) -> dict[str, ProviderConfig]:
+async def async_load_providers(hass: HomeAssistant) -> dict[str, ProviderConfig]:
     """Load providers from the packaged YAML file."""
     demo_mode: bool = hass.data.get(DOMAIN, {}).get(CONF_DEMO_MODE, False)
     return await hass.async_add_executor_job(_load_providers_sync, demo_mode)
