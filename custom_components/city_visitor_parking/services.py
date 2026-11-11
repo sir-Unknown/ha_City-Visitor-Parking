@@ -900,11 +900,10 @@ def _resolve_entry_from_device_id(hass: HomeAssistant, device_id: str) -> Config
     """Resolve a loaded config entry from a service device target."""
     device_registry = dr.async_get(hass)
     device = device_registry.async_get(device_id)
-    if device is None or not device.config_entries:
+    if device is None:
         _raise_invalid_target()
 
-    entry_id = next(iter(device.config_entries))
-    entry = hass.config_entries.async_get_entry(entry_id)
+    entry = hass.config_entries.async_get_entry(device.config_entry_id)
     if entry is None or entry.domain != DOMAIN:
         _raise_invalid_target()
     if entry.state is not config_entries.ConfigEntryState.LOADED:

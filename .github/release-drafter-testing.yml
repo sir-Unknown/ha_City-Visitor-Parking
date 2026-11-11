@@ -119,11 +119,12 @@ template: |
 
   ## 📦 Installation
 
-  In HACS, go to **City Visitor Parking** → **⋮** → **Redownload** → select this version from the version dropdown.
+  - **Home Assistant 2026.11 or newer (Marketplace):** go to **Settings** → **Marketplace** → **City Visitor Parking** → **⋮** → **Install another version** → select this version.
+  - **Home Assistant 2026.10 (HACS):** go to **HACS** → **City Visitor Parking** → **⋮** → **Redownload** → select this version from the version dropdown.
 
   ## 🔁 Rollback
 
-  If something breaks, reinstall the latest stable release the same way: **HACS** → **City Visitor Parking** → **⋮** → **Redownload** → select the stable version.
+  If something breaks, restore the backup you made before updating. Alternatively, reinstall the latest stable release the same way you installed this version and select the stable version.
 
   ## 🪲 Enable debug logging
 
