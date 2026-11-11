@@ -26,6 +26,9 @@ from pycityvisitorparking.exceptions import ServiceUnavailableError
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 import custom_components.city_visitor_parking as init_module
+from custom_components.city_visitor_parking.config_flow import (
+    CityVisitorParkingConfigFlow,
+)
 from custom_components.city_visitor_parking.const import (
     CONF_AUTO_END,
     CONF_MUNICIPALITY,
@@ -452,6 +455,68 @@ def test_normalize_operating_time_overrides_filters_invalid() -> None:
         "mon": (("08:00", "09:00"),),
         "tue": (("10:00", "11:00"),),
     }
+
+
+def _legacy_entry(version: int = 1, **overrides: str) -> MockConfigEntry:
+    """Create a 1.1 entry as written before the catalog path correction."""
+    data = {
+        CONF_PROVIDER_ID: "dvsportal",
+        CONF_MUNICIPALITY: "Venlo",
+        "base_url": "https://parkeren.venlo.nl",
+        "api_url": "/DVSWebAPI/api",
+        CONF_PERMIT_ID: "permit",
+        CONF_USERNAME: "user",
+        CONF_PASSWORD: "pass",
+    }
+    data.update(overrides)
+    return MockConfigEntry(
+        domain=DOMAIN,
+        data=data,
+        unique_id="dvsportal:permit:venlo",
+        title="Venlo - permit",
+        version=version,
+        minor_version=1,
+    )
+
+
+async def test_migrate_entry_replaces_retired_api_url(hass: HomeAssistant) -> None:
+    """Entries still on the retired default path take the catalog path."""
+    entry = _legacy_entry()
+    entry.add_to_hass(hass)
+
+    assert await init_module.async_migrate_entry(hass, entry)
+
+    assert entry.data["api_url"] == "/DVSPortal/api"
+    assert entry.minor_version == CityVisitorParkingConfigFlow.MINOR_VERSION
+
+
+async def test_migrate_entry_keeps_custom_api_url(hass: HomeAssistant) -> None:
+    """A manually chosen api_url must survive the migration."""
+    entry = _legacy_entry(api_url="/custom/api")
+    entry.add_to_hass(hass)
+
+    assert await init_module.async_migrate_entry(hass, entry)
+
+    assert entry.data["api_url"] == "/custom/api"
+    assert entry.minor_version == CityVisitorParkingConfigFlow.MINOR_VERSION
+
+
+async def test_migrate_entry_ignores_unknown_base_url(hass: HomeAssistant) -> None:
+    """Manual ('Other') entries that are not in the catalog stay untouched."""
+    entry = _legacy_entry(base_url="https://parkeren.example.org")
+    entry.add_to_hass(hass)
+
+    assert await init_module.async_migrate_entry(hass, entry)
+
+    assert entry.data["api_url"] == "/DVSWebAPI/api"
+
+
+async def test_migrate_entry_rejects_newer_major_version(hass: HomeAssistant) -> None:
+    """Entries from a newer integration version must not be migrated."""
+    entry = _legacy_entry(version=CityVisitorParkingConfigFlow.VERSION + 1)
+    entry.add_to_hass(hass)
+
+    assert not await init_module.async_migrate_entry(hass, entry)
 
 
 def _create_entry() -> MockConfigEntry:

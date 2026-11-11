@@ -31,7 +31,7 @@ bloemendaal:
   provider_id: dvsportal
   base_url: "https://parkeren.bloemendaal.nl"
   gui_url: "https://parkeren.bloemendaal.nl/DVSPortal/"
-  api_url: "/DVSWebAPI/api"
+  api_url: "/DVSPortal/api"
 
 breda:
   municipality_name: Breda
@@ -52,7 +52,7 @@ delft:
   provider_id: dvsportal
   base_url: "https://vergunningen.parkerendelft.com"
   gui_url: "https://vergunningen.parkerendelft.com/DVSPortal/"
-  api_url: "/DVSWebAPI/api"
+  api_url: "/DVSPortal/api"
 
 den_haag:
   municipality_name: Den Haag
@@ -134,7 +134,7 @@ haarlem:
   provider_id: dvsportal
   base_url: "https://parkeren.haarlem.nl"
   gui_url: "https://parkeren.haarlem.nl/DVSPortal/"
-  api_url: "/DVSWebAPI/api"
+  api_url: "/DVSPortal/api"
 
 harlingen:
   municipality_name: Harlingen
@@ -162,14 +162,14 @@ heemstede:
   provider_id: dvsportal
   base_url: "https://parkeren.heemstede.nl"
   gui_url: "https://parkeren.heemstede.nl/DVSPortal/"
-  api_url: "/DVSWebAPI/api"
+  api_url: "/DVSPortal/api"
 
 heerenveen:
   municipality_name: Heerenveen
   provider_id: dvsportal
   base_url: "https://parkeren.heerenveen.nl"
   gui_url: "https://parkeren.heerenveen.nl/DVSPortal/"
-  api_url: "/DVSWebAPI/api"
+  api_url: "/DVSPortal/api"
 
 heerlen:
   municipality_name: Heerlen
@@ -269,14 +269,14 @@ rijswijk:
   provider_id: dvsportal
   base_url: "https://parkeren.rijswijk.nl"
   gui_url: "https://parkeren.rijswijk.nl/DVSPortal/"
-  api_url: "/DVSWebAPI/api"
+  api_url: "/DVSPortal/api"
 
 roermond:
   municipality_name: Roermond
   provider_id: dvsportal
   base_url: "https://parkeren.roermond.nl"
   gui_url: "https://parkeren.roermond.nl/DVSPortal/"
-  api_url: "/DVSWebAPI/api"
+  api_url: "/DVSPortal/api"
 
 roosendaal:
   municipality_name: Roosendaal
@@ -349,7 +349,7 @@ veere:
   provider_id: dvsportal
   base_url: "https://parkeren.veere.nl"
   gui_url: "https://parkeren.veere.nl/DVSPortal/"
-  api_url: "/DVSWebAPI/api"
+  api_url: "/DVSPortal/api"
 
 veenendaal:
   municipality_name: Veenendaal
@@ -363,7 +363,7 @@ venlo:
   provider_id: dvsportal
   base_url: "https://parkeren.venlo.nl"
   gui_url: "https://parkeren.venlo.nl/DVSPortal/"
-  api_url: "/DVSWebAPI/api"
+  api_url: "/DVSPortal/api"
 
 vlaardingen:
   municipality_name: Vlaardingen
@@ -391,7 +391,7 @@ waalwijk:
   provider_id: dvsportal
   base_url: "https://parkeren.waalwijk.nl"
   gui_url: "https://parkeren.waalwijk.nl/DVSPortal/"
-  api_url: "/DVSWebAPI/api"
+  api_url: "/DVSPortal/api"
 
 weert:
   municipality_name: Weert
@@ -419,14 +419,14 @@ zutphen:
   provider_id: dvsportal
   base_url: "https://parkeren.zutphen.nl"
   gui_url: "https://parkeren.zutphen.nl/DVSPortal/"
-  api_url: "/DVSWebAPI/api"
+  api_url: "/DVSPortal/api"
 
 zwolle:
   municipality_name: Zwolle
   provider_id: dvsportal
   base_url: "https://parkeerloket.zwolle.nl"
   gui_url: "https://parkeerloket.zwolle.nl/DVSPortal/"
-  api_url: "/DVSWebAPI/api"
+  api_url: "/DVSPortal/api"
 
 #######################################################################
 # DEMO PROVIDERS
