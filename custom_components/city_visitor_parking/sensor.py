@@ -56,7 +56,7 @@ class ActiveReservationsSensor(CityVisitorParkingEntity):
     _entity_key = "active_reservations"
     _attr_translation_key: str | None = "active_reservations"
     _attr_state_class: SensorStateClass | None = SensorStateClass.MEASUREMENT
-    
+
     def _update_from_coordinator(self) -> None:
         """Update the sensor from coordinator data."""
         self._attr_native_value = len(self.coordinator.data.active_reservations)
@@ -68,7 +68,7 @@ class FutureReservationsSensor(CityVisitorParkingEntity):
     _entity_key = "future_reservations"
     _attr_translation_key: str | None = "future_reservations"
     _attr_state_class: SensorStateClass | None = SensorStateClass.MEASUREMENT
-    
+
     def _update_from_coordinator(self) -> None:
         """Update the sensor from coordinator data."""
         now = dt_util.utcnow()
