@@ -122,8 +122,8 @@ The repository currently relies on GitHub Actions workflows for validation, labe
 
 - Async-only. No blocking calls in integration runtime code.
 - Do not perform HTTP directly from integration modules; only `pycityvisitorparking` uses aiohttp for provider communication.
-- Always inject Home Assistant's shared aiohttp session into `pycityvisitorparking.Client`.
-- Never close injected HA-managed sessions.
+- Inject a dedicated session per config entry from `aiohttp_client.async_create_clientsession(hass)` into `pycityvisitorparking.Client`, so cookie-based provider logins of different entries never share a cookie jar.
+- Never call `close()` on HA-created sessions; HA detaches entry sessions on unload, and short-lived config flow sessions use `auto_cleanup=False` plus `detach()`.
 
 ### Provider abstraction
 
