@@ -80,6 +80,7 @@ The integration supports a growing number of Dutch municipalities and connects t
 | Roermond         | [parkeren.roermond.nl](https://parkeren.roermond.nl/DVSPortal/)                         |
 | Den Haag         | [parkerendenhaag.denhaag.nl](https://parkerendenhaag.denhaag.nl/)                       |
 | Roosendaal       | [mijn.2park.nl](https://mijn.2park.nl/)                                                 |
+| Rotterdam (beta) | [bezoek.rotterdam.nl](https://bezoek.rotterdam.nl/)                                     |
 | Deventer         | [mijn.2park.nl](https://mijn.2park.nl/)                                                 |
 | Sittard-Geleen   | [parkeren.sittard-geleen.nl](https://parkeren.sittard-geleen.nl/DVSPortal/)             |
 | Doetinchem       | [parkeren.buha.nl](https://parkeren.buha.nl/DVSPortal/)                                 |

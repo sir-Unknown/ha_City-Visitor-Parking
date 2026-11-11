@@ -285,6 +285,14 @@ roosendaal:
   gui_url: "https://mijn.2park.nl/"
   api_url: "/gsmpark-app-www/json"
 
+# Only available in the pycityvisitorparking pre-release pinned on the beta branch.
+# Never add this entry to main until main pins a stable library that contains it.
+rotterdam:
+  municipality_name: Rotterdam
+  provider_id: rotterdam
+  base_url: "https://bezoek.rotterdam.nl"
+  gui_url: "https://bezoek.rotterdam.nl/"
+
 # The Schouwen-Duiveland parking provider is currently not working, so it's commented out for now.
 # It is not working because only LoginMethod=Gebruiker is allowed. Please open an issue if you want this provider enabled.
 # schouwen_duiveland:
