@@ -77,3 +77,13 @@ ignore = ["D203", "D204", "D213", "D215", "D400", "D401", "D404", "D406", "D407"
 
 [tool.ruff.format]
 quote-style = "double"
+
+# ----------------------------
+# uv configuration
+# ----------------------------
+[tool.uv]
+# Home Assistant 2026.10.x (via pytest-homeassistant-custom-component) pins
+# Pillow==12.3.0, which carries open advisories fixed in 13.0.0. Pillow is only
+# part of the test stack. Remove this override once the test stack moves to
+# Home Assistant 2026.11 or newer, which pins Pillow 13.
+override-dependencies = ["pillow==13.0.0"]
