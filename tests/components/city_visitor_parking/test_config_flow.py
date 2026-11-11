@@ -8,7 +8,7 @@ from types import SimpleNamespace
 from typing import TYPE_CHECKING, Protocol
 from unittest.mock import AsyncMock
 
-import voluptuous as vol
+import probatio as vol
 from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
 from homeassistant.helpers import selector
 from pytest_homeassistant_custom_component.common import MockConfigEntry
