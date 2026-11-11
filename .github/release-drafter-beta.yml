@@ -1,6 +1,6 @@
 name-template: "v$RESOLVED_VERSION"
 tag-template: "v$RESOLVED_VERSION"
-commitish: "main"
+commitish: "beta"
 change-template: "- $TITLE @$AUTHOR (#$NUMBER)"
 no-changes-template: "- No changes in `custom_components/**` since the last release."
 exclude-labels:

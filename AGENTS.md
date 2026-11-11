@@ -82,6 +82,18 @@ Release automation and release notes MUST stay aligned with:
 - `.github/workflows/release-drafter.yml`
 - `.github/workflows/release.yml`
 
+### Pre-release channel (`beta` branch)
+
+Stable releases (`vX.Y.Z`) are built from `main` and pin the latest stable `pycityvisitorparking` release. Pre-releases that need an unreleased library version are built from the long-lived `beta` branch instead:
+
+- `beta` contains everything on `main` plus the changes that only make sense with a library pre-release: the library pre-release pin (for example `pycityvisitorparking==0.6.0b1`) and `providers.yaml` entries for providers that exist only in that pre-release.
+- Fixes and features go to `main` first and reach `beta` by merging `main` into `beta`. Never rebase or force-push `beta`.
+- Beta-only changes (the pre-release pin and the entries above) MUST NOT be merged back to `main`. Once the library publishes the provider in a stable release, move the entry to `main` in a normal PR together with the stable pin, then merge `main` into `beta` and drop the pre-release pin.
+- Draft a beta with the `Release Drafter` workflow run on ref `beta` with `prerelease=beta` and `version` set to the next stable version, for example `0.1.39`. This creates the tag `vX.Y.Z-beta.N`, targeting `beta`.
+- The beta draft body MUST fill in `PyPI` with the exact library version pinned on `beta`; `release.yml` rejects a beta without it.
+- The release title and the top of the body MUST state plainly what the pre-release is for (for example "test Rotterdam provider") and what is known to be untested, so testers cannot mistake it for a general update.
+- Create releases as drafts and publish only when the maintainer asks for it.
+
 ## 6) CI requirements
 
 The repository currently relies on GitHub Actions workflows for validation, labeling, release drafting, dependency review, and release packaging. Treat these workflows as part of the product surface, not as incidental tooling.
@@ -102,6 +114,7 @@ The repository currently relies on GitHub Actions workflows for validation, labe
 - Python development and CI use `uv` with dependency groups from `pyproject.toml`.
 - Frontend development and CI use the bundle under `custom_components/city_visitor_parking/frontend/`.
 - Treat PR labeling, Release Drafter, dependency review, and release packaging workflows as part of the maintained repository surface.
+- The `Validate` workflow runs on pushes to `main`, `beta`, and `testing`, and on pull requests to `main` and `beta`. `release.yml` requires a successful `Validate` run on the release commit, so keep `beta` green before publishing a beta.
 
 ## 7) Hard rules
 
@@ -144,6 +157,7 @@ The repository currently relies on GitHub Actions workflows for validation, labe
 - Do not add agent-related prefixes or suffixes such as `[codex]`, `[agent]`, or similar markers in branch names, commit titles, or pull request titles.
 - Keep feature branches current with `dev` as needed, but do not rewrite shared history once review is in progress unless explicitly requested.
 - After a feature branch is merged, delete it on GitHub and clean up the local branch as soon as it is no longer needed unless there is an explicit reason to keep it temporarily.
+- `beta` is a long-lived release branch. Do not do feature work on it directly; see "Pre-release channel" in section 5.
 
 ### Python workflow
 
@@ -176,6 +190,8 @@ If frontend output or frontend translation assets are expected by runtime code, 
 - Keep `pycityvisitorparking` pinned consistently in both:
   - `pyproject.toml`
   - `custom_components/city_visitor_parking/manifest.json`
+- On `main`, the pin MUST be the latest stable PyPI release. The `Release policy` job enforces this.
+- On `beta`, the pin MAY be a library pre-release (`==X.Y.ZbN`). `manifest.json` and `pyproject.toml` MUST still match, `uv.lock` MUST be refreshed, and the `Release policy` job skips only the "latest on PyPI" comparison.
 
 ### CI-sensitive dependency changes
 
@@ -206,6 +222,11 @@ If frontend output or frontend translation assets are expected by runtime code, 
   - `base_url`
   - `api_url`
 - Manual provider configs are stored in config entry data only and must not be written back to YAML.
+
+### Providers that exist only in a library pre-release
+
+- The municipality dropdown does not check whether the installed library knows a provider. An entry for a provider missing from the pinned library would be offered to users and fail at setup.
+- Therefore add such entries on `beta` only, together with the library pre-release pin, and never on `main` until `main` pins a stable library that contains the provider.
 
 ## 11) Config entry lifecycle
 
