@@ -41,7 +41,7 @@ export type DeviceEntry = {
   id: string;
   name?: string | null;
   identifiers?: Array<[string, string]>;
-  config_entries?: string[];
+  config_entry_id?: string;
 };
 
 /** Config entry fields used for permit selection in the frontend. */

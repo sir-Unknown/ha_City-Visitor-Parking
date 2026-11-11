@@ -241,8 +241,8 @@ class CityVisitorParkingActiveCard extends BaseLocalizedCard<CardConfig> {
     try {
       let devices = await this._getDomainDevices();
       if (entryId) {
-        devices = devices.filter((device) =>
-          (device.config_entries ?? []).includes(entryId),
+        devices = devices.filter(
+          (device) => device.config_entry_id === entryId,
         );
       }
       if (!devices.length) {

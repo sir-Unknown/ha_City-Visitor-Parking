@@ -163,10 +163,7 @@ export const resolvePermitLabelsByDevice = (
 ): Map<string, string> => {
   const labels = new Map<string, string>();
   for (const device of devices) {
-    const entryIds = Array.isArray(device.config_entries)
-      ? device.config_entries
-      : [];
-    const entryId = entryIds.find((id) => entryTitles.has(id)) ?? entryIds[0];
+    const entryId = device.config_entry_id;
     if (!entryId) continue;
     labels.set(device.id, entryTitles.get(entryId) ?? entryId);
   }
