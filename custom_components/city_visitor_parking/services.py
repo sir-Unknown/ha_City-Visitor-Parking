@@ -9,13 +9,11 @@ from datetime import datetime, timedelta
 from typing import TYPE_CHECKING, Final, NoReturn, Protocol, cast
 
 import probatio as vol
-from homeassistant import config_entries
 from homeassistant.const import ATTR_DEVICE_ID
 from homeassistant.core import SupportsResponse
 from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from homeassistant.helpers import config_validation as cv
-from homeassistant.helpers import device_registry as dr
-from homeassistant.helpers import selector
+from homeassistant.helpers import selector, service
 from homeassistant.util import dt as dt_util
 from pycityvisitorparking import ProviderError
 from pycityvisitorparking.exceptions import (
@@ -907,16 +905,14 @@ def _runtime_from_call(call: ServiceCall) -> CityVisitorParkingRuntimeData:
 
 
 def _entry_from_call(call: ServiceCall) -> ConfigEntry:
-    """Resolve the config entry from a service call."""
-    return _resolve_entry_from_device_id(call.hass, str(call.data[ATTR_DEVICE_ID]))
-
-
-def _raise_invalid_target() -> NoReturn:
-    """Raise when a service call targets an invalid entry."""
-    raise ServiceValidationError(
-        translation_domain=DOMAIN,
-        translation_key="invalid_target",
+    """Resolve the loaded config entry that owns the targeted device."""
+    _, entry = service.async_get_device_and_config_entry(
+        call.hass,
+        DOMAIN,
+        str(call.data[ATTR_DEVICE_ID]),
+        include_child_devices=False,
     )
+    return entry
 
 
 def _as_utc(value: datetime) -> datetime:
@@ -930,21 +926,6 @@ def _is_not_supported(err: ProviderError) -> bool:
     """Return True when the provider reports an unsupported operation."""
     message = str(err).lower()
     return "not supported" in message or "unsupported" in message
-
-
-def _resolve_entry_from_device_id(hass: HomeAssistant, device_id: str) -> ConfigEntry:
-    """Resolve a loaded config entry from a service device target."""
-    device_registry = dr.async_get(hass)
-    device = device_registry.async_get(device_id)
-    if device is None:
-        _raise_invalid_target()
-
-    entry = hass.config_entries.async_get_entry(device.config_entry_id)
-    if entry is None or entry.domain != DOMAIN:
-        _raise_invalid_target()
-    if entry.state is not config_entries.ConfigEntryState.LOADED:
-        _raise_invalid_target()
-    return entry
 
 
 async def _async_refresh_runtime_data(

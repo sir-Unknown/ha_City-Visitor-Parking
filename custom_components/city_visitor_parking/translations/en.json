@@ -354,9 +354,6 @@
     },
     "status_operation_failed": {
       "message": "The permit status could not be loaded. Try again later."
-    },
-    "invalid_target": {
-      "message": "The selected device is not available."
     }
   },
   "entity": {

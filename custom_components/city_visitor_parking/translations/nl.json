@@ -354,9 +354,6 @@
     },
     "status_operation_failed": {
       "message": "De vergunningstatus kon niet worden geladen. Probeer het later opnieuw."
-    },
-    "invalid_target": {
-      "message": "Het gekozen apparaat is niet beschikbaar."
     }
   },
   "entity": {
