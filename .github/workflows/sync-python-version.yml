@@ -114,7 +114,7 @@ jobs:
 
           gh pr create \
             --title "Bump Python version to ${NEW_VERSION}" \
-            --label "maintenance,no-stale" \
+            --label "maintenance" \
             --body "$(cat <<EOF
           ## Sync Python version from HA Core
 
