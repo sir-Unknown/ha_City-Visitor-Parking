@@ -40,6 +40,10 @@ class ServiceUnavailableError(ProviderError):
     """Stub service unavailable error."""
 
 
+class NotFoundError(ProviderError):
+    """Stub not found error."""
+
+
 class Client:
     """Stub client for testing."""
 
@@ -123,6 +127,7 @@ exceptions_module.ProviderError = ProviderError
 exceptions_module.ValidationError = ValidationError
 exceptions_module.RateLimitError = RateLimitError
 exceptions_module.ServiceUnavailableError = ServiceUnavailableError
+exceptions_module.NotFoundError = NotFoundError
 
 sys.modules.setdefault("pycityvisitorparking", module)
 sys.modules.setdefault("pycityvisitorparking.exceptions", exceptions_module)

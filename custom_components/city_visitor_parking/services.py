@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import functools
 import logging
 import time
 from datetime import datetime, timedelta
@@ -40,7 +41,8 @@ from .payloads import build_status_payload, normalize_favorites, reservation_pay
 from .version import async_get_versions, build_log_block
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping
+    from collections.abc import Callable, Coroutine, Mapping
+    from typing import Any
 
     from homeassistant.config_entries import ConfigEntry
     from homeassistant.core import HomeAssistant, ServiceCall
@@ -355,6 +357,33 @@ async def async_setup_services(hass: HomeAssistant) -> None:
     )
 
 
+def _renews_session(
+    handler: Callable[[ServiceCall], Coroutine[Any, Any, None]],
+) -> Callable[[ServiceCall], Coroutine[Any, Any, None]]:
+    """Re-authenticate the entry after a write service fails on the provider.
+
+    A provider that reports an expired session as a generic error would fail
+    every following call until the next poll renews it. Writes cannot be retried
+    safely, because a provider error does not prove the request was not applied,
+    so the failure is still reported and only the next attempt benefits.
+    """
+
+    @functools.wraps(handler)
+    async def wrapper(call: ServiceCall) -> None:
+        try:
+            await handler(call)
+        except HomeAssistantError as err:
+            # The handlers translate provider failures into HomeAssistantError
+            # with the provider error chained as the cause.
+            cause = err.__cause__
+            if isinstance(cause, PyCityVisitorParkingError):
+                await _runtime_from_call(call).coordinator.async_renew_session(cause)
+            raise
+
+    return wrapper
+
+
+@_renews_session
 async def _async_handle_start_reservation(call: ServiceCall) -> None:
     """Handle reservation start service."""
     runtime = _runtime_from_call(call)
@@ -407,6 +436,7 @@ async def _async_handle_start_reservation(call: ServiceCall) -> None:
         )
 
 
+@_renews_session
 async def _async_handle_update_reservation(call: ServiceCall) -> None:
     """Handle reservation update service."""
     runtime = _runtime_from_call(call)
@@ -502,6 +532,7 @@ async def _async_handle_update_reservation(call: ServiceCall) -> None:
         )
 
 
+@_renews_session
 async def _async_handle_end_reservation(call: ServiceCall) -> None:
     """Handle reservation end service."""
     runtime = _runtime_from_call(call)
@@ -527,6 +558,7 @@ async def _async_handle_end_reservation(call: ServiceCall) -> None:
         )
 
 
+@_renews_session
 async def _async_handle_add_favorite(call: ServiceCall) -> None:
     """Handle add favorite service."""
     runtime = _runtime_from_call(call)
@@ -554,6 +586,7 @@ async def _async_handle_add_favorite(call: ServiceCall) -> None:
         )
 
 
+@_renews_session
 async def _async_handle_update_favorite(call: ServiceCall) -> None:
     """Handle update favorite service."""
     runtime = _runtime_from_call(call)
@@ -602,6 +635,7 @@ async def _async_handle_update_favorite(call: ServiceCall) -> None:
         )
 
 
+@_renews_session
 async def _async_handle_remove_favorite(call: ServiceCall) -> None:
     """Handle remove favorite service."""
     runtime = _runtime_from_call(call)
@@ -687,7 +721,9 @@ async def _async_handle_list_favorites(call: ServiceCall) -> dict[str, JsonValue
     """Handle list favorites service."""
     runtime = _runtime_from_call(call)
     try:
-        favorites = await runtime.provider.list_favorites()
+        favorites = await runtime.coordinator.async_call_with_relogin(
+            runtime.provider.list_favorites
+        )
     except PyCityVisitorParkingError as err:
         ha_cvp_version, pycvp_version = await async_get_versions(call.hass)
         _raise_favorite_error(

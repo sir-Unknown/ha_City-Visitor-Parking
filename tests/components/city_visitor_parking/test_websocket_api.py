@@ -39,6 +39,8 @@ from custom_components.city_visitor_parking.websocket_api import (
 )
 
 if TYPE_CHECKING:
+    from collections.abc import Awaitable, Callable
+
     from homeassistant.components.websocket_api.connection import ActiveConnection
     from homeassistant.core import HomeAssistant
 
@@ -299,11 +301,17 @@ def _create_entry(options: dict[str, object] | None = None) -> MockConfigEntry:
     )
 
 
+async def _call_through[T](operation: Callable[[], Awaitable[T]]) -> T:
+    """Run a provider call without session recovery, like a healthy coordinator."""
+    return await operation()
+
+
 def _runtime(
     provider: AsyncMock, data: CoordinatorData | None
 ) -> CityVisitorParkingRuntimeData:
     """Build runtime data for websocket tests."""
     coordinator = AsyncMock()
+    coordinator.async_call_with_relogin = AsyncMock(side_effect=_call_through)
     coordinator.data = data
     return CityVisitorParkingRuntimeData(
         client=AsyncMock(),
