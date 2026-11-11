@@ -1,13 +1,6 @@
 # Scans dependency changes in PRs for known vulnerabilities using the GitHub
 # Advisory Database. Fails on findings with severity >= moderate and posts a
 # summary comment on the PR when issues are found.
-#
-# Note: allow-ghsas contains temporary exceptions for packages pinned by the
-# current pytest-homeassistant-custom-component / Home Assistant dependency set
-# that cannot yet be updated cleanly in this repository.
-# Remove these exceptions as soon as upstream releases unblock the pins:
-#   GHSA-752w-5fwx-jx9f  PyJWT <= 2.11.0           (high)
-#   GHSA-6w46-j5rx-g56g  pytest < 9.0.3             (medium) — pinned by pytest-homeassistant-custom-component
 name: "Dependency review"
 on:
   workflow_dispatch:
@@ -50,5 +43,4 @@ jobs:
           head-ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
           comment-summary-in-pr: on-failure
           fail-on-severity: moderate
-          allow-ghsas: GHSA-752w-5fwx-jx9f,GHSA-6w46-j5rx-g56g
           retry-on-snapshot-warnings: true
