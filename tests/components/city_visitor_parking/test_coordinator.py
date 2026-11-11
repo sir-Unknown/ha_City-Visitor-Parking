@@ -22,6 +22,7 @@ from custom_components.city_visitor_parking.const import (
     CONF_MUNICIPALITY,
     CONF_OPERATING_TIME_OVERRIDES,
     CONF_PROVIDER_ID,
+    CONF_RESOLVED_LOGIN_PARAMS,
     DEFAULT_UPDATE_INTERVAL,
     DOMAIN,
     IDLE_UPDATE_INTERVAL,
@@ -69,6 +70,7 @@ if TYPE_CHECKING:
 EXPECTED_MINUTES = 15
 EXPECTED_FETCH_ATTEMPTS = 2
 EXPECTED_LOGIN_ATTEMPTS = 2
+EXPECTED_LOGINS_ACROSS_WINDOWS = 3
 
 
 async def test_auto_end_reservation_once(hass: HomeAssistant) -> None:
@@ -838,8 +840,10 @@ async def test_expired_auth_recovers_without_reload(hass: HomeAssistant) -> None
     assert coordinator.last_update_success is True
 
 
-async def test_rejected_credentials_still_trigger_reauth(hass: HomeAssistant) -> None:
-    """When the re-login itself is rejected, HA must ask for new credentials."""
+async def test_rejected_relogin_after_provider_error_escalates_once_repeated(
+    hass: HomeAssistant,
+) -> None:
+    """One rejected re-login may be an outage; a repeated one asks for reauth."""
     entry = _create_entry(auto_end=False, credentials=True)
     entry.add_to_hass(hass)
 
@@ -856,9 +860,157 @@ async def test_rejected_credentials_still_trigger_reauth(hass: HomeAssistant) ->
         auto_end_state=AutoEndState(),
     )
 
+    start = datetime(2025, 1, 6, 10, 0, tzinfo=UTC)
+    with freeze_time(start):
+        await coordinator.async_refresh()
+    assert isinstance(coordinator.last_exception, UpdateFailed)
+    assert not isinstance(coordinator.last_exception, ConfigEntryAuthFailed)
+
+    with freeze_time(start + RELOGIN_COOLDOWN):
+        await coordinator.async_refresh()
+    assert isinstance(coordinator.last_exception, ConfigEntryAuthFailed)
+
+
+async def test_rejected_relogin_after_auth_error_triggers_reauth(
+    hass: HomeAssistant,
+) -> None:
+    """A rejected re-login after an auth error is a credential problem."""
+    entry = _create_entry(auto_end=False, credentials=True)
+    entry.add_to_hass(hass)
+
+    provider = AsyncMock()
+    provider.resolved_login_params = {}
+    provider.fetch_all.side_effect = coord_module.AuthError()
+    provider.login.side_effect = coord_module.AuthError()
+
+    coordinator = CityVisitorParkingCoordinator(
+        hass,
+        provider=provider,
+        config_entry=entry,
+        permit_id="permit",
+        auto_end_state=AutoEndState(),
+    )
+
     await coordinator.async_refresh()
 
     assert isinstance(coordinator.last_exception, ConfigEntryAuthFailed)
+
+
+async def test_successful_relogin_resets_rejection_count(
+    hass: HomeAssistant,
+) -> None:
+    """Rejections separated by a working login are not consecutive."""
+    entry = _create_entry(auto_end=False, credentials=True)
+    entry.add_to_hass(hass)
+
+    provider = AsyncMock()
+    provider.resolved_login_params = {}
+    provider.fetch_all.side_effect = coord_module.ProviderError("status 500")
+    provider.login.side_effect = [
+        coord_module.AuthError(),
+        None,
+        coord_module.AuthError(),
+    ]
+
+    coordinator = CityVisitorParkingCoordinator(
+        hass,
+        provider=provider,
+        config_entry=entry,
+        permit_id="permit",
+        auto_end_state=AutoEndState(),
+    )
+
+    start = datetime(2025, 1, 6, 10, 0, tzinfo=UTC)
+    for window in range(EXPECTED_LOGINS_ACROSS_WINDOWS):
+        with freeze_time(start + window * RELOGIN_COOLDOWN):
+            await coordinator.async_refresh()
+
+    assert provider.login.await_count == EXPECTED_LOGINS_ACROSS_WINDOWS
+    assert not isinstance(coordinator.last_exception, ConfigEntryAuthFailed)
+
+
+async def test_recovery_allows_immediate_relogin_on_next_expiry(
+    hass: HomeAssistant,
+) -> None:
+    """A successful recovery must not leave the next expiry waiting on cooldown."""
+    entry = _create_entry(auto_end=False, credentials=True)
+    entry.add_to_hass(hass)
+
+    ok: tuple[dict[str, Any], list[Any], list[Any]] = ({"zone_validity": []}, [], [])
+    provider = AsyncMock()
+    provider.resolved_login_params = {}
+    provider.fetch_all.side_effect = [
+        coord_module.ProviderError("status 500"),
+        ok,
+        coord_module.ProviderError("status 500"),
+        ok,
+    ]
+
+    coordinator = CityVisitorParkingCoordinator(
+        hass,
+        provider=provider,
+        config_entry=entry,
+        permit_id="permit",
+        auto_end_state=AutoEndState(),
+    )
+
+    with freeze_time(datetime(2025, 1, 6, 10, 0, tzinfo=UTC)):
+        await coordinator.async_refresh()
+        await coordinator.async_refresh()
+
+    assert provider.login.await_count == EXPECTED_LOGIN_ATTEMPTS
+    assert coordinator.last_update_success is True
+
+
+async def test_relogin_persists_resolved_login_params(hass: HomeAssistant) -> None:
+    """Params resolved during a runtime re-login are stored on the entry."""
+    entry = _create_entry(auto_end=False, credentials=True)
+    entry.add_to_hass(hass)
+
+    provider = _recovering_provider(coord_module.ProviderError("status 500"))
+    provider.resolved_login_params = {"location": "resolved"}
+
+    coordinator = CityVisitorParkingCoordinator(
+        hass,
+        provider=provider,
+        config_entry=entry,
+        permit_id="permit",
+        auto_end_state=AutoEndState(),
+    )
+
+    await coordinator.async_refresh()
+
+    assert entry.data[CONF_RESOLVED_LOGIN_PARAMS] == {"location": "resolved"}
+
+
+async def test_rejected_relogin_clears_resolved_login_params(
+    hass: HomeAssistant,
+) -> None:
+    """A rejected login drops cached params so a stale value cannot lock out."""
+    entry = _create_entry(auto_end=False, credentials=True)
+    entry.add_to_hass(hass)
+    hass.config_entries.async_update_entry(
+        entry,
+        data={**entry.data, CONF_RESOLVED_LOGIN_PARAMS: {"location": "stale"}},
+    )
+
+    provider = AsyncMock()
+    provider.resolved_login_params = {}
+    provider.fetch_all.side_effect = coord_module.ProviderError("status 500")
+    provider.login.side_effect = coord_module.AuthError()
+
+    coordinator = CityVisitorParkingCoordinator(
+        hass,
+        provider=provider,
+        config_entry=entry,
+        permit_id="permit",
+        auto_end_state=AutoEndState(),
+    )
+
+    await coordinator.async_refresh()
+
+    assert provider.login.await_args.kwargs["location"] == "stale"
+    assert entry.data[CONF_RESOLVED_LOGIN_PARAMS] == {}
 
 
 async def test_relogin_is_rate_limited(hass: HomeAssistant) -> None:
@@ -891,14 +1043,23 @@ async def test_relogin_is_rate_limited(hass: HomeAssistant) -> None:
     assert isinstance(coordinator.last_exception, UpdateFailed)
 
 
-async def test_rate_limit_does_not_trigger_relogin(hass: HomeAssistant) -> None:
-    """Rate-limit responses must not be answered with another login."""
+@pytest.mark.parametrize(
+    "error",
+    [
+        coord_module.RateLimitError("slow down"),
+        coord_module.ServiceUnavailableError("maintenance"),
+    ],
+)
+async def test_throttling_errors_do_not_trigger_relogin(
+    hass: HomeAssistant, error: Exception
+) -> None:
+    """Rate-limit and maintenance responses must not be answered with a login."""
     entry = _create_entry(auto_end=False, credentials=True)
     entry.add_to_hass(hass)
 
     provider = AsyncMock()
     provider.resolved_login_params = {}
-    provider.fetch_all.side_effect = coord_module.RateLimitError("slow down")
+    provider.fetch_all.side_effect = error
 
     coordinator = CityVisitorParkingCoordinator(
         hass,

@@ -24,6 +24,7 @@ from .const import (
     DEFAULT_UPDATE_INTERVAL,
     IDLE_UPDATE_INTERVAL,
     RELOGIN_COOLDOWN,
+    RELOGIN_REJECTIONS_BEFORE_REAUTH,
     TRANSITION_BUFFER,
     TRANSITION_LOOKAHEAD,
 )
@@ -100,6 +101,7 @@ class CityVisitorParkingCoordinator(DataUpdateCoordinator[CoordinatorData]):
         self._unavailable_logged: bool = False
         self._entry: CityVisitorParkingConfigEntry = config_entry
         self._last_relogin: datetime | None = None
+        self._relogin_rejections: int = 0
 
     async def _async_update_data(self) -> CoordinatorData:
         """Fetch data from the API and normalize it."""
@@ -239,9 +241,13 @@ class CityVisitorParkingCoordinator(DataUpdateCoordinator[CoordinatorData]):
         re-raised untouched: a ``NetworkError`` never reached the provider, and
         rate-limit or maintenance responses would only be made worse by adding a
         login to the next poll.
+
+        ``AuthError`` stays in the retry set because the library's own
+        re-authentication is opt-in per provider request; for providers that do
+        not use it, this is the only path that renews the session.
         """
         try:
-            return await self._provider.fetch_all()
+            result = await self._provider.fetch_all()
         except RateLimitError, ServiceUnavailableError:
             raise
         except (AuthError, ProviderError) as err:
@@ -252,10 +258,13 @@ class CityVisitorParkingCoordinator(DataUpdateCoordinator[CoordinatorData]):
                 self._entry_title,
                 type(err).__name__,
             )
-            # An AuthError raised here means the stored credentials themselves
-            # are rejected, which _async_update_data turns into a reauth flow.
-            await self._async_relogin()
-            return await self._provider.fetch_all()
+            await self._async_relogin(err)
+            result = await self._provider.fetch_all()
+        # A working session clears the recovery state, so the next expiry is
+        # handled immediately and an old rejection is not counted again.
+        self._last_relogin = None
+        self._relogin_rejections = 0
+        return result
 
     def _may_relogin(self) -> bool:
         """Return whether an automatic re-login may be attempted right now."""
@@ -265,12 +274,35 @@ class CityVisitorParkingCoordinator(DataUpdateCoordinator[CoordinatorData]):
             return True
         return dt_util.utcnow() - self._last_relogin >= RELOGIN_COOLDOWN
 
-    async def _async_relogin(self) -> None:
-        """Re-authenticate the provider with the credentials on the entry."""
+    async def _async_relogin(self, trigger: PyCityVisitorParkingError) -> None:
+        """Re-authenticate the provider with the credentials on the entry.
+
+        A rejected login escalates to a reauth flow (``AuthError`` reaches
+        ``_async_update_data``) only when it is a credential problem with
+        reasonable certainty: the failed update was itself an ``AuthError``, or
+        the login has now been rejected in consecutive cooldown windows. A
+        single rejection after a generic provider error may be part of the same
+        outage, so it is reported as that provider error instead.
+        """
         # Recorded before the attempt so a login that fails or hangs still
         # spaces out the next one.
         self._last_relogin = dt_util.utcnow()
-        await async_provider_login(self.hass, self._entry, self._provider)
+        try:
+            await async_provider_login(self.hass, self._entry, self._provider)
+        except AuthError:
+            self._relogin_rejections += 1
+            if (
+                isinstance(trigger, AuthError)
+                or self._relogin_rejections >= RELOGIN_REJECTIONS_BEFORE_REAUTH
+            ):
+                raise
+            _LOGGER.debug(
+                "Re-login for %s was rejected after %s; retrying after cooldown",
+                self._entry_title,
+                type(trigger).__name__,
+            )
+            raise trigger from None
+        self._relogin_rejections = 0
 
     async def _async_maybe_auto_end(self, data: CoordinatorData) -> None:
         """Auto-end reservations when the zone becomes free."""

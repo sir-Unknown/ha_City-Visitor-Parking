@@ -77,6 +77,14 @@ plausibly fix. This cooldown keeps a provider-side outage — which fails every
 update for hours — from turning into one login attempt per poll.
 """
 
+RELOGIN_REJECTIONS_BEFORE_REAUTH: Final = 2
+"""Consecutive rejected re-logins before a generic provider error asks for reauth.
+
+A login rejected once while the provider is already failing may be part of the
+same outage. Rejected again in the next cooldown window, it is treated as a
+credential problem so the reauth flow still starts.
+"""
+
 AUTO_END_COOLDOWN: Final = timedelta(minutes=10)
 
 WEEKDAY_KEYS: Final[list[str]] = [

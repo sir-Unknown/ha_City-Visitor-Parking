@@ -61,8 +61,10 @@ class CityVisitorParkingEntity(
         }
         self._update_from_coordinator()
 
+    # Same override as CoordinatorEntity.available; HA's metaclass handles the
+    # property-over-cached_property shadowing that pyright reports.
     @property
-    def available(self) -> bool:
+    def available(self) -> bool:  # pyright: ignore[reportIncompatibleVariableOverride]
         """Return if entity is available.
 
         These entities extend ``BaseCoordinatorEntity`` so they can drive their
