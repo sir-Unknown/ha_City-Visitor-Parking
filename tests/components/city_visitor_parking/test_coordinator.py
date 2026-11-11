@@ -1121,3 +1121,96 @@ async def test_relogin_skipped_without_stored_credentials(
 
     provider.login.assert_not_awaited()
     assert isinstance(coordinator.last_exception, UpdateFailed)
+
+
+def _coordinator_with_provider(
+    hass: HomeAssistant, provider: AsyncMock
+) -> CityVisitorParkingCoordinator:
+    """Build a coordinator for an entry that carries credentials."""
+    entry = _create_entry(auto_end=False, credentials=True)
+    entry.add_to_hass(hass)
+    return CityVisitorParkingCoordinator(
+        hass,
+        provider=provider,
+        config_entry=entry,
+        permit_id="permit",
+        auto_end_state=AutoEndState(),
+    )
+
+
+async def test_read_call_recovers_after_relogin(hass: HomeAssistant) -> None:
+    """A repeatable read outside the poll also recovers from a dead session."""
+    provider = AsyncMock()
+    provider.resolved_login_params = {}
+    provider.list_favorites.side_effect = [coord_module.ProviderError("500"), ["fav"]]
+    coordinator = _coordinator_with_provider(hass, provider)
+
+    result = await coordinator.async_call_with_relogin(provider.list_favorites)
+
+    assert result == ["fav"]
+    provider.login.assert_awaited_once()
+
+
+async def test_not_found_does_not_trigger_relogin(hass: HomeAssistant) -> None:
+    """A missing item is unrelated to the session."""
+    provider = AsyncMock()
+    provider.resolved_login_params = {}
+    provider.list_favorites.side_effect = coord_module.NotFoundError("gone")
+    coordinator = _coordinator_with_provider(hass, provider)
+
+    with pytest.raises(coord_module.NotFoundError):
+        await coordinator.async_call_with_relogin(provider.list_favorites)
+
+    provider.login.assert_not_awaited()
+
+
+async def test_renew_session_logs_in_once_per_cooldown(hass: HomeAssistant) -> None:
+    """Failed writes renew the session, but not on every failure."""
+    provider = AsyncMock()
+    provider.resolved_login_params = {}
+    coordinator = _coordinator_with_provider(hass, provider)
+    error = coord_module.ProviderError("500")
+
+    start = datetime(2025, 1, 6, 10, 0, tzinfo=UTC)
+    with freeze_time(start):
+        await coordinator.async_renew_session(error)
+        await coordinator.async_renew_session(error)
+    assert provider.login.await_count == 1
+
+    with freeze_time(start + RELOGIN_COOLDOWN):
+        await coordinator.async_renew_session(error)
+    assert provider.login.await_count == EXPECTED_LOGIN_ATTEMPTS
+
+
+async def test_renew_session_never_raises(hass: HomeAssistant) -> None:
+    """A rejected login must not replace the error the caller is reporting."""
+    provider = AsyncMock()
+    provider.resolved_login_params = {}
+    provider.login.side_effect = coord_module.AuthError()
+    coordinator = _coordinator_with_provider(hass, provider)
+
+    await coordinator.async_renew_session(coord_module.ProviderError("500"))
+
+    provider.login.assert_awaited_once()
+
+
+@pytest.mark.parametrize(
+    "error",
+    [
+        coord_module.NetworkError(),
+        coord_module.RateLimitError("slow down"),
+        coord_module.ServiceUnavailableError("maintenance"),
+        coord_module.NotFoundError("gone"),
+    ],
+)
+async def test_renew_session_ignores_unrelated_failures(
+    hass: HomeAssistant, error: Exception
+) -> None:
+    """Only failures a new session could fix cause a login."""
+    provider = AsyncMock()
+    provider.resolved_login_params = {}
+    coordinator = _coordinator_with_provider(hass, provider)
+
+    await coordinator.async_renew_session(cast("Any", error))
+
+    provider.login.assert_not_awaited()

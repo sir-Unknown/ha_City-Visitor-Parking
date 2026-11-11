@@ -12,6 +12,7 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 from homeassistant.util import dt as dt_util
 from pycityvisitorparking import AuthError, NetworkError, ProviderError
 from pycityvisitorparking.exceptions import (
+    NotFoundError,
     PyCityVisitorParkingError,
     RateLimitError,
     ServiceUnavailableError,
@@ -41,7 +42,7 @@ from .time_windows import windows_for_today
 from .version import async_get_versions, build_log_block
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable, Mapping
+    from collections.abc import Awaitable, Callable, Iterable, Mapping
 
     from homeassistant.core import HomeAssistant
     from pycityvisitorparking import Favorite as ProviderFavorite
@@ -114,7 +115,9 @@ class CityVisitorParkingCoordinator(DataUpdateCoordinator[CoordinatorData]):
             )
 
             started = time.perf_counter()
-            permit, reservations, favorites = await self._async_fetch_all()
+            permit, reservations, favorites = await self.async_call_with_relogin(
+                self._provider.fetch_all
+            )
             _LOGGER.debug(
                 "Provider %s fetch_all duration: %.3fs — reservations=%s favorites=%s",
                 self._entry_title,
@@ -224,47 +227,84 @@ class CityVisitorParkingCoordinator(DataUpdateCoordinator[CoordinatorData]):
         await self._async_maybe_auto_end(data)
         return data
 
-    async def _async_fetch_all(
-        self,
-    ) -> tuple[Permit, list[ProviderReservation], list[ProviderFavorite]]:
-        """Fetch provider data, recovering once from an expired provider session.
+    async def async_call_with_relogin[T](
+        self, operation: Callable[[], Awaitable[T]]
+    ) -> T:
+        """Run a provider call, recovering once from an expired provider session.
 
         The session established at setup is not refreshed anywhere else, so it
         eventually expires while the entry keeps running. The library retries a
         request once after re-authenticating, but only when the provider answers
         with an explicit auth status; a provider that reports an expired session
         as a generic server error instead keeps the dead session in place and
-        every following update fails until the entry is reloaded by hand.
+        every following call fails until the entry is reloaded by hand.
 
         Reloading only helps because it logs in again, so do exactly that here
-        and retry the fetch once. Failures that a new session cannot fix are
-        re-raised untouched: a ``NetworkError`` never reached the provider, and
-        rate-limit or maintenance responses would only be made worse by adding a
-        login to the next poll.
+        and retry the call once. Failures that a new session cannot fix are
+        re-raised untouched, see ``_is_session_failure``.
 
         ``AuthError`` stays in the retry set because the library's own
         re-authentication is opt-in per provider request; for providers that do
         not use it, this is the only path that renews the session.
+
+        Only use this for calls that are safe to repeat. A provider error does
+        not prove the first attempt was not processed, so a retried write could
+        be applied twice; writes use ``async_renew_session`` instead.
         """
         try:
-            result = await self._provider.fetch_all()
-        except RateLimitError, ServiceUnavailableError:
-            raise
-        except (AuthError, ProviderError) as err:
-            if not self._may_relogin():
+            result = await operation()
+        except PyCityVisitorParkingError as err:
+            if not self._is_session_failure(err) or not self._may_relogin():
                 raise
             _LOGGER.debug(
-                "Update for %s failed with %s; re-authenticating and retrying once",
+                "Call for %s failed with %s; re-authenticating and retrying once",
                 self._entry_title,
                 type(err).__name__,
             )
             await self._async_relogin(err)
-            result = await self._provider.fetch_all()
+            result = await operation()
         # A working session clears the recovery state, so the next expiry is
         # handled immediately and an old rejection is not counted again.
         self._last_relogin = None
         self._relogin_rejections = 0
         return result
+
+    async def async_renew_session(self, err: PyCityVisitorParkingError) -> None:
+        """Re-authenticate after a failed call that must not be repeated.
+
+        For writes the failed call is reported to the caller unchanged; this
+        only makes sure the next attempt does not hit the same dead session
+        instead of waiting for the next poll. Never raises: the original error
+        is what the caller needs to see, and a rejected login is counted so the
+        next poll can still escalate to reauth.
+        """
+        if not self._is_session_failure(err) or not self._may_relogin():
+            return
+        _LOGGER.debug(
+            "Call for %s failed with %s; re-authenticating for the next attempt",
+            self._entry_title,
+            type(err).__name__,
+        )
+        try:
+            await self._async_relogin(err)
+        except PyCityVisitorParkingError as login_err:
+            _LOGGER.debug(
+                "Re-login for %s failed: %s",
+                self._entry_title,
+                type(login_err).__name__,
+            )
+
+    @staticmethod
+    def _is_session_failure(err: PyCityVisitorParkingError) -> bool:
+        """Return whether a fresh session could plausibly fix this failure.
+
+        A ``NetworkError`` never reached the provider, rate-limit and
+        maintenance responses would only be made worse by an extra login, and a
+        missing item or invalid input is unrelated to the session.
+        """
+        if isinstance(err, RateLimitError | ServiceUnavailableError | NotFoundError):
+            return False
+        return isinstance(err, AuthError | ProviderError)
 
     def _may_relogin(self) -> bool:
         """Return whether an automatic re-login may be attempted right now."""

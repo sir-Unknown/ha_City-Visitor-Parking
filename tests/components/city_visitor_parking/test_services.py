@@ -68,6 +68,7 @@ from custom_components.city_visitor_parking.services import (
 )
 
 if TYPE_CHECKING:
+    from collections.abc import Awaitable, Callable
     from types import ModuleType
 
     from homeassistant.core import HomeAssistant
@@ -1267,6 +1268,59 @@ async def test_service_invalid_device_target(hass: HomeAssistant) -> None:
         )
 
 
+async def _call_through[T](operation: Callable[[], Awaitable[T]]) -> T:
+    """Run a provider call without session recovery, like a healthy coordinator."""
+    return await operation()
+
+
+async def test_service_write_error_renews_session_without_retry(
+    hass: HomeAssistant, pv_library: ModuleType
+) -> None:
+    """A failed write is reported once and only the next attempt gets a new session."""
+    await async_setup_services(hass)
+
+    entry, device, provider = _create_entry_with_device(hass, "permit1")
+    error = pv_library.ProviderError("boom")
+    provider.end_reservation.side_effect = error
+
+    with pytest.raises(HomeAssistantError):
+        await hass.services.async_call(
+            DOMAIN,
+            SERVICE_END_RESERVATION,
+            {ATTR_DEVICE_ID: device.id, ATTR_RESERVATION_ID: "res1"},
+            blocking=True,
+        )
+
+    # A retried write could be applied twice, so the provider is called once.
+    provider.end_reservation.assert_awaited_once()
+    entry.runtime_data.coordinator.async_renew_session.assert_awaited_once_with(error)
+
+
+async def test_service_input_error_does_not_renew_session(
+    hass: HomeAssistant,
+) -> None:
+    """Rejected input says nothing about the session."""
+    await async_setup_services(hass)
+
+    entry, device, _provider = _create_entry_with_device(hass, "permit1")
+    start = dt_util.utcnow() + timedelta(hours=2)
+
+    with pytest.raises(ServiceValidationError):
+        await hass.services.async_call(
+            DOMAIN,
+            SERVICE_START_RESERVATION,
+            {
+                ATTR_DEVICE_ID: device.id,
+                ATTR_LICENSE_PLATE: "AB1234",
+                ATTR_START_TIME: start,
+                ATTR_END_TIME: start - timedelta(hours=1),
+            },
+            blocking=True,
+        )
+
+    entry.runtime_data.coordinator.async_renew_session.assert_not_awaited()
+
+
 def _create_entry_with_device(
     hass: HomeAssistant, permit_id: str, options: dict[str, object] | None = None
 ) -> tuple[MockConfigEntry, dr.DeviceEntry, AsyncMock]:
@@ -1290,6 +1344,7 @@ def _create_entry_with_device(
     provider = AsyncMock()
     coordinator = AsyncMock()
     coordinator.async_refresh = AsyncMock()
+    coordinator.async_call_with_relogin = AsyncMock(side_effect=_call_through)
     coordinator.last_update_success = True
     coordinator.config_entry = entry
 

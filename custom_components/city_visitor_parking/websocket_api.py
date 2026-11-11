@@ -82,7 +82,9 @@ async def _ws_list_favorites(
     runtime: CityVisitorParkingRuntimeData = entry.runtime_data
     provider: BaseProvider = runtime.provider
     try:
-        favorites: list[ProviderFavorite] = await provider.list_favorites()
+        favorites: list[
+            ProviderFavorite
+        ] = await runtime.coordinator.async_call_with_relogin(provider.list_favorites)
     except PyCityVisitorParkingError:
         _LOGGER.debug(
             "Favorites websocket fetch failed for %s (permit %s)",
