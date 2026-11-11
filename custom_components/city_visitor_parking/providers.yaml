@@ -185,6 +185,13 @@ hengelo:
   gui_url: "https://parkeren.hengelo.nl/DVSPortal/"
   api_url: "/DVSWebAPI/api"
 
+hoorn:
+  municipality_name: Hoorn
+  provider_id: dvsportal
+  base_url: "https://parkeren.hoorn.nl/"
+  gui_url: "https://parkeren.hoorn.nl/DVSPortal/"
+  api_url: "/DVSPortal/api"
+
 katwijk:
   municipality_name: Katwijk
   provider_id: dvsportal
