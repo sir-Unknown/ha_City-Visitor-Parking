@@ -136,11 +136,11 @@
         },
         "start_time": {
           "name": "Starttijd",
-          "description": "De UTC-starttijd van de reservering."
+          "description": "De starttijd van de reservering. Tijden zonder tijdzone-offset gebruiken de tijdzone van Home Assistant."
         },
         "end_time": {
           "name": "Eindtijd",
-          "description": "De UTC-eindtijd van de reservering."
+          "description": "De eindtijd van de reservering. Tijden zonder tijdzone-offset gebruiken de tijdzone van Home Assistant."
         },
         "license_plate": {
           "name": "Kenteken",
@@ -166,11 +166,11 @@
         },
         "start_time": {
           "name": "Starttijd",
-          "description": "Nieuwe UTC-starttijd van de reservering."
+          "description": "Nieuwe starttijd van de reservering. Tijden zonder tijdzone-offset gebruiken de tijdzone van Home Assistant."
         },
         "end_time": {
           "name": "Eindtijd",
-          "description": "Nieuwe UTC-eindtijd van de reservering."
+          "description": "Nieuwe eindtijd van de reservering. Tijden zonder tijdzone-offset gebruiken de tijdzone van Home Assistant."
         },
         "license_plate": {
           "name": "Kenteken",
