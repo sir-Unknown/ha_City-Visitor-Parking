@@ -5,6 +5,15 @@ amstelveen:
   gui_url: "https://mijn.2park.nl/"
   api_url: "/gsmpark-app-www/json"
 
+# Only available in a pycityvisitorparking pre-release that contains the Amsterdam provider
+# (sir-Unknown/pyCityVisitorParking#130). Never add this entry to main until main pins a
+# stable library that contains it.
+amsterdam:
+  municipality_name: Amsterdam
+  provider_id: amsterdam
+  base_url: "https://api.parkeervergunningen.egisparkingservices.nl"
+  api_url: "api"
+
 apeldoorn:
   municipality_name: Apeldoorn
   provider_id: dvsportal
