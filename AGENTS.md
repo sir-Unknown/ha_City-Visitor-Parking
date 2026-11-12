@@ -78,7 +78,7 @@ Progress is tracked in `custom_components/city_visitor_parking/quality_scale.yam
 
 Release automation and release notes MUST stay aligned with:
 
-- `.github/release-drafter.yml`
+- `.github/release-drafter.yml` (with shared base `release-drafter-base.yml` and the beta/testing variants)
 - `.github/workflows/release-drafter.yml`
 - `.github/workflows/release.yml`
 
