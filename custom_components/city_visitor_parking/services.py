@@ -18,6 +18,7 @@ from homeassistant.util import dt as dt_util
 from pycityvisitorparking import ProviderError
 from pycityvisitorparking.exceptions import (
     AuthError,
+    ErrorCode,
     NetworkError,
     PyCityVisitorParkingError,
     ValidationError,
@@ -88,10 +89,7 @@ def _runtime_log_context(runtime: CityVisitorParkingRuntimeData) -> dict[str, st
 
 
 def _error_detail(err: PyCityVisitorParkingError) -> str | None:
-    """Return a safe, user-facing detail message when available."""
-    user_message = getattr(err, "user_message", None)
-    if isinstance(user_message, str) and user_message:
-        return user_message
+    """Return the technical, PII-free detail of a library error when available."""
     detail = getattr(err, "detail", None)
     if isinstance(detail, str) and detail:
         return detail
@@ -101,13 +99,13 @@ def _error_detail(err: PyCityVisitorParkingError) -> str | None:
 def _error_base_key(err: PyCityVisitorParkingError, prefix: str) -> str:
     """Return the base translation key for a failed provider operation."""
     error_code = getattr(err, "error_code", None)
-    if error_code == "auth_error":
+    if error_code == ErrorCode.AUTH_ERROR:
         suffix = "auth_failed"
-    elif error_code == "network_error":
+    elif error_code == ErrorCode.NETWORK_ERROR:
         suffix = "network_failed"
-    elif error_code == "validation_error":
+    elif error_code == ErrorCode.VALIDATION_ERROR:
         suffix = "validation_failed"
-    elif error_code == "provider_error":
+    elif error_code == ErrorCode.PROVIDER_ERROR:
         suffix = "provider_failed"
     elif isinstance(err, AuthError):
         suffix = "auth_failed"
