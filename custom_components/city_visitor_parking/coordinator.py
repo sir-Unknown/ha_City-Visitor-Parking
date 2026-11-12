@@ -342,7 +342,7 @@ class CityVisitorParkingCoordinator(DataUpdateCoordinator[CoordinatorData]):
         # spaces out the next one.
         self._last_relogin = dt_util.utcnow()
         try:
-            await async_provider_login(self.hass, self._entry, self._provider)
+            await async_provider_login(self._entry, self._provider)
         except AuthError:
             self._relogin_rejections += 1
             if (

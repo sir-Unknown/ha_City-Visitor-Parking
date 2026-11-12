@@ -4,12 +4,29 @@ from __future__ import annotations
 
 import sys
 from dataclasses import dataclass
+from enum import StrEnum
 from types import ModuleType
 from typing import Any, cast
 
 import pytest
 
 pytest_plugins = "pytest_homeassistant_custom_component"  # pylint: disable=invalid-name
+
+
+class ErrorCode(StrEnum):
+    """Stub of the library's stable error codes."""
+
+    AUTH_ERROR = "auth_error"
+    NETWORK_ERROR = "network_error"
+    TIMEOUT = "timeout"
+    VALIDATION_ERROR = "validation_error"
+    CONFIG_ERROR = "config_error"
+    PROVIDER_ERROR = "provider_error"
+    RATE_LIMIT = "rate_limit"
+    SERVICE_UNAVAILABLE = "service_unavailable"
+    NOT_FOUND = "not_found"
+    NOT_SUPPORTED = "not_supported"
+    PROVIDER_REJECTED = "provider_rejected"
 
 
 class PyCityVisitorParkingError(Exception):
@@ -34,6 +51,10 @@ class AuthError(PyCityVisitorParkingError):
 
 class NetworkError(PyCityVisitorParkingError):
     """Stub network error."""
+
+
+class TimeoutError(NetworkError):
+    """Stub timeout error."""
 
 
 class ProviderError(PyCityVisitorParkingError):
@@ -132,7 +153,9 @@ module.ProviderInfo = ProviderInfo
 module.Client = Client
 
 exceptions_module = cast("Any", ModuleType("pycityvisitorparking.exceptions"))
+exceptions_module.ErrorCode = ErrorCode
 exceptions_module.PyCityVisitorParkingError = PyCityVisitorParkingError
+exceptions_module.TimeoutError = TimeoutError
 exceptions_module.AuthError = AuthError
 exceptions_module.NetworkError = NetworkError
 exceptions_module.ProviderError = ProviderError

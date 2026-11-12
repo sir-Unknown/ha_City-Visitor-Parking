@@ -7,11 +7,7 @@ from typing import TYPE_CHECKING, Final, Protocol, cast
 from homeassistant.components import diagnostics as diagnostics_util
 from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
 
-from .const import (
-    CONF_AUTO_END,
-    CONF_OPERATING_TIME_OVERRIDES,
-    CONF_RESOLVED_LOGIN_PARAMS,
-)
+from .const import CONF_AUTO_END, CONF_OPERATING_TIME_OVERRIDES
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Mapping
@@ -20,7 +16,7 @@ if TYPE_CHECKING:
 
     from .runtime_data import CityVisitorParkingConfigEntry
 
-TO_REDACT: Final[list[str]] = [CONF_PASSWORD, CONF_USERNAME, CONF_RESOLVED_LOGIN_PARAMS]
+TO_REDACT: Final[list[str]] = [CONF_PASSWORD, CONF_USERNAME]
 
 
 class _DiagnosticsModule(Protocol):

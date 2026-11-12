@@ -78,20 +78,24 @@ Progress is tracked in `custom_components/city_visitor_parking/quality_scale.yam
 
 Release automation and release notes MUST stay aligned with:
 
-- `.github/release-drafter.yml`
+- `.github/release-drafter.yml` (with shared base `release-drafter-base.yml` and the beta variant)
 - `.github/workflows/release-drafter.yml`
 - `.github/workflows/release.yml`
 
-### Pre-release channel (`beta` branch)
+### Pre-release channel (betas)
 
-Stable releases (`vX.Y.Z`) are built from `main` and pin the latest stable `pycityvisitorparking` release. Pre-releases that need an unreleased library version are built from the long-lived `beta` branch instead:
+Stable releases (`vX.Y.Z`) are built from `main` and pin the latest stable `pycityvisitorparking` release. A beta (`vX.Y.Z-beta.N`) is a test build: nothing in it reaches `main` before it has been tested and approved.
 
-- `beta` contains everything on `main` plus the changes that only make sense with a library pre-release: the library pre-release pin (for example `pycityvisitorparking==0.6.0b1`) and `providers.yaml` entries for providers that exist only in that pre-release.
-- Fixes and features go to `main` first and reach `beta` by merging `main` into `beta`. Never rebase or force-push `beta`.
+- `beta` MUST always contain everything on `main`: merge `main` into `beta` whenever `main` changes, and in any case before drafting a beta. Never rebase or force-push `beta`. `beta` is `main` plus the work under test.
+- Large features that are still in development go to `beta` first (PR into `beta`), are tested in a beta release, and reach `main` in a normal PR only after the beta was tested and approved. Never merge or push untested beta work to `main`.
+- `beta` also carries the changes that only make sense with a library pre-release: the library pre-release pin (for example `pycityvisitorparking==0.6.0b1`) and `providers.yaml` entries for providers that exist only in that pre-release.
+- Branch a feature from `main`. Branch from `beta` only when the feature needs the library pre-release. A feature branched from `beta` MUST reach `main` with only its own commits (`git rebase --onto main` or cherry-pick), never with the beta-only changes below.
+- When testers need exactly one change, a beta MAY instead be built directly from a feature branch (manual flow below). Such a branch MUST also contain everything on `main`.
 - Beta-only changes (the pre-release pin and the entries above) MUST NOT be merged back to `main`. Once the library publishes the provider in a stable release, move the entry to `main` in a normal PR together with the stable pin, then merge `main` into `beta` and drop the pre-release pin.
-- Draft a beta with the `Release Drafter` workflow run on ref `beta` with `prerelease=beta` and `version` set to the next stable version, for example `0.1.39`. This creates the tag `vX.Y.Z-beta.N`, targeting `beta`.
-- The beta draft body MUST fill in `PyPI` with the exact library version pinned on `beta`; `release.yml` rejects a beta without it.
-- The release title and the top of the body MUST state plainly what the pre-release is for (for example "test Rotterdam provider") and what is known to be untested, so testers cannot mistake it for a general update.
+- Draft a beta from `beta` with the `Release Drafter` workflow run on ref `beta` with `prerelease=beta` and `version` set to the next stable version, for example `0.1.39`. This creates the tag `vX.Y.Z-beta.N`, targeting `beta`.
+- Release Drafter only drafts betas on ref `beta`. For a beta from a feature branch: push an annotated tag `vX.Y.Z-beta.N` (next free number) on the branch head, wait for the `Validate` run on that tag to succeed, then create the draft pre-release by hand from the existing tag with `--target` set to the branch, reusing the body layout of the previous beta.
+- The beta draft body MUST fill in `PyPI` with the exact library version pinned in the beta; `release.yml` rejects a beta without it.
+- The release title and the top of the body MUST state plainly what the pre-release is for (for example "test Rotterdam provider"), which branch it is built from when that is not `beta`, and what is known to be untested, so testers cannot mistake it for a general update.
 - Create releases as drafts and publish only when the maintainer asks for it.
 
 ## 6) CI requirements
@@ -114,7 +118,7 @@ The repository currently relies on GitHub Actions workflows for validation, labe
 - Python development and CI use `uv` with dependency groups from `pyproject.toml`.
 - Frontend development and CI use the bundle under `custom_components/city_visitor_parking/frontend/`.
 - Treat PR labeling, Release Drafter, dependency review, and release packaging workflows as part of the maintained repository surface.
-- The `Validate` workflow runs on pushes to `main`, `beta`, and `testing`, and on pull requests to `main` and `beta`. `release.yml` requires a successful `Validate` run on the release commit, so keep `beta` green before publishing a beta.
+- The `Validate` workflow runs on pushes to `main` and `beta`, on pushed tags, and on pull requests to `main` and `beta`. `release.yml` requires a successful `Validate` run on the release commit, so keep `beta` green before publishing a beta from it, and for a beta built from a feature branch wait for the `Validate` run on the beta tag.
 
 ## 7) Hard rules
 
@@ -157,7 +161,7 @@ The repository currently relies on GitHub Actions workflows for validation, labe
 - Do not add agent-related prefixes or suffixes such as `[codex]`, `[agent]`, or similar markers in branch names, commit titles, or pull request titles.
 - Keep feature branches current with `dev` as needed, but do not rewrite shared history once review is in progress unless explicitly requested.
 - After a feature branch is merged, delete it on GitHub and clean up the local branch as soon as it is no longer needed unless there is an explicit reason to keep it temporarily.
-- `beta` is a long-lived release branch. Do not do feature work on it directly; see "Pre-release channel" in section 5.
+- `beta` is a long-lived release branch that always contains everything on `main`. Large features in development reach it through a PR from a feature branch, not by direct commits; see "Pre-release channel" in section 5.
 
 ### Python workflow
 
@@ -191,7 +195,7 @@ If frontend output or frontend translation assets are expected by runtime code, 
   - `pyproject.toml`
   - `custom_components/city_visitor_parking/manifest.json`
 - On `main`, the pin MUST be the latest stable PyPI release. The `Release policy` job enforces this.
-- On `beta`, the pin MAY be a library pre-release (`==X.Y.ZbN`). `manifest.json` and `pyproject.toml` MUST still match, `uv.lock` MUST be refreshed, and the `Release policy` job skips only the "latest on PyPI" comparison.
+- On `beta` and on beta feature branches built from it, the pin MAY be a library pre-release (`==X.Y.ZbN`). `manifest.json` and `pyproject.toml` MUST still match, and `uv.lock` MUST be refreshed. The `Release policy` job skips the "latest on PyPI" comparison only on `beta` and on beta tags; on a beta feature branch that comparison fails for branch pushes, so the `Validate` run on the beta tag is the one that counts.
 
 ### CI-sensitive dependency changes
 
@@ -226,7 +230,7 @@ If frontend output or frontend translation assets are expected by runtime code, 
 ### Providers that exist only in a library pre-release
 
 - The municipality dropdown does not check whether the installed library knows a provider. An entry for a provider missing from the pinned library would be offered to users and fail at setup.
-- Therefore add such entries on `beta` only, together with the library pre-release pin, and never on `main` until `main` pins a stable library that contains the provider.
+- Therefore add such entries on `beta` (or a beta feature branch built from it) only, together with the library pre-release pin, and never on `main` until `main` pins a stable library that contains the provider.
 
 ## 11) Config entry lifecycle
 
@@ -440,6 +444,7 @@ If a backend change affects frontend payloads, websocket responses, config entry
 Maintain these docs as part of the integration surface:
 
 - `README.md`
+- `README.nl.md`
 - `MIGRATION.md`
 - wiki pages when they are part of the maintained user or developer workflow
 - release-drafter and release-policy documentation when behavior changes
@@ -453,5 +458,12 @@ README should cover:
 - frontend expectations if relevant
 - troubleshooting
 - privacy notes
+
+### README and the Marketplace
+
+- The Home Assistant Marketplace shows `README.<language>.md` matching the user's language and falls back to `README.md`. Keep `README.nl.md` aligned with `README.md` in structure and content; English stays canonical.
+- Put GitHub-only content (install badges, language hints, install-only links) between `<!-- ha-marketplace:exclude-start -->` and `<!-- ha-marketplace:exclude-end -->` in every README; the Marketplace already has an install button.
+- Use absolute URLs for links that must work in the Marketplace; relative links to other repository files do not resolve there. Relative links are only acceptable inside excluded sections.
+- `categories` in `manifest.json` is optional for custom integrations but the Marketplace catalog uses it. Keep it set.
 
 MIGRATION.md should describe concrete steps to move the integration into Home Assistant Core.

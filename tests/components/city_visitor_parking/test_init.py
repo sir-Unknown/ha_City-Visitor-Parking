@@ -457,9 +457,9 @@ def test_normalize_operating_time_overrides_filters_invalid() -> None:
     }
 
 
-def _legacy_entry(version: int = 1, **overrides: str) -> MockConfigEntry:
+def _legacy_entry(version: int = 1, **overrides: object) -> MockConfigEntry:
     """Create a 1.1 entry as written before the catalog path correction."""
-    data = {
+    data: dict[str, object] = {
         CONF_PROVIDER_ID: "dvsportal",
         CONF_MUNICIPALITY: "Venlo",
         "base_url": "https://parkeren.venlo.nl",
@@ -487,6 +487,20 @@ async def test_migrate_entry_replaces_retired_api_url(hass: HomeAssistant) -> No
     assert await init_module.async_migrate_entry(hass, entry)
 
     assert entry.data["api_url"] == "/DVSPortal/api"
+    assert entry.minor_version == CityVisitorParkingConfigFlow.MINOR_VERSION
+
+
+async def test_migrate_entry_drops_resolved_login_params(
+    hass: HomeAssistant,
+) -> None:
+    """Login state the library now keeps internal is removed from the entry."""
+    entry = _legacy_entry(resolved_login_params={"location": "stale"})
+    entry.add_to_hass(hass)
+
+    assert await init_module.async_migrate_entry(hass, entry)
+
+    assert "resolved_login_params" not in entry.data
+    assert entry.data[CONF_PERMIT_ID] == "permit"
     assert entry.minor_version == CityVisitorParkingConfigFlow.MINOR_VERSION
 
 
@@ -544,7 +558,6 @@ async def _setup_entry(
     entry.mock_state(hass, config_entries.ConfigEntryState.SETUP_IN_PROGRESS)
 
     provider = AsyncMock()
-    provider.resolved_login_params = {}
     provider.fetch_all.return_value = ({"id": "permit", "zone_validity": []}, [], [])
 
     client = AsyncMock()
@@ -575,7 +588,6 @@ async def test_each_entry_gets_its_own_session_closed_on_unload(
     ) -> AsyncMock:
         sessions.append(session)
         provider = AsyncMock()
-        provider.resolved_login_params = {}
         provider.fetch_all.return_value = (
             {"id": "permit", "zone_validity": []},
             [],

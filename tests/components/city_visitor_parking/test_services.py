@@ -16,7 +16,14 @@ from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from homeassistant.helpers import device_registry as dr
 from homeassistant.util import dt as dt_util
 from pycityvisitorparking import AuthError, NetworkError, ProviderError, ValidationError
-from pycityvisitorparking.exceptions import PyCityVisitorParkingError
+from pycityvisitorparking.exceptions import (
+    ErrorCode,
+    NotFoundError,
+    PyCityVisitorParkingError,
+    RateLimitError,
+    ServiceUnavailableError,
+)
+from pycityvisitorparking.exceptions import TimeoutError as LibraryTimeoutError
 from pytest_homeassistant_custom_component.common import (  # type: ignore[import-untyped]
     MockConfigEntry,
 )
@@ -833,11 +840,6 @@ async def test_fallback_update_favorite_error(
 def test_error_helpers() -> None:
     """Error helper functions should map and format details."""
     err = PyCityVisitorParkingError()
-    err.user_message = "User message"
-    err.detail = "Detail"
-    assert _error_detail(err) == "User message"
-
-    err = PyCityVisitorParkingError()
     err.detail = "Detail"
     assert _error_detail(err) == "Detail"
 
@@ -847,16 +849,32 @@ def test_error_helpers() -> None:
 @pytest.mark.parametrize(
     ("error_code", "expected"),
     [
-        ("auth_error", "reservation_auth_failed"),
-        ("network_error", "reservation_network_failed"),
-        ("validation_error", "reservation_validation_failed"),
-        ("provider_error", "reservation_provider_failed"),
+        (ErrorCode.AUTH_ERROR, "reservation_auth_failed"),
+        (ErrorCode.NETWORK_ERROR, "reservation_network_failed"),
+        (ErrorCode.VALIDATION_ERROR, "reservation_validation_failed"),
+        (ErrorCode.PROVIDER_ERROR, "reservation_provider_failed"),
     ],
 )
-def test_error_base_key_with_error_code(error_code: str, expected: str) -> None:
+def test_error_base_key_with_error_code(error_code: ErrorCode, expected: str) -> None:
     """Error codes should map to reservation keys."""
     err = PyCityVisitorParkingError()
     err.error_code = error_code
+    assert _error_base_key(err, "reservation") == expected
+
+
+@pytest.mark.parametrize(
+    ("err", "expected"),
+    [
+        (LibraryTimeoutError(), "reservation_network_failed"),
+        (RateLimitError(), "reservation_provider_failed"),
+        (ServiceUnavailableError(), "reservation_provider_failed"),
+        (NotFoundError(), "reservation_provider_failed"),
+    ],
+)
+def test_error_base_key_with_specific_error_codes(
+    err: PyCityVisitorParkingError, expected: str
+) -> None:
+    """Specific library errors fall back to their base exception key."""
     assert _error_base_key(err, "reservation") == expected
 
 
@@ -896,7 +914,6 @@ def test_raise_error_helpers() -> None:
         _raise_reservation_error(err)
 
     err = PyCityVisitorParkingError()
-    err.user_message = "Message"
     with pytest.raises(HomeAssistantError):
         _raise_favorite_error(err)
 

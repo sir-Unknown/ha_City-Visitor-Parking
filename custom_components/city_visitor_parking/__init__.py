@@ -67,6 +67,11 @@ _LOGGER = logging.getLogger(__name__)
 _LEGACY_API_URL: Final = "/DVSWebAPI/api"
 # Minor config entry version that introduced the api_url migration.
 _API_URL_MIGRATION_MINOR_VERSION: Final = 2
+# Entry key that persisted provider-resolved login state before the library
+# started keeping that state internal.
+_LEGACY_RESOLVED_LOGIN_PARAMS_KEY: Final = "resolved_login_params"
+# Minor config entry version that dropped the persisted login state.
+_RESOLVED_PARAMS_MIGRATION_MINOR_VERSION: Final = 3
 
 
 class _ResourceStorage(Protocol):
@@ -144,6 +149,19 @@ async def async_migrate_entry(
             data=_migrate_legacy_api_url(entry.data, providers.values()),
             minor_version=_API_URL_MIGRATION_MINOR_VERSION,
         )
+
+    if entry.minor_version < _RESOLVED_PARAMS_MIGRATION_MINOR_VERSION:
+        # 1.2 -> 1.3: the library keeps provider-resolved login state internal,
+        # so the copy persisted on the entry is dead data.
+        hass.config_entries.async_update_entry(
+            entry,
+            data={
+                key: value
+                for key, value in entry.data.items()
+                if key != _LEGACY_RESOLVED_LOGIN_PARAMS_KEY
+            },
+            minor_version=_RESOLVED_PARAMS_MIGRATION_MINOR_VERSION,
+        )
     return True
 
 
@@ -215,7 +233,7 @@ async def async_setup_entry(
     )
     _install_zone_validity_logging(provider)
     try:
-        await async_provider_login(hass, entry, provider)
+        await async_provider_login(entry, provider)
     except AuthError as err:
         raise ConfigEntryAuthFailed from err
     except (NetworkError, ServiceUnavailableError) as err:
