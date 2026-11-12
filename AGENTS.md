@@ -444,6 +444,7 @@ If a backend change affects frontend payloads, websocket responses, config entry
 Maintain these docs as part of the integration surface:
 
 - `README.md`
+- `README.nl.md`
 - `MIGRATION.md`
 - wiki pages when they are part of the maintained user or developer workflow
 - release-drafter and release-policy documentation when behavior changes
@@ -457,5 +458,12 @@ README should cover:
 - frontend expectations if relevant
 - troubleshooting
 - privacy notes
+
+### README and the Marketplace
+
+- The Home Assistant Marketplace shows `README.<language>.md` matching the user's language and falls back to `README.md`. Keep `README.nl.md` aligned with `README.md` in structure and content; English stays canonical.
+- Put GitHub-only content (install badges, language hints, install-only links) between `<!-- ha-marketplace:exclude-start -->` and `<!-- ha-marketplace:exclude-end -->` in every README; the Marketplace already has an install button.
+- Use absolute URLs for links that must work in the Marketplace; relative links to other repository files do not resolve there. Relative links are only acceptable inside excluded sections.
+- `categories` in `manifest.json` is optional for custom integrations but the Marketplace catalog uses it. Keep it set.
 
 MIGRATION.md should describe concrete steps to move the integration into Home Assistant Core.
