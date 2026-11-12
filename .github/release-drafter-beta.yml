@@ -1,71 +1,19 @@
-name-template: "v$RESOLVED_VERSION"
-tag-template: "v$RESOLVED_VERSION"
+_extends: release-drafter-base.yml
 commitish: "beta"
-change-template: "- $TITLE @$AUTHOR (#$NUMBER)"
-no-changes-template: "- No changes in `custom_components/**` since the last release."
-exclude-labels:
-  - "skip-changelog"
-  - "duplicate"
-  - "invalid"
-exclude-contributors:
-  - "sir-Unknown"
-  - "dependabot[bot]"
-  - "renovate[bot]"
-  - "github-actions[bot]"
-  - "codex[bot]"
-  - "claude[bot]"
-sort-direction: ascending
-include-paths:
-  - "custom_components/"
-categories:
-  - title: "🚨 Breaking changes"
-    labels:
-      - "breaking-change"
-  - title: "✨ New features"
-    labels:
-      - "new-feature"
-  - title: "🐛 Bug fixes"
-    labels:
-      - "bugfix"
-  - title: "🚀 Enhancements"
-    labels:
-      - "enhancement"
-      - "refactor"
-      - "performance"
-  - title: "🧰 Maintenance"
-    labels:
-      - "maintenance"
-      - "ci"
-  - title: "⬆️ Dependency updates"
-    labels:
-      - "dependencies"
-  - title: "🧪 Tests"
-    labels:
-      - "tests"
-  - title: "📚 Documentation"
-    labels:
-      - "documentation"
-template: |
+header: |+
   > [!WARNING]
   > **Beta pre-release.** May contain incomplete features or regressions. Not for production use. Always verify in the official parking portal that a session was started, updated, or stopped correctly.
 
-  $CHANGES
-
-  ## Contributors
-
-  $CONTRIBUTORS
-
-  ## pyCityVisitorParking
-
+template: |
   **PyPI:** `FILL_IN_PYPI_VERSION_OR_LEAVE_EMPTY`
   **Commit:** `FILL_IN_COMMIT_SHA_OR_LEAVE_EMPTY`
 
-  Built with [pyCityVisitorParking](https://github.com/sir-Unknown/pyCityVisitorParking) version: PYCVP_VERSION_PLACEHOLDER
+  $CHANGES
 
-  ## Install and rollback
+  #### Install and rollback
 
   - **Marketplace (Home Assistant 2026.11+):** **Settings** → **Marketplace** → **City Visitor Parking** → **⋮** → **Install another version**.
   - **HACS (Home Assistant 2026.10):** **HACS** → **City Visitor Parking** → **⋮** → **Redownload**.
   - **Rollback:** restore your backup, or install the latest stable version the same way.
 
-  [Documentation](https://github.com/sir-Unknown/ha_City-Visitor-Parking/wiki) · [Report a bug](https://github.com/sir-Unknown/ha_City-Visitor-Parking/issues/new) (attach the diagnostics file) · [Full changelog](https://github.com/sir-Unknown/ha_City-Visitor-Parking/compare/$PREVIOUS_TAG...v$RESOLVED_VERSION)
+  When reporting a bug, attach the diagnostics file.

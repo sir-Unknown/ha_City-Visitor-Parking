@@ -21,6 +21,7 @@ on:
     paths:
       - custom_components/**
       - .github/release-drafter.yml
+      - .github/release-drafter-base.yml
       - .github/release-drafter-beta.yml
       - .github/release-drafter-testing.yml
       - .github/workflows/release-drafter.yml

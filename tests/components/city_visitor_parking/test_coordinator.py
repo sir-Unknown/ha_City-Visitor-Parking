@@ -22,7 +22,6 @@ from custom_components.city_visitor_parking.const import (
     CONF_MUNICIPALITY,
     CONF_OPERATING_TIME_OVERRIDES,
     CONF_PROVIDER_ID,
-    CONF_RESOLVED_LOGIN_PARAMS,
     DEFAULT_UPDATE_INTERVAL,
     DOMAIN,
     IDLE_UPDATE_INTERVAL,
@@ -794,7 +793,6 @@ def _create_entry(auto_end: bool, *, credentials: bool = False) -> MockConfigEnt
 def _recovering_provider(error: Exception) -> AsyncMock:
     """Return a provider that fails once and succeeds after a re-login."""
     provider = AsyncMock()
-    provider.resolved_login_params = {}
     provider.fetch_all.side_effect = [error, ({"zone_validity": []}, [], [])]
     return provider
 
@@ -848,7 +846,6 @@ async def test_rejected_relogin_after_provider_error_escalates_once_repeated(
     entry.add_to_hass(hass)
 
     provider = AsyncMock()
-    provider.resolved_login_params = {}
     provider.fetch_all.side_effect = coord_module.ProviderError("status 500")
     provider.login.side_effect = coord_module.AuthError()
 
@@ -879,7 +876,6 @@ async def test_rejected_relogin_after_auth_error_triggers_reauth(
     entry.add_to_hass(hass)
 
     provider = AsyncMock()
-    provider.resolved_login_params = {}
     provider.fetch_all.side_effect = coord_module.AuthError()
     provider.login.side_effect = coord_module.AuthError()
 
@@ -904,7 +900,6 @@ async def test_successful_relogin_resets_rejection_count(
     entry.add_to_hass(hass)
 
     provider = AsyncMock()
-    provider.resolved_login_params = {}
     provider.fetch_all.side_effect = coord_module.ProviderError("status 500")
     provider.login.side_effect = [
         coord_module.AuthError(),
@@ -938,7 +933,6 @@ async def test_recovery_allows_immediate_relogin_on_next_expiry(
 
     ok: tuple[dict[str, Any], list[Any], list[Any]] = ({"zone_validity": []}, [], [])
     provider = AsyncMock()
-    provider.resolved_login_params = {}
     provider.fetch_all.side_effect = [
         coord_module.ProviderError("status 500"),
         ok,
@@ -962,13 +956,16 @@ async def test_recovery_allows_immediate_relogin_on_next_expiry(
     assert coordinator.last_update_success is True
 
 
-async def test_relogin_persists_resolved_login_params(hass: HomeAssistant) -> None:
-    """Params resolved during a runtime re-login are stored on the entry."""
+async def test_relogin_passes_only_stored_credentials(hass: HomeAssistant) -> None:
+    """A runtime re-login must not replay provider-resolved state."""
     entry = _create_entry(auto_end=False, credentials=True)
     entry.add_to_hass(hass)
+    # Entry written before the library kept resolved login state internal.
+    hass.config_entries.async_update_entry(
+        entry, data={**entry.data, "resolved_login_params": {"location": "stale"}}
+    )
 
     provider = _recovering_provider(coord_module.ProviderError("status 500"))
-    provider.resolved_login_params = {"location": "resolved"}
 
     coordinator = CityVisitorParkingCoordinator(
         hass,
@@ -980,37 +977,11 @@ async def test_relogin_persists_resolved_login_params(hass: HomeAssistant) -> No
 
     await coordinator.async_refresh()
 
-    assert entry.data[CONF_RESOLVED_LOGIN_PARAMS] == {"location": "resolved"}
-
-
-async def test_rejected_relogin_clears_resolved_login_params(
-    hass: HomeAssistant,
-) -> None:
-    """A rejected login drops cached params so a stale value cannot lock out."""
-    entry = _create_entry(auto_end=False, credentials=True)
-    entry.add_to_hass(hass)
-    hass.config_entries.async_update_entry(
-        entry,
-        data={**entry.data, CONF_RESOLVED_LOGIN_PARAMS: {"location": "stale"}},
-    )
-
-    provider = AsyncMock()
-    provider.resolved_login_params = {}
-    provider.fetch_all.side_effect = coord_module.ProviderError("status 500")
-    provider.login.side_effect = coord_module.AuthError()
-
-    coordinator = CityVisitorParkingCoordinator(
-        hass,
-        provider=provider,
-        config_entry=entry,
-        permit_id="permit",
-        auto_end_state=AutoEndState(),
-    )
-
-    await coordinator.async_refresh()
-
-    assert provider.login.await_args.kwargs["location"] == "stale"
-    assert entry.data[CONF_RESOLVED_LOGIN_PARAMS] == {}
+    assert set(provider.login.await_args.kwargs) == {
+        "username",
+        "password",
+        "permit_id",
+    }
 
 
 async def test_relogin_is_rate_limited(hass: HomeAssistant) -> None:
@@ -1019,7 +990,6 @@ async def test_relogin_is_rate_limited(hass: HomeAssistant) -> None:
     entry.add_to_hass(hass)
 
     provider = AsyncMock()
-    provider.resolved_login_params = {}
     provider.fetch_all.side_effect = coord_module.ProviderError("status 500")
 
     coordinator = CityVisitorParkingCoordinator(
@@ -1058,7 +1028,6 @@ async def test_throttling_errors_do_not_trigger_relogin(
     entry.add_to_hass(hass)
 
     provider = AsyncMock()
-    provider.resolved_login_params = {}
     provider.fetch_all.side_effect = error
 
     coordinator = CityVisitorParkingCoordinator(
@@ -1081,7 +1050,6 @@ async def test_network_error_does_not_trigger_relogin(hass: HomeAssistant) -> No
     entry.add_to_hass(hass)
 
     provider = AsyncMock()
-    provider.resolved_login_params = {}
     provider.fetch_all.side_effect = coord_module.NetworkError()
 
     coordinator = CityVisitorParkingCoordinator(
@@ -1106,7 +1074,6 @@ async def test_relogin_skipped_without_stored_credentials(
     entry.add_to_hass(hass)
 
     provider = AsyncMock()
-    provider.resolved_login_params = {}
     provider.fetch_all.side_effect = coord_module.ProviderError("status 500")
 
     coordinator = CityVisitorParkingCoordinator(
@@ -1141,7 +1108,6 @@ def _coordinator_with_provider(
 async def test_read_call_recovers_after_relogin(hass: HomeAssistant) -> None:
     """A repeatable read outside the poll also recovers from a dead session."""
     provider = AsyncMock()
-    provider.resolved_login_params = {}
     provider.list_favorites.side_effect = [coord_module.ProviderError("500"), ["fav"]]
     coordinator = _coordinator_with_provider(hass, provider)
 
@@ -1154,7 +1120,6 @@ async def test_read_call_recovers_after_relogin(hass: HomeAssistant) -> None:
 async def test_not_found_does_not_trigger_relogin(hass: HomeAssistant) -> None:
     """A missing item is unrelated to the session."""
     provider = AsyncMock()
-    provider.resolved_login_params = {}
     provider.list_favorites.side_effect = coord_module.NotFoundError("gone")
     coordinator = _coordinator_with_provider(hass, provider)
 
@@ -1167,7 +1132,6 @@ async def test_not_found_does_not_trigger_relogin(hass: HomeAssistant) -> None:
 async def test_renew_session_logs_in_once_per_cooldown(hass: HomeAssistant) -> None:
     """Failed writes renew the session, but not on every failure."""
     provider = AsyncMock()
-    provider.resolved_login_params = {}
     coordinator = _coordinator_with_provider(hass, provider)
     error = coord_module.ProviderError("500")
 
@@ -1185,7 +1149,6 @@ async def test_renew_session_logs_in_once_per_cooldown(hass: HomeAssistant) -> N
 async def test_renew_session_never_raises(hass: HomeAssistant) -> None:
     """A rejected login must not replace the error the caller is reporting."""
     provider = AsyncMock()
-    provider.resolved_login_params = {}
     provider.login.side_effect = coord_module.AuthError()
     coordinator = _coordinator_with_provider(hass, provider)
 
@@ -1208,7 +1171,6 @@ async def test_renew_session_ignores_unrelated_failures(
 ) -> None:
     """Only failures a new session could fix cause a login."""
     provider = AsyncMock()
-    provider.resolved_login_params = {}
     coordinator = _coordinator_with_provider(hass, provider)
 
     await coordinator.async_renew_session(cast("Any", error))
