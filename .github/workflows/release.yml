@@ -20,7 +20,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Release tag to process (e.g. v1.0.0-beta.1)"
+        description: "Release tag to process (e.g. v1.0.0-beta.1 or v1.0.0-rotterdam-provider.1)"
         required: true
         type: string
 
@@ -222,9 +222,11 @@ jobs:
           RELEASE_BODY: ${{ steps.release_body.outputs.body }}
           RELEASE_TAG: ${{ needs.validate.outputs.tag }}
         run: |
+          # Pre-release tags are vX.Y.Z-<name>.N: "beta" for the beta branch, or a
+          # feature branch slug for a manual feature-branch build.
           IS_BETA=false
 
-          if echo "$RELEASE_TAG" | grep -qE '^v[0-9]+\.[0-9]+\.[0-9]+-beta\.[0-9]+(\+.*)?$'; then
+          if echo "$RELEASE_TAG" | grep -qE '^v[0-9]+\.[0-9]+\.[0-9]+-[a-z][a-z0-9-]*\.[0-9]+(\+.*)?$'; then
             IS_BETA=true
           fi
 
