@@ -7,6 +7,3 @@ frontend:
   - changed-files:
       - any-glob-to-any-file:
           - "custom_components/city_visitor_parking/frontend/**"
-
-testing:
-  - head-branch: ["testing"]

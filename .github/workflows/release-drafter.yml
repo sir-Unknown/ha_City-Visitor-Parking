@@ -1,5 +1,5 @@
 # Maintains a draft GitHub Release that is kept up-to-date with every push to
-# main or testing that touches custom_components/. Pull request labeling is
+# main that touches custom_components/. Pull request labeling is
 # handled separately by dedicated PR-safe workflows; this workflow only updates
 # release drafts. The draft is populated using the rules in
 # .github/release-drafter.yml (categories, version bump strategy, etc.). When a
@@ -17,13 +17,11 @@ on:
   push:
     branches:
       - main
-      - testing
     paths:
       - custom_components/**
       - .github/release-drafter.yml
       - .github/release-drafter-base.yml
       - .github/release-drafter-beta.yml
-      - .github/release-drafter-testing.yml
       - .github/workflows/release-drafter.yml
   workflow_dispatch:
     inputs:
@@ -35,7 +33,6 @@ on:
         options:
           - stable
           - beta
-          - testing
       version:
         description: "Version override (e.g. 0.1.35). Leave empty to auto-resolve from manifest.json."
         required: false
@@ -122,47 +119,5 @@ jobs:
           config-name: release-drafter-beta.yml
           prerelease: true
           version: ${{ steps.next_beta_version.outputs.version }}
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-
-      - name: Get next testing version
-        if: github.ref_name == 'testing'
-        id: next_version
-        env:
-          GH_TOKEN: ${{ github.token }}
-          INPUT_VERSION: ${{ inputs.version }}
-          INPUT_SUFFIX: ${{ inputs.suffix }}
-        run: |
-          if [ -n "${INPUT_VERSION}" ]; then
-            BASE="${INPUT_VERSION}"
-          else
-            MANIFEST_VERSION=$(jq -r '.version' custom_components/city_visitor_parking/manifest.json | sed 's/-.*//')
-            if [ "${MANIFEST_VERSION}" = "0.0.0" ]; then
-              BASE=$(gh release list --limit 1000 --json tagName,isPrerelease,isDraft \
-                --jq '[.[] | select(.isPrerelease == false and .isDraft == false) | .tagName] | first' \
-                | sed 's/^v//')
-            else
-              BASE="${MANIFEST_VERSION}"
-            fi
-          fi
-          LAST=$(gh release list --limit 1000 --json tagName --jq '.[].tagName' \
-            | grep -E "^v${BASE}-testing\.[0-9]+(\+.*)?$" \
-            | grep -oE "testing\.[0-9]+" \
-            | grep -oE "[0-9]+$" \
-            | sort -n | tail -1)
-          NEXT=$((${LAST:-0} + 1))
-          if [ -n "${INPUT_SUFFIX}" ]; then
-            echo "version=${BASE}-testing.${NEXT}+${INPUT_SUFFIX}" >> "$GITHUB_OUTPUT"
-          else
-            echo "version=${BASE}-testing.${NEXT}" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Run Release Drafter (pre-release)
-        if: github.ref_name == 'testing'
-        uses: release-drafter/release-drafter@c2e2804cc59f45f57076a99af580d0fedb697927 # v7.3.0
-        with:
-          config-name: release-drafter-testing.yml
-          prerelease: true
-          version: ${{ steps.next_version.outputs.version }}
         env:
           GITHUB_TOKEN: ${{ github.token }}

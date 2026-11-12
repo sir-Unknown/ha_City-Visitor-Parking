@@ -1,7 +1,6 @@
-# Shared Release Drafter settings. The stable (release-drafter.yml), beta
-# (release-drafter-beta.yml) and testing (release-drafter-testing.yml) configs
-# inherit this file with `_extends` and only set their commitish plus the parts
-# of the release body that differ. Body = header + template + footer.
+# Shared Release Drafter settings. The stable (release-drafter.yml) and beta
+# (release-drafter-beta.yml) configs inherit this file with `_extends` and only
+# set their commitish plus the parts of the release body that differ. Body = header + template + footer.
 name-template: "v$RESOLVED_VERSION"
 tag-template: "v$RESOLVED_VERSION"
 change-template: "- $TITLE @$AUTHOR (#$NUMBER)"
