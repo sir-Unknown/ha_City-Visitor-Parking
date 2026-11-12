@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, time, timedelta
 from types import SimpleNamespace
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Any, cast
 from unittest.mock import AsyncMock, MagicMock
 
 from freezegun import freeze_time
@@ -27,6 +27,7 @@ from custom_components.city_visitor_parking.models import (
     Favorite,
     Reservation,
     TimeRange,
+    Zone,
     ZoneAvailability,
 )
 from custom_components.city_visitor_parking.sensor import (
@@ -39,16 +40,24 @@ from custom_components.city_visitor_parking.sensor import (
     ProviderChargeableEndSensor,
     ProviderChargeableStartSensor,
     RemainingTimeSensor,
+    ZoneAvailabilitySensor,
+    ZoneNextChargeableEndSensor,
+    ZoneNextChargeableStartSensor,
+    ZoneProviderChargeableEndSensor,
+    ZoneProviderChargeableStartSensor,
     _as_utc_iso,
     _next_end_time,
     _remaining_balance,
     _timerange_to_dict,
+    async_setup_entry,
 )
 from custom_components.city_visitor_parking.time_windows import current_or_next_window
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping
+    from collections.abc import Callable, Iterable, Mapping
 
+    from homeassistant.components.sensor import SensorEntity
+    from homeassistant.core import HomeAssistant
     from homeassistant.helpers import entity_registry as er
     from pytest import MonkeyPatch
 
@@ -58,6 +67,14 @@ EXPECTED_COUNT_BALANCE = 3
 EXPECTED_DURATION_BALANCE = 120
 EXPECTED_MONETARY_BALANCE = 12.5
 EXPECTED_EURO_BALANCE = 237.5
+PERMIT_SENSOR_COUNT = 9
+ZONE_SENSOR_SUFFIXES = (
+    "availability",
+    "provider_chargeable_start",
+    "provider_chargeable_end",
+    "next_chargeable_start",
+    "next_chargeable_end",
+)
 
 
 async def test_entity_unique_id_and_device_info() -> None:
@@ -550,3 +567,190 @@ async def test_entity_availability_follows_coordinator() -> None:
 
     coordinator.last_update_success = False
     assert entity.available is False
+
+
+_ZONE_NOW = datetime(2025, 1, 6, 10, 0, tzinfo=UTC)
+_ZONE_ENTRY_ID = "provider:permit1:city"
+
+
+def _zone(zone_id: str, window: TimeRange | None) -> Zone:
+    """Return a zone that is chargeable during ``window`` (free without one)."""
+    validity = (window,) if window else ()
+    chargeable = window is not None and window.start <= _ZONE_NOW < window.end
+    return Zone(
+        zone_id=zone_id,
+        name=f"Z{zone_id}",
+        zone_validity=validity,
+        zone_availability=ZoneAvailability(
+            is_chargeable_now=chargeable,
+            next_change_time=window.end if chargeable and window else None,
+            windows_today=validity,
+        ),
+    )
+
+
+def _zone_data(zones: Iterable[Zone]) -> CoordinatorData:
+    """Return coordinator data whose default zone is the first of ``zones``."""
+    zones = tuple(zones)
+    base = _sample_data()
+    return CoordinatorData(
+        permit_id=base.permit_id,
+        permit_remaining_balance=base.permit_remaining_balance,
+        permit_balance_unit=None,
+        zone_validity=zones[0].zone_validity if zones else (),
+        reservations=(),
+        favorites=(),
+        zone_availability=zones[0].zone_availability
+        if zones
+        else base.zone_availability,
+        active_reservations=(),
+        zones=zones,
+    )
+
+
+_CURRENT_WINDOW = TimeRange(
+    start=_ZONE_NOW - timedelta(hours=1), end=_ZONE_NOW + timedelta(hours=13)
+)
+_NEXT_WINDOW = TimeRange(
+    start=_ZONE_NOW + timedelta(hours=14), end=_ZONE_NOW + timedelta(hours=15)
+)
+
+
+async def _setup_sensors(
+    hass: HomeAssistant, data: CoordinatorData
+) -> tuple[MagicMock, list[SensorEntity], Callable[[], None]]:
+    """Run the sensor platform setup and return coordinator, entities, listener."""
+    coordinator = _make_coordinator(data)
+    coordinator.last_update_success = True
+    entry = _create_entry(_ZONE_ENTRY_ID)
+    entry.runtime_data = SimpleNamespace(
+        coordinator=coordinator, provider_config=SimpleNamespace(gui_url=None)
+    )
+    added: list[SensorEntity] = []
+
+    def _add_entities(entities: Iterable[SensorEntity], *_args: object) -> None:
+        added.extend(entities)
+
+    await async_setup_entry(hass, cast("Any", entry), cast("Any", _add_entities))
+    listener = coordinator.async_add_listener.call_args.args[0]
+    return coordinator, added, listener
+
+
+def _zone_sensors(entities: Iterable[SensorEntity]) -> dict[str, SensorEntity]:
+    """Return per-zone entities keyed by unique ID."""
+    prefix = f"{_ZONE_ENTRY_ID}:zone:"
+    return {
+        str(entity.unique_id): entity
+        for entity in entities
+        if str(entity.unique_id).startswith(prefix)
+    }
+
+
+async def test_zone_sensors_created_for_each_zone(hass: HomeAssistant) -> None:
+    """A multi-zone permit gets availability and window sensors per zone."""
+    zones = (
+        _zone("10", None),
+        _zone("630", _CURRENT_WINDOW),
+        _zone("632", _NEXT_WINDOW),
+    )
+    with freeze_time(_ZONE_NOW):
+        _coordinator, entities, _listener = await _setup_sensors(
+            hass, _zone_data(zones)
+        )
+
+    zone_sensors = _zone_sensors(entities)
+    assert len(entities) == PERMIT_SENSOR_COUNT + len(zones) * len(ZONE_SENSOR_SUFFIXES)
+    assert set(zone_sensors) == {
+        f"{_ZONE_ENTRY_ID}:zone:{zone.zone_id}:{suffix}"
+        for zone in zones
+        for suffix in ZONE_SENSOR_SUFFIXES
+    }
+
+    def _sensor(zone_id: str, suffix: str) -> SensorEntity:
+        return zone_sensors[f"{_ZONE_ENTRY_ID}:zone:{zone_id}:{suffix}"]
+
+    availability = _sensor("630", "availability")
+    assert isinstance(availability, ZoneAvailabilitySensor)
+    assert availability.translation_key == "zone_availability"
+    assert availability.translation_placeholders == {"zone": "Z630"}
+    assert availability.native_value == STATE_CHARGEABLE
+    attributes = availability.extra_state_attributes
+    assert attributes is not None
+    assert attributes["Next provider"] == _timerange_to_dict(_CURRENT_WINDOW)
+    assert attributes["Today user entered"] == [_timerange_to_dict(_CURRENT_WINDOW)]
+    assert _sensor("10", "availability").native_value == "free"
+    assert _sensor("632", "availability").native_value == "free"
+
+    provider_start = _sensor("632", "provider_chargeable_start")
+    assert isinstance(provider_start, ZoneProviderChargeableStartSensor)
+    assert provider_start.entity_registry_enabled_default is False
+    assert provider_start.native_value == _NEXT_WINDOW.start
+    assert isinstance(
+        _sensor("632", "provider_chargeable_end"), ZoneProviderChargeableEndSensor
+    )
+    assert _sensor("632", "provider_chargeable_end").native_value == _NEXT_WINDOW.end
+    next_start = _sensor("630", "next_chargeable_start")
+    assert isinstance(next_start, ZoneNextChargeableStartSensor)
+    assert next_start.native_value == _CURRENT_WINDOW.start
+    next_end = _sensor("630", "next_chargeable_end")
+    assert isinstance(next_end, ZoneNextChargeableEndSensor)
+    assert next_end.native_value == _CURRENT_WINDOW.end
+    assert _sensor("10", "next_chargeable_start").native_value is None
+
+
+async def test_zone_sensors_not_created_for_single_zone_permit(
+    hass: HomeAssistant,
+) -> None:
+    """Permits with zero or one zone only get the permit-level sensors."""
+    for zones in ((), (_zone("10", None),)):
+        _coordinator, entities, _listener = await _setup_sensors(
+            hass, _zone_data(zones)
+        )
+        assert len(entities) == PERMIT_SENSOR_COUNT
+        assert not _zone_sensors(entities)
+
+
+async def test_zone_sensors_added_when_zones_appear(hass: HomeAssistant) -> None:
+    """Zones that show up after setup get entities once, without duplicates."""
+    coordinator, entities, listener = await _setup_sensors(
+        hass, _zone_data((_zone("10", None),))
+    )
+    assert not _zone_sensors(entities)
+
+    coordinator.data = _zone_data((_zone("10", None), _zone("630", None)))
+    listener()
+    assert {unique_id.split(":")[-2] for unique_id in _zone_sensors(entities)} == {
+        "10",
+        "630",
+    }
+
+    coordinator.data = _zone_data(
+        (_zone("10", None), _zone("630", None), _zone("632", None))
+    )
+    listener()
+    listener()
+    zone_sensors = _zone_sensors(entities)
+    assert len(zone_sensors) == 3 * len(ZONE_SENSOR_SUFFIXES)
+    assert len(entities) == PERMIT_SENSOR_COUNT + len(zone_sensors)
+
+
+async def test_zone_sensors_unavailable_when_zone_disappears(
+    hass: HomeAssistant, monkeypatch: MonkeyPatch
+) -> None:
+    """A zone missing from coordinator data makes its entities unavailable."""
+    with freeze_time(_ZONE_NOW):
+        coordinator, entities, _listener = await _setup_sensors(
+            hass, _zone_data((_zone("10", None), _zone("630", _CURRENT_WINDOW)))
+        )
+        zone_sensors = _zone_sensors(entities)
+        availability = zone_sensors[f"{_ZONE_ENTRY_ID}:zone:630:availability"]
+        assert isinstance(availability, ZoneAvailabilitySensor)
+        monkeypatch.setattr(availability, "async_write_ha_state", MagicMock())
+        assert availability.available is True
+
+        coordinator.data = _zone_data((_zone("10", None), _zone("632", None)))
+        availability._handle_coordinator_update()
+
+    assert availability.available is False
+    assert availability.native_value == STATE_CHARGEABLE
+    assert zone_sensors[f"{_ZONE_ENTRY_ID}:zone:10:availability"].available is True

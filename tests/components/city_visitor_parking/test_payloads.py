@@ -7,11 +7,15 @@ from datetime import UTC, datetime, timedelta
 from custom_components.city_visitor_parking.const import STATE_CHARGEABLE, STATE_FREE
 from custom_components.city_visitor_parking.models import (
     CoordinatorData,
+    Reservation,
     TimeRange,
     Zone,
     ZoneAvailability,
 )
-from custom_components.city_visitor_parking.payloads import build_status_payload
+from custom_components.city_visitor_parking.payloads import (
+    build_status_payload,
+    reservation_payload,
+)
 
 ZONE_STATUS_RESPONSE_KEYS = {
     "state",
@@ -147,3 +151,39 @@ def test_build_status_payload_reports_each_zone_with_its_own_window() -> None:
             "window_end": later.end.isoformat(),
         },
     ]
+
+
+def test_reservation_payload_includes_zone_only_when_present() -> None:
+    """Reservations carry zone_id/zone_name, falling back to the ID for unknowns."""
+    start = datetime(2025, 1, 6, 10, 0, tzinfo=UTC)
+    zones = (
+        Zone(
+            zone_id="630",
+            name="Centrum",
+            zone_validity=(),
+            zone_availability=ZoneAvailability(
+                is_chargeable_now=False, next_change_time=None, windows_today=()
+            ),
+        ),
+    )
+
+    def _payload(zone_id: str | None) -> dict[str, str]:
+        reservation = Reservation(
+            reservation_id="res",
+            start_time=start,
+            end_time=start + timedelta(hours=1),
+            zone_id=zone_id,
+        )
+        return reservation_payload(reservation, {}, zones)
+
+    known = _payload("630")
+    assert known["zone_id"] == "630"
+    assert known["zone_name"] == "Centrum"
+
+    unknown = _payload("999")
+    assert unknown["zone_id"] == "999"
+    assert unknown["zone_name"] == "999"
+
+    without_zone = _payload(None)
+    assert "zone_id" not in without_zone
+    assert "zone_name" not in without_zone

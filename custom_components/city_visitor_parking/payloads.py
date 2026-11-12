@@ -25,6 +25,7 @@ if TYPE_CHECKING:
         Favorite,
         Reservation,
         TimeRange,
+        Zone,
         ZoneAvailability,
     )
 
@@ -45,14 +46,28 @@ def timerange_payload(window: TimeRange) -> dict[str, str]:
 
 
 def reservation_payload(
-    reservation: Reservation, favorite_by_plate: Mapping[str, Favorite]
+    reservation: Reservation,
+    favorite_by_plate: Mapping[str, Favorite],
+    zones: Sequence[Zone],
 ) -> dict[str, str]:
-    """Build a reservation response payload with favorite metadata."""
+    """Build a reservation response payload with favorite and zone metadata.
+
+    ``zone_id`` and ``zone_name`` are only present when the reservation has a
+    zone; the name falls back to the zone ID when the zone is not in ``zones``.
+    """
     payload: dict[str, str] = {
         "reservation_id": reservation.reservation_id,
         "start_time": utc_iso(reservation.start_time) or "",
         "end_time": utc_iso(reservation.end_time) or "",
     }
+
+    zone_id = reservation.zone_id
+    if zone_id:
+        payload["zone_id"] = zone_id
+        payload["zone_name"] = next(
+            (zone.name for zone in zones if zone.zone_id == zone_id and zone.name),
+            zone_id,
+        )
 
     license_plate = reservation.license_plate
     plate = normalize_plate(license_plate)

@@ -721,7 +721,10 @@ async def _async_handle_list_reservations(
         time.perf_counter() - request_started,
     )
     reservation_payloads: list[JsonValueType] = [
-        cast("JsonValueType", reservation_payload(reservation, favorite_by_plate))
+        cast(
+            "JsonValueType",
+            reservation_payload(reservation, favorite_by_plate, data.zones),
+        )
         for reservation in visible
     ]
     reservation_update_fields_json: list[JsonValueType] = [

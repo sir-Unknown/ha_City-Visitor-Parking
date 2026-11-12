@@ -397,6 +397,25 @@
       "next_chargeable_end": {
         "name": "Einde betaalvenster"
       },
+      "zone_availability": {
+        "name": "Beschikbaarheid zone {zone}",
+        "state": {
+          "chargeable": "Betaald",
+          "free": "Gratis"
+        }
+      },
+      "zone_provider_chargeable_start": {
+        "name": "Start provider betaalvenster zone {zone}"
+      },
+      "zone_provider_chargeable_end": {
+        "name": "Einde provider betaalvenster zone {zone}"
+      },
+      "zone_next_chargeable_start": {
+        "name": "Start betaalvenster zone {zone}"
+      },
+      "zone_next_chargeable_end": {
+        "name": "Einde betaalvenster zone {zone}"
+      },
       "favorites": {
         "name": "Favorieten"
       }

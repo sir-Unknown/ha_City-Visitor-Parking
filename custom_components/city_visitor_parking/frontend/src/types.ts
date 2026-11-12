@@ -201,6 +201,8 @@ export type ParkingCardEditorConfig = {
   show_end_time?: boolean;
   default_license_plate?: string;
   config_entry_id?: string;
+  zone_id?: string;
+  show_zone?: boolean;
 };
 
 /** Generic schema payload returned to Lovelace card config forms. */

@@ -397,6 +397,25 @@
       "next_chargeable_end": {
         "name": "Chargeable window end"
       },
+      "zone_availability": {
+        "name": "Zone {zone} availability",
+        "state": {
+          "chargeable": "Chargeable",
+          "free": "Free"
+        }
+      },
+      "zone_provider_chargeable_start": {
+        "name": "Zone {zone} provider chargeable window start"
+      },
+      "zone_provider_chargeable_end": {
+        "name": "Zone {zone} provider chargeable window end"
+      },
+      "zone_next_chargeable_start": {
+        "name": "Zone {zone} chargeable window start"
+      },
+      "zone_next_chargeable_end": {
+        "name": "Zone {zone} chargeable window end"
+      },
       "favorites": {
         "name": "Favorites"
       }

@@ -14,6 +14,8 @@ import { localize } from "./translations";
 
 /** Integration domain used for selectors, websocket calls, and device matching. */
 export const DOMAIN = "city_visitor_parking";
+/** Websocket command returning the status and zones of one permit. */
+export const WS_GET_STATUS = "city_visitor_parking/status";
 export const RESERVATION_STARTED_EVENT =
   "city-visitor-parking-reservation-started";
 export const RESERVATION_ENDED_EVENT = "city-visitor-parking-reservation-ended";
@@ -174,13 +176,6 @@ export const normalizeZones = (
     ? payload.zones.filter((zone) => Boolean(nonEmptyString(zone?.zone_id)))
     : [];
 
-/** Resolves the remembered zone, falling back to the first (default) zone. */
-export const resolveSelectedZone = (
-  zones: readonly ZoneStatusZone[],
-  selectedZoneId: string | null | undefined,
-): ZoneStatusZone | null =>
-  zones.find((zone) => zone.zone_id === selectedZoneId) ?? zones[0] ?? null;
-
 /**
  * Replaces the state and window of a status with those of the selected zone.
  * Balance fields stay permit-wide. A status without state (not loaded or
@@ -194,14 +189,203 @@ export const applyZoneToStatus = (
     ? { ...status, ...normalizeZoneWindow(zone) }
     : status;
 
-/** Builds the optional `zone_id` part of the `start_reservation` service data. */
-export const buildZoneServiceData = (
-  zones: readonly ZoneStatusZone[],
-  selectedZoneId: string | null | undefined,
-): { zone_id?: string } => {
-  const zone = resolveSelectedZone(zones, selectedZoneId);
-  return zone ? { zone_id: zone.zone_id } : {};
+/**
+ * Drops a configured `zone_id` once the permit changed or was cleared.
+ * Zone ids are per permit, so the zone survives only when the new permit's
+ * known zones list it.
+ */
+export const dropForeignZoneId = <
+  T extends { config_entry_id?: string; zone_id?: string },
+>(
+  config: T,
+  previousEntryId: string | undefined,
+  zonesByEntryId: ReadonlyMap<string, readonly ZoneStatusZone[]>,
+): T => {
+  if (!config.zone_id || config.config_entry_id === previousEntryId) {
+    return config;
+  }
+  const zones = config.config_entry_id
+    ? zonesByEntryId.get(config.config_entry_id)
+    : undefined;
+  if (zones?.some((zone) => zone.zone_id === config.zone_id)) return config;
+  const next = { ...config };
+  delete next.zone_id;
+  return next;
 };
+
+/** Minimum number of zones before a permit offers a zone choice. */
+export const MIN_SELECTABLE_ZONES = 2;
+
+/** Card options that decide which zone the new-reservation card uses. */
+export type CardZoneOptions = {
+  /** Whether the card shows its zone field (`show_zone`). */
+  showZone: boolean;
+  /** Preset zone from the card config (`zone_id`) for the configured permit. */
+  configZoneId?: string | null;
+  /** Zone the user picked in the card's zone field. */
+  pickedZoneId?: string | null;
+};
+
+/**
+ * Resolves the zone the new-reservation card uses for a permit.
+ *
+ * With the zone field shown, the user's pick wins over the configured preset;
+ * with it hidden there is nothing to pick, so only the preset counts. Ids that
+ * are not one of the permit's zones fall through to the first (default) zone.
+ */
+export const resolveCardZone = (
+  zones: readonly ZoneStatusZone[],
+  options: CardZoneOptions,
+): ZoneStatusZone | null => {
+  const find = (zoneId: string | null | undefined) =>
+    zoneId ? zones.find((zone) => zone.zone_id === zoneId) : undefined;
+  return (
+    (options.showZone ? find(options.pickedZoneId) : undefined) ??
+    find(options.configZoneId) ??
+    zones[0] ??
+    null
+  );
+};
+
+/**
+ * Decides which zone settings the new-reservation card editor shows.
+ *
+ * The zone picker needs a configured permit with a zone choice. The
+ * `show_zone` toggle follows the configured permit, or, without one (the card
+ * then shows a permit picker), any permit with a zone choice.
+ */
+export const getZoneEditorVisibility = (params: {
+  permitConfigured: boolean;
+  permitZoneCount: number;
+  anyPermitHasZones: boolean;
+}): { showZoneSelect: boolean; showZoneToggle: boolean } => {
+  const permitHasZones =
+    params.permitConfigured && params.permitZoneCount >= MIN_SELECTABLE_ZONES;
+  return {
+    showZoneSelect: permitHasZones,
+    showZoneToggle: params.permitConfigured
+      ? permitHasZones
+      : params.anyPermitHasZones,
+  };
+};
+
+/** Fetches the zones of one permit from the status websocket; empty on failure. */
+export const fetchPermitZones = async (
+  hass: HomeAssistant,
+  entryId: string,
+): Promise<ZoneStatusZone[]> => {
+  try {
+    return normalizeZones(
+      await hass.callWS<ZoneStatusResponse>({
+        type: WS_GET_STATUS,
+        config_entry_id: entryId,
+      }),
+    );
+  } catch {
+    return [];
+  }
+};
+
+/** Locale settings used to format zone window times. */
+export type ZoneWindowFormatOptions = {
+  /** BCP 47 language of the user; the browser default when omitted. */
+  language?: string;
+  /** Forces a 12- or 24-hour clock; the language default when omitted. */
+  hour12?: boolean;
+  /** IANA time zone; the browser time zone (as for the form fields) when omitted. */
+  timeZone?: string;
+  /** Reference time deciding whether a start is "today". */
+  now?: Date;
+};
+
+const createDateTimeFormat = (
+  language: string | undefined,
+  options: Intl.DateTimeFormatOptions,
+): Intl.DateTimeFormat => {
+  try {
+    return new Intl.DateTimeFormat(language, options);
+  } catch {
+    // An unknown language tag throws; fall back to the browser locale.
+    return new Intl.DateTimeFormat(undefined, options);
+  }
+};
+
+/**
+ * Formats the paid window of a zone as one localized line.
+ *
+ * Shows the current window while the zone is paid, otherwise the next one.
+ * A start today shows only its time; other starts add weekday and date. An
+ * end on the start day (or at the midnight closing it) shows only its time.
+ * Returns the "no upcoming paid parking" text for a free zone without a next
+ * window, and `null` when there is nothing reliable to show.
+ */
+export const formatZoneWindow = (
+  zone: ZoneStatusZone | null,
+  localizeFn: (key: string) => string,
+  options: ZoneWindowFormatOptions = {},
+): string | null => {
+  if (!zone) return null;
+  const { state, kind, start, end } = normalizeZoneWindow(zone);
+  const startDate = parseDateTimeValue(start);
+  const endDate = parseDateTimeValue(end);
+  const validKind =
+    (state === "chargeable" && kind === "current") ||
+    (state === "free" && kind === "next");
+  if (!validKind || !startDate || !endDate || endDate <= startDate) {
+    return state === "free" ? localizeFn("label.zone_window_none") : null;
+  }
+  const { language, hour12, timeZone } = options;
+  const dayKey = createDateTimeFormat("en-CA", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  });
+  const sameDay = (first: Date, second: Date): boolean =>
+    dayKey.format(first) === dayKey.format(second);
+  const timeFormat = createDateTimeFormat(language, {
+    timeZone,
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12,
+  });
+  const dateTimeFormat = createDateTimeFormat(language, {
+    timeZone,
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12,
+  });
+  const startText = sameDay(startDate, options.now ?? new Date())
+    ? timeFormat.format(startDate)
+    : dateTimeFormat.format(startDate);
+  // Subtracting 1 ms keeps a window ending at midnight on its start day.
+  const endText = sameDay(new Date(endDate.getTime() - 1), startDate)
+    ? timeFormat.format(endDate)
+    : dateTimeFormat.format(endDate);
+  return localizeFn(`label.zone_window_${kind}`)
+    .replace("{start}", startText)
+    .replace("{end}", endText);
+};
+
+/** Maps Home Assistant's `locale.time_format` to an Intl `hour12` option. */
+export const resolveHour12 = (
+  locale: { time_format?: unknown } | null | undefined,
+): boolean | undefined =>
+  locale?.time_format === "12"
+    ? true
+    : locale?.time_format === "24"
+      ? false
+      : undefined;
+
+/** Returns the zone label of a listed reservation: its name, else its id. */
+export const formatReservationZone = (reservation: {
+  zone_id?: string | null;
+  zone_name?: string | null;
+}): string | null =>
+  nonEmptyString(reservation.zone_name) ?? nonEmptyString(reservation.zone_id);
 
 /** Returns whether a config entry should be hidden from permit selection. */
 export const isPermitEntryDisabled = (entry: PermitEntry): boolean =>

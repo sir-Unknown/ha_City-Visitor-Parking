@@ -17,12 +17,13 @@ import {
 } from "./translations";
 import {
   DOMAIN,
+  MIN_SELECTABLE_ZONES,
   RESERVATION_ENDED_EVENT,
   EMPTY_ZONE_STATUS,
   RESERVATION_STARTED_EVENT,
+  WS_GET_STATUS,
   applyZoneStatus,
   applyZoneToStatus,
-  buildZoneServiceData,
   buildPermitOptions,
   clearFavoriteTransientState,
   createFavoriteIndex,
@@ -30,6 +31,7 @@ import {
   fetchPermitEntries,
   filterDomainDevices,
   formatDateTimeLocal,
+  formatZoneWindow,
   getConfigEntryId,
   invalidateFavoritesCache,
   isHassRunning,
@@ -38,7 +40,8 @@ import {
   normalizeZoneStatus,
   normalizeZones,
   parseDateTimeValue,
-  resolveSelectedZone,
+  resolveCardZone,
+  resolveHour12,
   setPendingPermitDefaults,
 } from "./helpers";
 import {
@@ -56,7 +59,6 @@ import { getCardConfigForm } from "./editor-parking";
 
 const CARD_TYPE = "city-visitor-parking-card";
 const WS_LIST_FAVORITES = "city_visitor_parking/favorites";
-const WS_GET_STATUS = "city_visitor_parking/status";
 // Minimum interval between status fetches triggered by hass updates.
 const STATUS_THROTTLE_MS = 60000;
 // Background polling interval for zone status (and on page visibility restore).
@@ -73,6 +75,8 @@ type CardConfig = {
   show_end_time?: boolean;
   default_license_plate?: string;
   config_entry_id?: string;
+  zone_id?: string;
+  show_zone?: boolean;
   device_id?: string;
 };
 type CheckedElement = HTMLElement & { checked: boolean; disabled?: boolean };
@@ -122,6 +126,11 @@ class CityVisitorParkingNewReservationCard extends BaseLocalizedCard<CardConfig>
       }
       .start-button {
         margin-left: auto;
+      }
+      .zone-window {
+        margin-top: var(--ha-space-1);
+        color: var(--secondary-text-color);
+        font-size: var(--ha-font-size-s, 0.875rem);
       }
     `,
   ];
@@ -234,6 +243,7 @@ class CityVisitorParkingNewReservationCard extends BaseLocalizedCard<CardConfig>
       show_favorites: config.show_favorites !== false,
       show_start_time: config.show_start_time !== false,
       show_end_time: config.show_end_time !== false,
+      show_zone: config.show_zone !== false,
       ...config,
     };
     if (
@@ -570,11 +580,31 @@ class CityVisitorParkingNewReservationCard extends BaseLocalizedCard<CardConfig>
       ? (this._zonesByEntryId.get(activeEntryId) ?? [])
       : [];
     const selectedZone = activeEntryId
-      ? resolveSelectedZone(
-          zones,
-          this._selectedZoneIdByEntryId.get(activeEntryId),
-        )
+      ? this._resolveZone(activeEntryId)
       : null;
+    // Without a permit only the preview shows an (empty) zone field: there the
+    // permit picker is read-only, so any permit with zones stands in for it.
+    const showZoneField =
+      this._config.show_zone !== false &&
+      (zones.length >= MIN_SELECTABLE_ZONES ||
+        (controlsDisabled &&
+          !activeEntryId &&
+          this._permitOptions.some(
+            (option) =>
+              (this._zonesByEntryId.get(option.id)?.length ?? 0) >=
+              MIN_SELECTABLE_ZONES,
+          )));
+    // A failed status refresh keeps cached zones for the picker, but their
+    // windows are no longer reliable, so the window line waits for a status.
+    const zoneWindowText =
+      showZoneField &&
+      activeEntryId &&
+      this._zoneStatusByEntryId.get(activeEntryId)?.state
+        ? formatZoneWindow(selectedZone, localizeFn, {
+            language: getHassLanguage(this._hass),
+            hour12: resolveHour12(this._hass.locale),
+          })
+        : null;
     const { showAddFavorite, showRemoveFavorite, removeFavorite } =
       this._getFavoriteActionState();
     const favoriteRemoveDisabled =
@@ -620,12 +650,13 @@ class CityVisitorParkingNewReservationCard extends BaseLocalizedCard<CardConfig>
                 onSelected: this._onPermitSelectChange,
               })
             : nothing}
-          ${zones.length >= 2
+          ${showZoneField
             ? renderZoneSelect({
                 hass: this._hass,
                 label: localizeFn("field.zone"),
                 zones,
                 value: selectedZone?.zone_id ?? "",
+                windowText: zoneWindowText,
                 disabled: controlsDisabled || selectedPermitDisabled,
                 preview: controlsDisabled,
                 onSelected: this._onZoneSelectChange,
@@ -728,12 +759,28 @@ class CityVisitorParkingNewReservationCard extends BaseLocalizedCard<CardConfig>
     if (!this._config) return;
     const controlsDisabled = this._isInEditor();
     this.toggleAttribute("data-preview", controlsDisabled);
+    if (controlsDisabled) this._loadPreviewPermitZones();
     if (this._addFavoriteChecked) {
       const { showAddFavorite } = this._getFavoriteActionState();
       if (!showAddFavorite) {
         this._addFavoriteChecked = false;
         this._requestRender();
       }
+    }
+  }
+
+  /**
+   * The preview's permit picker is read-only, so without a configured permit
+   * no permit gets selected and no zones load. Load the zones of every permit
+   * so the preview can still show the zone field the dashboard card offers.
+   */
+  _loadPreviewPermitZones(): void {
+    if (this._getActiveEntryId() || !this._permitOptionsLoaded) return;
+    for (const option of this._permitOptions) {
+      if (option.disabled || this._zoneStatusTsByEntryId.has(option.id)) {
+        continue;
+      }
+      void this._loadZoneStatusForEntry(option.id);
     }
   }
 
@@ -824,29 +871,31 @@ class CityVisitorParkingNewReservationCard extends BaseLocalizedCard<CardConfig>
     if (!entryId || !zoneId) return;
     const zones = this._zonesByEntryId.get(entryId) ?? [];
     if (!zones.some((zone) => zone.zone_id === zoneId)) return;
-    if (
-      resolveSelectedZone(zones, this._selectedZoneIdByEntryId.get(entryId))
-        ?.zone_id === zoneId
-    ) {
-      return;
-    }
+    if (this._resolveZone(entryId)?.zone_id === zoneId) return;
     this._selectedZoneIdByEntryId.set(entryId, zoneId);
     applyZoneStatus(this, this._getEffectiveZoneStatus(entryId));
     this._applyStatusDefaultsToForm(true);
     this._requestRender();
   }
 
+  /** Zone the card uses for an entry: user pick, configured preset, or default. */
+  _resolveZone(entryId: string): ZoneStatusZone | null {
+    return resolveCardZone(this._zonesByEntryId.get(entryId) ?? [], {
+      showZone: this._config?.show_zone !== false,
+      // The configured zone preset belongs to the configured permit only.
+      configZoneId:
+        getConfigEntryId(this._config) === entryId
+          ? this._config?.zone_id
+          : null,
+      pickedZoneId: this._selectedZoneIdByEntryId.get(entryId),
+    });
+  }
+
   /** Zone status of an entry with the selected zone's state and window applied. */
   _getEffectiveZoneStatus(entryId: string): ZoneStatus | null {
     const status = this._zoneStatusByEntryId.get(entryId);
     if (!status) return null;
-    return applyZoneToStatus(
-      status,
-      resolveSelectedZone(
-        this._zonesByEntryId.get(entryId) ?? [],
-        this._selectedZoneIdByEntryId.get(entryId),
-      ),
-    );
+    return applyZoneToStatus(status, this._resolveZone(entryId));
   }
 
   _handleFavoriteSelectChange(event: Event): void {
@@ -1143,17 +1192,14 @@ class CityVisitorParkingNewReservationCard extends BaseLocalizedCard<CardConfig>
     }
     try {
       const activeEntryId = this._getActiveEntryId();
+      const zone = activeEntryId ? this._resolveZone(activeEntryId) : null;
       await this._hass.callService(DOMAIN, "start_reservation", {
         device_id: this._deviceId,
         start_time: start!.toISOString(),
         end_time: end!.toISOString(),
         license_plate: license,
-        ...(activeEntryId
-          ? buildZoneServiceData(
-              this._zonesByEntryId.get(activeEntryId) ?? [],
-              this._selectedZoneIdByEntryId.get(activeEntryId),
-            )
-          : {}),
+        // Permits without zones send no zone_id at all.
+        ...(zone ? { zone_id: zone.zone_id } : {}),
       });
     } catch (err: unknown) {
       const message = this._errorMessage(

@@ -922,6 +922,7 @@ async def test_service_list_reservations_response(
         start_time=now - timedelta(hours=1),
         end_time=now + timedelta(hours=1),
         license_plate="AB-1234",
+        zone_id="630",
     )
     future_reservation = Reservation(
         reservation_id="res2",
@@ -948,6 +949,15 @@ async def test_service_list_reservations_response(
             windows_today=(),
         ),
         active_reservations=(active_reservation,),
+        zones=(
+            _zone("10"),
+            Zone(
+                zone_id="630",
+                name="Centrum",
+                zone_validity=(),
+                zone_availability=_FREE,
+            ),
+        ),
     )
     entry.runtime_data.coordinator.data = data
     entry.runtime_data.coordinator.last_update_success = True
@@ -979,6 +989,13 @@ async def test_service_list_reservations_response(
     assert active_payload[ATTR_LICENSE_PLATE] == "AB-1234"
     assert active_payload[ATTR_FAVORITE_ID] == "fav1"
     assert active_payload["favorite_name"] == "Ada"
+    assert active_payload["zone_id"] == "630"
+    assert active_payload["zone_name"] == "Centrum"
+    future_payload = next(
+        item for item in reservations if item[ATTR_RESERVATION_ID] == "res2"
+    )
+    assert "zone_id" not in future_payload
+    assert "zone_name" not in future_payload
 
 
 async def test_service_list_reservations_stale(hass: HomeAssistant) -> None:
