@@ -9,7 +9,7 @@ on:
   schedule:
     - cron: "0 3 * * *"
   push:
-    branches: [main, beta, testing]
+    branches: [main, beta]
     tags:
       - "*"
     paths-ignore:
@@ -55,7 +55,7 @@ jobs:
   hassfest:
     name: Integration metadata (Hassfest)
     needs: [python_quality]
-    if: ${{ github.ref_name != 'testing' && !(contains(github.ref_name, '-rc') || contains(github.ref_name, '-alpha') || (startsWith(github.ref, 'refs/tags/') && contains(github.ref_name, 'b'))) }}
+    if: ${{ !(contains(github.ref_name, '-rc') || contains(github.ref_name, '-alpha') || (startsWith(github.ref, 'refs/tags/') && contains(github.ref_name, 'b'))) }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -71,7 +71,7 @@ jobs:
   hacs:
     name: Integration metadata (HACS)
     needs: [python_quality]
-    if: ${{ github.ref_name != 'testing' && !(contains(github.ref_name, '-rc') || contains(github.ref_name, '-alpha') || (startsWith(github.ref, 'refs/tags/') && contains(github.ref_name, 'b'))) }}
+    if: ${{ !(contains(github.ref_name, '-rc') || contains(github.ref_name, '-alpha') || (startsWith(github.ref, 'refs/tags/') && contains(github.ref_name, 'b'))) }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -116,7 +116,7 @@ jobs:
 
   release_policy:
     name: Release policy
-    if: ${{ github.ref_name != 'testing' && !(contains(github.ref_name, '-rc') || contains(github.ref_name, '-alpha') || (startsWith(github.ref, 'refs/tags/') && contains(github.ref_name, 'b'))) }}
+    if: ${{ !(contains(github.ref_name, '-rc') || contains(github.ref_name, '-alpha') || (startsWith(github.ref, 'refs/tags/') && contains(github.ref_name, 'b'))) }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:

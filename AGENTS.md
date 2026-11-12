@@ -78,7 +78,7 @@ Progress is tracked in `custom_components/city_visitor_parking/quality_scale.yam
 
 Release automation and release notes MUST stay aligned with:
 
-- `.github/release-drafter.yml` (with shared base `release-drafter-base.yml` and the beta/testing variants)
+- `.github/release-drafter.yml` (with shared base `release-drafter-base.yml` and the beta variant)
 - `.github/workflows/release-drafter.yml`
 - `.github/workflows/release.yml`
 
@@ -118,7 +118,7 @@ The repository currently relies on GitHub Actions workflows for validation, labe
 - Python development and CI use `uv` with dependency groups from `pyproject.toml`.
 - Frontend development and CI use the bundle under `custom_components/city_visitor_parking/frontend/`.
 - Treat PR labeling, Release Drafter, dependency review, and release packaging workflows as part of the maintained repository surface.
-- The `Validate` workflow runs on pushes to `main`, `beta`, and `testing`, on pushed tags, and on pull requests to `main` and `beta`. `release.yml` requires a successful `Validate` run on the release commit, so keep `beta` green before publishing a beta from it, and for a beta built from a feature branch wait for the `Validate` run on the beta tag.
+- The `Validate` workflow runs on pushes to `main` and `beta`, on pushed tags, and on pull requests to `main` and `beta`. `release.yml` requires a successful `Validate` run on the release commit, so keep `beta` green before publishing a beta from it, and for a beta built from a feature branch wait for the `Validate` run on the beta tag.
 
 ## 7) Hard rules
 
