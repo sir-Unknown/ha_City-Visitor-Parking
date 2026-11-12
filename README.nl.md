@@ -16,13 +16,13 @@
   </a>
 </p>
 
+<!-- ha-marketplace:exclude-start -->
 <p align="center">
   <a href="https://my.home-assistant.io/redirect/config_flow_start/?domain=city_visitor_parking">
     <img src="https://my.home-assistant.io/badges/config_flow_start.svg" alt="Open je Home Assistant en start de installatie van City Visitor Parking.">
   </a>
 </p>
 
-<!-- ha-marketplace:exclude-start -->
 <p align="center">
   <a href="https://my.home-assistant.io/redirect/marketplace_repository/?owner=sir-Unknown&repository=ha_City-Visitor-Parking&category=integration">
     <img src="https://my.home-assistant.io/badges/marketplace_repository.svg" alt="Open je Home Assistant en open deze repository in de Marketplace.">
