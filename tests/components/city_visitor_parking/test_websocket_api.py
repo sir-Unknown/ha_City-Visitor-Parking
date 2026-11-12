@@ -26,7 +26,9 @@ from custom_components.city_visitor_parking.const import (
 from custom_components.city_visitor_parking.models import (
     AutoEndState,
     CoordinatorData,
+    Favorite,
     ProviderConfig,
+    Reservation,
     TimeRange,
     ZoneAvailability,
 )
@@ -36,6 +38,7 @@ from custom_components.city_visitor_parking.runtime_data import (
 from custom_components.city_visitor_parking.websocket_api import (
     _ws_get_status,
     _ws_list_favorites,
+    _ws_list_reservations,
 )
 
 if TYPE_CHECKING:
@@ -267,6 +270,94 @@ async def test_ws_get_status_failure_response(hass: HomeAssistant) -> None:
 
     error = _first_error(raw_connection)
     assert error["code"] == "status_failed"
+
+
+async def test_ws_list_reservations_reads_coordinator_data(
+    hass: HomeAssistant,
+) -> None:
+    """Websocket should list unended reservations without a provider fetch."""
+    entry = _create_entry()
+    entry.add_to_hass(hass)
+    entry.mock_state(hass, config_entries.ConfigEntryState.LOADED)
+
+    now = datetime(2025, 1, 6, 10, 0, tzinfo=UTC)
+    running = Reservation(
+        reservation_id="running",
+        start_time=now - timedelta(minutes=30),
+        end_time=now + timedelta(minutes=30),
+        license_plate="AB-12-CD",
+    )
+    upcoming = Reservation(
+        reservation_id="upcoming",
+        start_time=now + timedelta(hours=2),
+        end_time=now + timedelta(hours=3),
+    )
+    ended = Reservation(
+        reservation_id="ended",
+        start_time=now - timedelta(hours=2),
+        end_time=now - timedelta(hours=1),
+    )
+    data = CoordinatorData(
+        permit_id="permit",
+        permit_remaining_balance=0,
+        permit_balance_unit=None,
+        zone_validity=(),
+        reservations=(running, upcoming, ended),
+        favorites=(Favorite(favorite_id="fav1", license_plate="AB12CD", name="Mom"),),
+        zone_availability=ZoneAvailability(
+            is_chargeable_now=False, next_change_time=None, windows_today=()
+        ),
+        active_reservations=(running,),
+    )
+    provider = AsyncMock()
+    provider.reservation_update_fields = ["end_time"]
+    entry.runtime_data = _runtime(provider, data)
+    entry.runtime_data.coordinator.last_update_success = False
+
+    raw_connection = _FakeConnection()
+    connection = cast("ActiveConnection", raw_connection)
+    with freeze_time(now):
+        _ws_list_reservations(
+            hass,
+            connection,
+            {"id": 1, "config_entry_id": entry.entry_id},
+        )
+
+    result = _first_result(raw_connection)
+    reservations = cast("list[dict[str, object]]", result["reservations"])
+    assert [item["reservation_id"] for item in reservations] == [
+        "running",
+        "upcoming",
+    ]
+    assert reservations[0]["favorite_name"] == "Mom"
+    assert (result["count"], result["active_count"], result["future_count"]) == (
+        2,
+        1,
+        1,
+    )
+    assert result["reservation_update_fields"] == ["end_time"]
+    assert result["stale"] is True
+    # The cached read must not reach the provider or refresh the coordinator.
+    assert provider.mock_calls == []
+    entry.runtime_data.coordinator.async_refresh.assert_not_called()
+
+
+async def test_ws_list_reservations_without_data(hass: HomeAssistant) -> None:
+    """Websocket should report an error before the first coordinator update."""
+    entry = _create_entry()
+    entry.add_to_hass(hass)
+    entry.mock_state(hass, config_entries.ConfigEntryState.LOADED)
+    entry.runtime_data = _runtime(AsyncMock(), None)
+
+    raw_connection = _FakeConnection()
+    connection = cast("ActiveConnection", raw_connection)
+    _ws_list_reservations(
+        hass,
+        connection,
+        {"id": 1, "config_entry_id": entry.entry_id},
+    )
+
+    assert _first_error(raw_connection)["code"] == "reservations_failed"
 
 
 def test_ws_as_utc_iso_none() -> None:

@@ -44,6 +44,44 @@ export type DeviceEntry = {
   config_entry_id?: string;
 };
 
+/** One reservation, built by `reservation_payload()` in `payloads.py`. */
+export type ReservationPayload = {
+  reservation_id: string;
+  /** UTC ISO8601 timestamps. */
+  start_time: string;
+  end_time: string;
+  /** Absent when the provider returned no usable plate. */
+  license_plate?: string;
+  /** Present when the plate matches a favorite. */
+  favorite_id?: string;
+  favorite_name?: string;
+  /** Zone id, present only when the reservation has a zone. */
+  zone_id?: string;
+  /** Zone display name (falls back to the id server-side), with `zone_id`. */
+  zone_name?: string;
+  /** Paid window of the reservation's zone that applies to it, when known. */
+  zone_window_start?: string;
+  zone_window_end?: string;
+};
+
+/**
+ * Reservations of one permit, built by `build_reservations_payload()` in
+ * `payloads.py`. Returned by the `list_reservations` service (which fetches
+ * from the provider first) and by the `city_visitor_parking/reservations`
+ * websocket command (which returns the coordinator data as is).
+ */
+export type ReservationsResponse = {
+  /** Reservations that have not ended yet; `count` is their number. */
+  reservations: ReservationPayload[];
+  count: number;
+  active_count: number;
+  future_count: number;
+  /** True when the last coordinator update failed and the data is older. */
+  stale: boolean;
+  /** Reservation fields the provider can update natively. */
+  reservation_update_fields: string[];
+};
+
 /** Config entry fields used for permit selection in the frontend. */
 export type PermitEntry = {
   entry_id: string;

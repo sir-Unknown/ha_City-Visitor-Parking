@@ -6,6 +6,7 @@ import type {
   LocalizeTarget,
   PermitEntry,
   PermitOption,
+  ReservationsResponse,
   ZoneStatus,
   ZoneStatusResponse,
   ZoneStatusZone,
@@ -16,6 +17,8 @@ import { localize } from "./translations";
 export const DOMAIN = "city_visitor_parking";
 /** Websocket command returning the status and zones of one permit. */
 export const WS_GET_STATUS = "city_visitor_parking/status";
+/** Websocket command returning the reservations held by the coordinator. */
+export const WS_LIST_RESERVATIONS = "city_visitor_parking/reservations";
 export const RESERVATION_STARTED_EVENT =
   "city-visitor-parking-reservation-started";
 export const RESERVATION_ENDED_EVENT = "city-visitor-parking-reservation-ended";
@@ -267,6 +270,38 @@ export const getZoneEditorVisibility = (params: {
       ? permitHasZones
       : params.anyPermitHasZones,
   };
+};
+
+/**
+ * Loads the reservations of one integration device.
+ *
+ * With `fresh`, the `list_reservations` service fetches from the provider, so
+ * changes made outside Home Assistant (the municipality app or website) show
+ * up. Without it, the websocket command returns the coordinator data without
+ * a provider fetch. Use that right after a write from a card: the write
+ * services refresh the coordinator before they return, so the data is current.
+ */
+export const fetchReservations = async (
+  hass: HomeAssistant,
+  device: DeviceEntry,
+  fresh: boolean,
+): Promise<ReservationsResponse> => {
+  if (!fresh && device.config_entry_id) {
+    return hass.callWS<ReservationsResponse>({
+      type: WS_LIST_RESERVATIONS,
+      config_entry_id: device.config_entry_id,
+    });
+  }
+  const result = await hass.callWS<
+    ReservationsResponse | { response: ReservationsResponse }
+  >({
+    type: "call_service",
+    domain: DOMAIN,
+    service: "list_reservations",
+    return_response: true,
+    service_data: { device_id: device.id },
+  });
+  return "response" in result ? result.response : result;
 };
 
 /** Fetches the zones of one permit from the status websocket; empty on failure. */

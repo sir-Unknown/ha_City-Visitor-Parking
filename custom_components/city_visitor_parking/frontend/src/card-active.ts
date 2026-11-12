@@ -1,6 +1,11 @@
 /** Lovelace card for listing and updating active visitor parking reservations. */
 import { css, html, nothing, type TemplateResult } from "lit";
-import type { DeviceEntry, HomeAssistant, ValueElement } from "./types";
+import type {
+  DeviceEntry,
+  HomeAssistant,
+  ReservationPayload,
+  ValueElement,
+} from "./types";
 import { ensureTranslations, getGlobalHass, localize } from "./translations";
 import {
   DOMAIN,
@@ -8,6 +13,7 @@ import {
   RESERVATION_STARTED_EVENT,
   buildPermitTitleMap,
   fetchPermitEntries,
+  fetchReservations,
   filterDomainDevices,
   formatOptionalDateTimeLocal,
   formatReservationZone,
@@ -32,25 +38,15 @@ import {
 import { getActiveCardConfigForm } from "./editor-active";
 
 const CARD_TYPE = "city-visitor-parking-active-card";
-const SERVICE_LIST_RESERVATIONS = "list_reservations";
 const SERVICE_UPDATE_RESERVATION = "update_reservation";
 const SERVICE_END_RESERVATION = "end_reservation";
 const UPDATE_START_FLAG = 1;
 const UPDATE_END_FLAG = 2;
 
-type ActiveReservation = {
-  reservation_id: string;
+/** A listed reservation plus the card-side device and display name. */
+type ActiveReservation = ReservationPayload & {
   name?: string;
-  license_plate?: string;
-  start_time: string;
-  end_time: string;
   device_id?: string;
-  favorite_id?: string;
-  favorite_name?: string;
-  /** Zone id, present only when the reservation has a zone. */
-  zone_id?: string;
-  /** Zone display name (falls back to the id server-side), with `zone_id`. */
-  zone_name?: string;
 };
 type CardConfig = {
   type: string;
@@ -159,7 +155,8 @@ class CityVisitorParkingActiveCard extends BaseLocalizedCard<CardConfig> {
       if (deviceId && licensePlate && name) {
         this._setPendingReservationName(deviceId, licensePlate, name);
       }
-      void this._maybeLoadActiveReservations(true);
+      // The start service refreshed the coordinator before it returned.
+      void this._maybeLoadActiveReservations(true, false);
     };
     window.addEventListener(
       RESERVATION_STARTED_EVENT,
@@ -227,7 +224,16 @@ class CityVisitorParkingActiveCard extends BaseLocalizedCard<CardConfig> {
     };
   }
 
-  async _maybeLoadActiveReservations(force = false): Promise<void> {
+  /**
+   * Loads the reservations shown by the card.
+   *
+   * `fresh` fetches from the provider; pass `false` after this card's own
+   * writes, whose services already refreshed the coordinator.
+   */
+  async _maybeLoadActiveReservations(
+    force = false,
+    fresh = true,
+  ): Promise<void> {
     if (!this._hass || !this._config) return;
     if (!isHassRunning(this._hass)) return;
     const entryId = this._getActiveEntryId();
@@ -262,24 +268,9 @@ class CityVisitorParkingActiveCard extends BaseLocalizedCard<CardConfig> {
         devices,
         entryTitles,
       );
-      type ActiveReservationsResult = {
-        reservations?: ActiveReservation[];
-        reservation_update_fields?: string[];
-        response?: {
-          reservations?: ActiveReservation[];
-          reservation_update_fields?: string[];
-        };
-      };
+      const hass = this._hass;
       const results = await Promise.allSettled(
-        devices.map((device) =>
-          this._hass!.callWS<ActiveReservationsResult>({
-            type: "call_service",
-            domain: DOMAIN,
-            service: SERVICE_LIST_RESERVATIONS,
-            return_response: true,
-            service_data: { device_id: device.id },
-          }),
-        ),
+        devices.map((device) => fetchReservations(hass, device, fresh)),
       );
       const collected: ActiveReservation[] = [];
       const collectedById = new Map<string, ActiveReservation>();
@@ -291,9 +282,9 @@ class CityVisitorParkingActiveCard extends BaseLocalizedCard<CardConfig> {
           failedDevices.push(device.name ?? device.id);
           continue;
         }
-        const result = settled.value;
-        const response = result?.response ?? result;
-        const activeReservations = response?.reservations;
+        const response = settled.value;
+        const activeReservations: ActiveReservation[] | undefined =
+          response?.reservations;
         const updateFields = response?.reservation_update_fields;
         if (Array.isArray(updateFields)) {
           const updateFlags =
@@ -758,7 +749,7 @@ class CityVisitorParkingActiveCard extends BaseLocalizedCard<CardConfig> {
       reservationId,
       "message.reservation_updated",
     );
-    await this._maybeLoadActiveReservations(true);
+    await this._maybeLoadActiveReservations(true, false);
   }
 
   async _handleActiveReservationEnd(reservationId: string): Promise<void> {
@@ -804,7 +795,7 @@ class CityVisitorParkingActiveCard extends BaseLocalizedCard<CardConfig> {
       "success",
     );
     this._activeReservationsLoadedFor = null;
-    await this._maybeLoadActiveReservations(true);
+    await this._maybeLoadActiveReservations(true, false);
   }
 
   async _getConfigEntryTitles(): Promise<Map<string, string>> {

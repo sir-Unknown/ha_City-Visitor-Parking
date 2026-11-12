@@ -670,6 +670,7 @@ var getHassLanguage = (hass) => {
 // src/helpers.ts
 var DOMAIN = "city_visitor_parking";
 var WS_GET_STATUS = "city_visitor_parking/status";
+var WS_LIST_RESERVATIONS = "city_visitor_parking/reservations";
 var RESERVATION_STARTED_EVENT = "city-visitor-parking-reservation-started";
 var RESERVATION_ENDED_EVENT = "city-visitor-parking-reservation-ended";
 var EMPTY_ZONE_STATUS = {
@@ -769,6 +770,22 @@ var getZoneEditorVisibility = (params) => {
     showZoneSelect: permitHasZones,
     showZoneToggle: params.permitConfigured ? permitHasZones : params.anyPermitHasZones
   };
+};
+var fetchReservations = async (hass, device, fresh) => {
+  if (!fresh && device.config_entry_id) {
+    return hass.callWS({
+      type: WS_LIST_RESERVATIONS,
+      config_entry_id: device.config_entry_id
+    });
+  }
+  const result = await hass.callWS({
+    type: "call_service",
+    domain: DOMAIN,
+    service: "list_reservations",
+    return_response: true,
+    service_data: { device_id: device.id }
+  });
+  return "response" in result ? result.response : result;
 };
 var fetchPermitZones = async (hass, entryId) => {
   try {
@@ -2467,7 +2484,7 @@ var CityVisitorParkingNewReservationCard = class extends BaseLocalizedCard {
     this._scheduleFavoriteActionsUpdate();
     this._activeReservationsLoadedFor = null;
     const activeEntryId = this._getActiveEntryId();
-    if (activeEntryId) void this._loadActivePlates(activeEntryId);
+    if (activeEntryId) void this._loadActivePlates(activeEntryId, false);
     this._requestRender();
     await triggerProgressButtonFeedback(this, "#startReservation", "success");
     window.dispatchEvent(
@@ -2610,7 +2627,13 @@ var CityVisitorParkingNewReservationCard = class extends BaseLocalizedCard {
     await this.updateComplete;
     this._scheduleFavoriteActionsUpdate();
   }
-  async _loadActivePlates(entryId) {
+  /**
+   * Loads the plates with a running or upcoming reservation for a permit.
+   *
+   * `fresh` fetches from the provider; pass `false` after a write from a card,
+   * whose service already refreshed the coordinator.
+   */
+  async _loadActivePlates(entryId, fresh = true) {
     if (!this._hass || !entryId) return;
     if (this._activeReservationsLoadedFor === entryId) return;
     this._activeReservationsLoadedFor = entryId;
@@ -2624,15 +2647,7 @@ var CityVisitorParkingNewReservationCard = class extends BaseLocalizedCard {
       );
       const byPlate = /* @__PURE__ */ new Map();
       const results = await Promise.allSettled(
-        domainDevices.map(
-          (device) => hass.callWS({
-            type: "call_service",
-            domain: DOMAIN,
-            service: "list_reservations",
-            return_response: true,
-            service_data: { device_id: device.id }
-          })
-        )
+        domainDevices.map((device) => fetchReservations(hass, device, fresh))
       );
       let anyFailed = false;
       for (const [index, settled] of results.entries()) {
@@ -2644,9 +2659,7 @@ var CityVisitorParkingNewReservationCard = class extends BaseLocalizedCard {
           );
           continue;
         }
-        const result = settled.value;
-        const response = result?.response ?? result;
-        const reservations = response?.reservations;
+        const reservations = settled.value?.reservations;
         if (Array.isArray(reservations)) {
           for (const r4 of reservations) {
             const plate = normalizePlateValue(r4.license_plate);
@@ -2678,7 +2691,7 @@ var CityVisitorParkingNewReservationCard = class extends BaseLocalizedCard {
     const deviceId = (detail?.device_id ?? "").trim();
     if (deviceId && this._deviceId && deviceId !== this._deviceId) return;
     this._activeReservationsLoadedFor = null;
-    await this._loadActivePlates(activeEntryId);
+    await this._loadActivePlates(activeEntryId, false);
   }
   _getActiveEntryId() {
     return getConfigEntryId(this._config) || this._selectedEntryId;
@@ -2809,7 +2822,6 @@ var getActiveCardConfigForm = createConfigFormGetter(
 
 // src/card-active.ts
 var CARD_TYPE2 = "city-visitor-parking-active-card";
-var SERVICE_LIST_RESERVATIONS = "list_reservations";
 var SERVICE_UPDATE_RESERVATION = "update_reservation";
 var SERVICE_END_RESERVATION = "end_reservation";
 var UPDATE_START_FLAG = 1;
@@ -2853,7 +2865,7 @@ var CityVisitorParkingActiveCard = class extends BaseLocalizedCard {
       if (deviceId && licensePlate && name) {
         this._setPendingReservationName(deviceId, licensePlate, name);
       }
-      void this._maybeLoadActiveReservations(true);
+      void this._maybeLoadActiveReservations(true, false);
     };
     window.addEventListener(
       RESERVATION_STARTED_EVENT,
@@ -2910,7 +2922,13 @@ var CityVisitorParkingActiveCard = class extends BaseLocalizedCard {
       min_rows: 4
     };
   }
-  async _maybeLoadActiveReservations(force = false) {
+  /**
+   * Loads the reservations shown by the card.
+   *
+   * `fresh` fetches from the provider; pass `false` after this card's own
+   * writes, whose services already refreshed the coordinator.
+   */
+  async _maybeLoadActiveReservations(force = false, fresh = true) {
     if (!this._hass || !this._config) return;
     if (!isHassRunning(this._hass)) return;
     const entryId = this._getActiveEntryId();
@@ -2940,16 +2958,9 @@ var CityVisitorParkingActiveCard = class extends BaseLocalizedCard {
         devices,
         entryTitles
       );
+      const hass = this._hass;
       const results = await Promise.allSettled(
-        devices.map(
-          (device) => this._hass.callWS({
-            type: "call_service",
-            domain: DOMAIN,
-            service: SERVICE_LIST_RESERVATIONS,
-            return_response: true,
-            service_data: { device_id: device.id }
-          })
-        )
+        devices.map((device) => fetchReservations(hass, device, fresh))
       );
       const collected = [];
       const collectedById = /* @__PURE__ */ new Map();
@@ -2961,8 +2972,7 @@ var CityVisitorParkingActiveCard = class extends BaseLocalizedCard {
           failedDevices.push(device.name ?? device.id);
           continue;
         }
-        const result = settled.value;
-        const response = result?.response ?? result;
+        const response = settled.value;
         const activeReservations = response?.reservations;
         const updateFields = response?.reservation_update_fields;
         if (Array.isArray(updateFields)) {
@@ -3321,7 +3331,7 @@ var CityVisitorParkingActiveCard = class extends BaseLocalizedCard {
       reservationId,
       "message.reservation_updated"
     );
-    await this._maybeLoadActiveReservations(true);
+    await this._maybeLoadActiveReservations(true, false);
   }
   async _handleActiveReservationEnd(reservationId) {
     if (!this._hass || !reservationId) return;
@@ -3366,7 +3376,7 @@ var CityVisitorParkingActiveCard = class extends BaseLocalizedCard {
       "success"
     );
     this._activeReservationsLoadedFor = null;
-    await this._maybeLoadActiveReservations(true);
+    await this._maybeLoadActiveReservations(true, false);
   }
   async _getConfigEntryTitles() {
     if (!this._hass) return /* @__PURE__ */ new Map();

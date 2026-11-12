@@ -110,6 +110,51 @@ def reservation_payload(
     return payload
 
 
+def reservation_update_fields(provider: object) -> list[str]:
+    """Return the reservation fields the provider can update natively."""
+    update_fields = getattr(provider, "reservation_update_fields", None)
+    if not isinstance(update_fields, (list, tuple)):
+        return []
+    return [str(field) for field in cast("list[object]", update_fields)]
+
+
+def build_reservations_payload(
+    data: CoordinatorData,
+    options: Mapping[str, object],
+    now: datetime,
+    update_fields: Sequence[str],
+    *,
+    stale: bool = False,
+) -> dict[str, object]:
+    """Build the shared reservations response for services and websocket.
+
+    Only reservations that have not ended yet are listed; ``active_count`` and
+    ``future_count`` split them into running and upcoming ones.
+    """
+    visible = [
+        reservation for reservation in data.reservations if reservation.end_time > now
+    ]
+    active_count = sum(1 for reservation in visible if reservation.start_time <= now)
+    favorite_by_plate = {
+        normalize_plate(favorite.license_plate): favorite
+        for favorite in data.favorites
+        if favorite.license_plate
+    }
+    return {
+        "count": len(visible),
+        "active_count": active_count,
+        "future_count": len(visible) - active_count,
+        "reservations": [
+            reservation_payload(
+                reservation, favorite_by_plate, data.zones, options, now
+            )
+            for reservation in visible
+        ],
+        "stale": stale,
+        "reservation_update_fields": list(update_fields),
+    }
+
+
 def normalize_favorites(
     favorites: Iterable[ProviderFavorite],
 ) -> list[dict[str, str]]:

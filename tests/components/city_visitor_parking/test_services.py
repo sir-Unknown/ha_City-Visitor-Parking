@@ -42,6 +42,7 @@ from custom_components.city_visitor_parking.models import (
     Zone,
     ZoneAvailability,
 )
+from custom_components.city_visitor_parking.payloads import reservation_update_fields
 from custom_components.city_visitor_parking.runtime_data import (
     CityVisitorParkingRuntimeData,
 )
@@ -65,7 +66,6 @@ from custom_components.city_visitor_parking.services import (
     _raise_favorite_error,
     _raise_reservation_error,
     _reservation_error_key,
-    _reservation_update_fields,
     async_setup_services,
 )
 
@@ -299,7 +299,7 @@ async def test_service_end_reservation_calls_provider(hass: HomeAssistant) -> No
     """End reservation should call the provider once."""
     await async_setup_services(hass)
 
-    _, device, provider = _create_entry_with_device(hass, "permit1")
+    entry, device, provider = _create_entry_with_device(hass, "permit1")
     now = datetime(2025, 1, 1, 12, 0, tzinfo=UTC)
 
     with freeze_time(now):
@@ -314,6 +314,7 @@ async def test_service_end_reservation_calls_provider(hass: HomeAssistant) -> No
         )
 
     provider.end_reservation.assert_awaited_once_with("res1", now)
+    entry.runtime_data.coordinator.async_refresh.assert_awaited_once()
 
 
 async def test_service_add_and_remove_favorite(hass: HomeAssistant) -> None:
@@ -354,7 +355,7 @@ async def test_service_start_reservation_adjusts_start(hass: HomeAssistant) -> N
     """Start reservation should enforce a minimum start time."""
     await async_setup_services(hass)
 
-    _, device, provider = _create_entry_with_device(hass, "permit1")
+    entry, device, provider = _create_entry_with_device(hass, "permit1")
     now = datetime(2025, 1, 1, 12, 0, tzinfo=UTC)
     start = now
     end = now + timedelta(minutes=30)
@@ -378,6 +379,7 @@ async def test_service_start_reservation_adjusts_start(hass: HomeAssistant) -> N
         start_time=expected_start,
         end_time=end,
     )
+    entry.runtime_data.coordinator.async_refresh.assert_awaited_once()
 
 
 async def test_service_start_reservation_error(
@@ -562,7 +564,7 @@ async def test_service_end_reservation_error(
     """End reservation errors should raise HomeAssistantError."""
     await async_setup_services(hass)
 
-    _, device, provider = _create_entry_with_device(hass, "permit1")
+    entry, device, provider = _create_entry_with_device(hass, "permit1")
     provider.end_reservation.side_effect = pv_library.ProviderError("boom")
 
     with pytest.raises(HomeAssistantError):
@@ -575,6 +577,8 @@ async def test_service_end_reservation_error(
             },
             blocking=True,
         )
+    # A failed write must not trigger a refresh.
+    entry.runtime_data.coordinator.async_refresh.assert_not_awaited()
 
 
 async def test_service_add_favorite_error(
@@ -902,9 +906,9 @@ def test_is_not_supported_and_update_fields(hass: HomeAssistant) -> None:
     assert _is_not_supported(ProviderError("not supported"))
     assert not _is_not_supported(ProviderError("boom"))
 
-    entry, _device, provider = _create_entry_with_device(hass, "permit1")
+    _entry, _device, provider = _create_entry_with_device(hass, "permit1")
     provider.reservation_update_fields = None
-    assert _reservation_update_fields(entry.runtime_data) == []
+    assert reservation_update_fields(provider) == []
 
 
 async def test_service_list_reservations_response(

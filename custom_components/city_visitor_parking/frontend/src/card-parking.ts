@@ -29,6 +29,7 @@ import {
   createFavoriteIndex,
   extractEventValue,
   fetchPermitEntries,
+  fetchReservations,
   filterDomainDevices,
   formatDateTimeLocal,
   getConfigEntryId,
@@ -1205,7 +1206,8 @@ class CityVisitorParkingNewReservationCard extends BaseLocalizedCard<CardConfig>
     this._scheduleFavoriteActionsUpdate();
     this._activeReservationsLoadedFor = null;
     const activeEntryId = this._getActiveEntryId();
-    if (activeEntryId) void this._loadActivePlates(activeEntryId);
+    // The start service refreshed the coordinator before it returned.
+    if (activeEntryId) void this._loadActivePlates(activeEntryId, false);
     this._requestRender();
     await triggerProgressButtonFeedback(this, "#startReservation", "success");
     window.dispatchEvent(
@@ -1382,25 +1384,17 @@ class CityVisitorParkingNewReservationCard extends BaseLocalizedCard<CardConfig>
     this._scheduleFavoriteActionsUpdate();
   }
 
-  async _loadActivePlates(entryId: string): Promise<void> {
+  /**
+   * Loads the plates with a running or upcoming reservation for a permit.
+   *
+   * `fresh` fetches from the provider; pass `false` after a write from a card,
+   * whose service already refreshed the coordinator.
+   */
+  async _loadActivePlates(entryId: string, fresh = true): Promise<void> {
     if (!this._hass || !entryId) return;
     if (this._activeReservationsLoadedFor === entryId) return;
     this._activeReservationsLoadedFor = entryId;
     try {
-      type ActiveReservationsResult = {
-        reservations?: Array<{
-          license_plate?: string;
-          start_time?: string;
-          end_time?: string;
-        }>;
-        response?: {
-          reservations?: Array<{
-            license_plate?: string;
-            start_time?: string;
-            end_time?: string;
-          }>;
-        };
-      };
       const hass = this._hass;
       const devices = await hass.callWS<DeviceEntry[]>({
         type: "config/device_registry/list",
@@ -1410,15 +1404,7 @@ class CityVisitorParkingNewReservationCard extends BaseLocalizedCard<CardConfig>
       );
       const byPlate = new Map<string, Array<{ start: Date; end: Date }>>();
       const results = await Promise.allSettled(
-        domainDevices.map((device) =>
-          hass.callWS<ActiveReservationsResult>({
-            type: "call_service",
-            domain: DOMAIN,
-            service: "list_reservations",
-            return_response: true,
-            service_data: { device_id: device.id },
-          }),
-        ),
+        domainDevices.map((device) => fetchReservations(hass, device, fresh)),
       );
       let anyFailed = false;
       for (const [index, settled] of results.entries()) {
@@ -1430,9 +1416,7 @@ class CityVisitorParkingNewReservationCard extends BaseLocalizedCard<CardConfig>
           );
           continue;
         }
-        const result = settled.value;
-        const response = result?.response ?? result;
-        const reservations = response?.reservations;
+        const reservations = settled.value?.reservations;
         if (Array.isArray(reservations)) {
           for (const r of reservations) {
             const plate = normalizePlateValue(r.license_plate);
@@ -1472,7 +1456,8 @@ class CityVisitorParkingNewReservationCard extends BaseLocalizedCard<CardConfig>
     const deviceId = (detail?.device_id ?? "").trim();
     if (deviceId && this._deviceId && deviceId !== this._deviceId) return;
     this._activeReservationsLoadedFor = null;
-    await this._loadActivePlates(activeEntryId);
+    // The end service refreshed the coordinator before it returned.
+    await this._loadActivePlates(activeEntryId, false);
   }
 
   _getActiveEntryId(): string | null {

@@ -35,8 +35,12 @@ from .const import (
     CONF_PERMIT_ID,
     DOMAIN,
 )
-from .helpers import normalize_plate
-from .payloads import build_status_payload, normalize_favorites, reservation_payload
+from .payloads import (
+    build_reservations_payload,
+    build_status_payload,
+    normalize_favorites,
+    reservation_update_fields,
+)
 from .version import async_get_versions, build_log_block
 
 if TYPE_CHECKING:
@@ -357,15 +361,21 @@ async def async_setup_services(hass: HomeAssistant) -> None:
     )
 
 
-def _renews_session(
+def _write_service(
     handler: Callable[[ServiceCall], Coroutine[Any, Any, None]],
 ) -> Callable[[ServiceCall], Coroutine[Any, Any, None]]:
-    """Re-authenticate the entry after a write service fails on the provider.
+    """Wrap a write service with session renewal and a post-write refresh.
 
     A provider that reports an expired session as a generic error would fail
     every following call until the next poll renews it. Writes cannot be retried
     safely, because a provider error does not prove the request was not applied,
     so the failure is still reported and only the next attempt benefits.
+
+    After a successful write the coordinator is refreshed before the service
+    returns, so sensors follow without waiting for the next scheduled poll and
+    callers (the cards read the coordinator data over the websocket) see the
+    change. ``async_refresh`` bypasses the request debouncer, whose cooldown
+    would otherwise delay the refresh after a quick second write.
     """
 
     @functools.wraps(handler)
@@ -379,6 +389,7 @@ def _renews_session(
             if isinstance(cause, PyCityVisitorParkingError):
                 await _runtime_from_call(call).coordinator.async_renew_session(cause)
             raise
+        await _runtime_from_call(call).coordinator.async_refresh()
 
     return wrapper
 
@@ -404,7 +415,7 @@ def _resolve_zone_id(
     return cast("str", requested)
 
 
-@_renews_session
+@_write_service
 async def _async_handle_start_reservation(call: ServiceCall) -> None:
     """Handle reservation start service."""
     runtime = _runtime_from_call(call)
@@ -460,7 +471,7 @@ async def _async_handle_start_reservation(call: ServiceCall) -> None:
         )
 
 
-@_renews_session
+@_write_service
 async def _async_handle_update_reservation(call: ServiceCall) -> None:
     """Handle reservation update service."""
     runtime = _runtime_from_call(call)
@@ -493,7 +504,7 @@ async def _async_handle_update_reservation(call: ServiceCall) -> None:
         )
         return
 
-    update_fields = set(_reservation_update_fields(runtime))
+    update_fields = set(reservation_update_fields(runtime.provider))
     allow_start = ATTR_START_TIME in update_fields
     allow_end = ATTR_END_TIME in update_fields
     start_dt = start_dt_raw if start_dt_raw and allow_start else None
@@ -556,7 +567,7 @@ async def _async_handle_update_reservation(call: ServiceCall) -> None:
         )
 
 
-@_renews_session
+@_write_service
 async def _async_handle_end_reservation(call: ServiceCall) -> None:
     """Handle reservation end service."""
     runtime = _runtime_from_call(call)
@@ -582,7 +593,7 @@ async def _async_handle_end_reservation(call: ServiceCall) -> None:
         )
 
 
-@_renews_session
+@_write_service
 async def _async_handle_add_favorite(call: ServiceCall) -> None:
     """Handle add favorite service."""
     runtime = _runtime_from_call(call)
@@ -610,7 +621,7 @@ async def _async_handle_add_favorite(call: ServiceCall) -> None:
         )
 
 
-@_renews_session
+@_write_service
 async def _async_handle_update_favorite(call: ServiceCall) -> None:
     """Handle update favorite service."""
     runtime = _runtime_from_call(call)
@@ -659,7 +670,7 @@ async def _async_handle_update_favorite(call: ServiceCall) -> None:
         )
 
 
-@_renews_session
+@_write_service
 async def _async_handle_remove_favorite(call: ServiceCall) -> None:
     """Handle remove favorite service."""
     runtime = _runtime_from_call(call)
@@ -690,61 +701,29 @@ async def _async_handle_list_reservations(
         translation_key="reservation_operation_failed",
         log_label="Reservations",
     )
-    reservation_update_fields = _reservation_update_fields(runtime)
-    reservations = data.reservations
-    favorites = data.favorites
-    now = dt_util.utcnow()
-    visible = [
-        reservation for reservation in reservations if reservation.end_time > now
-    ]
-    active = [
-        reservation
-        for reservation in visible
-        if reservation.start_time <= now < reservation.end_time
-    ]
-    future = [reservation for reservation in visible if reservation.start_time > now]
-    favorite_by_plate = {
-        normalize_plate(favorite.license_plate): favorite
-        for favorite in favorites
-        if favorite.license_plate
-    }
     config_entry = runtime.coordinator.config_entry
-    entry_title = config_entry.title if config_entry else "unknown"
+    options = config_entry.options if config_entry else {}
+    payload = build_reservations_payload(
+        data,
+        options,
+        dt_util.utcnow(),
+        reservation_update_fields(runtime.provider),
+        stale=stale,
+    )
     _LOGGER.debug(
         "Reservations response for %s (permit %s): %s active, %s future of %s "
         "(duration=%.3fs)",
-        entry_title,
+        config_entry.title if config_entry else "unknown",
         runtime.permit_id,
-        len(active),
-        len(future),
-        len(reservations),
+        payload["active_count"],
+        payload["future_count"],
+        len(data.reservations),
         time.perf_counter() - request_started,
     )
-    options = config_entry.options if config_entry else {}
-    reservation_payloads: list[JsonValueType] = [
-        cast(
-            "JsonValueType",
-            reservation_payload(
-                reservation, favorite_by_plate, data.zones, options, now
-            ),
-        )
-        for reservation in visible
-    ]
-    reservation_update_fields_json: list[JsonValueType] = [
-        str(field) for field in reservation_update_fields
-    ]
-
-    return {
-        "count": len(visible),
-        "active_count": len(active),
-        "future_count": len(future),
-        # Keep the legacy response key during the migration window so the
-        # existing card and automations do not break when only the backend updates.
-        "active_reservations": reservation_payloads,
-        "reservations": reservation_payloads,
-        "stale": stale,
-        "reservation_update_fields": reservation_update_fields_json,
-    }
+    # Keep the legacy response key during the migration window so the
+    # existing card and automations do not break when only the backend updates.
+    payload["active_reservations"] = payload["reservations"]
+    return cast("dict[str, JsonValueType]", payload)
 
 
 async def _async_handle_list_favorites(call: ServiceCall) -> dict[str, JsonValueType]:
@@ -814,7 +793,7 @@ async def _async_handle_get_entry_info(call: ServiceCall) -> dict[str, JsonValue
         "auto_end_reservation_when_free": bool(entry.options.get(CONF_AUTO_END, False)),
         "reservation_update_fields": [
             cast("JsonValueType", str(field))
-            for field in _reservation_update_fields(runtime)
+            for field in reservation_update_fields(runtime.provider)
         ],
     }
 
@@ -1011,13 +990,3 @@ async def _async_refresh_runtime_data(
             translation_key=translation_key,
         )
     return coordinator_data, stale
-
-
-def _reservation_update_fields(
-    runtime: CityVisitorParkingRuntimeData,
-) -> list[str]:
-    """Return normalized reservation update fields for a provider."""
-    update_fields = getattr(runtime.provider, "reservation_update_fields", None)
-    if not isinstance(update_fields, (list, tuple)):
-        return []
-    return [str(field) for field in cast("list[object]", update_fields)]
