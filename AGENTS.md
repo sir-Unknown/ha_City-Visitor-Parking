@@ -86,10 +86,11 @@ Release automation and release notes MUST stay aligned with:
 
 Stable releases (`vX.Y.Z`) are built from `main` and pin the latest stable `pycityvisitorparking` release. A beta (`vX.Y.Z-beta.N`) is a test build: nothing in it reaches `main` before it has been tested and approved.
 
-- A beta is built from the long-lived `beta` branch or directly from a feature branch. A feature branch is often the better choice: testers get exactly that change, and nothing has to be reverted on `beta` or `main` when the test fails.
-- Never merge or push untested beta work to `main` first. A feature goes to `main` (in a normal PR) only after its beta was tested and approved.
-- `beta` contains everything on `main` plus the changes that only make sense with a library pre-release: the library pre-release pin (for example `pycityvisitorparking==0.6.0b1`) and `providers.yaml` entries for providers that exist only in that pre-release. Changes on `main` reach `beta` by merging `main` into `beta`. Never rebase or force-push `beta`.
-- A feature branch that needs a library pre-release starts from `beta`, not from `main`, so its beta contains the pre-release pin.
+- `beta` MUST always contain everything on `main`: merge `main` into `beta` whenever `main` changes, and in any case before drafting a beta. Never rebase or force-push `beta`. `beta` is `main` plus the work under test.
+- Large features that are still in development go to `beta` first (PR into `beta`), are tested in a beta release, and reach `main` in a normal PR only after the beta was tested and approved. Never merge or push untested beta work to `main`.
+- `beta` also carries the changes that only make sense with a library pre-release: the library pre-release pin (for example `pycityvisitorparking==0.6.0b1`) and `providers.yaml` entries for providers that exist only in that pre-release.
+- Branch a feature from `main`. Branch from `beta` only when the feature needs the library pre-release. A feature branched from `beta` MUST reach `main` with only its own commits (`git rebase --onto main` or cherry-pick), never with the beta-only changes below.
+- When testers need exactly one change, a beta MAY instead be built directly from a feature branch (manual flow below). Such a branch MUST also contain everything on `main`.
 - Beta-only changes (the pre-release pin and the entries above) MUST NOT be merged back to `main`. Once the library publishes the provider in a stable release, move the entry to `main` in a normal PR together with the stable pin, then merge `main` into `beta` and drop the pre-release pin.
 - Draft a beta from `beta` with the `Release Drafter` workflow run on ref `beta` with `prerelease=beta` and `version` set to the next stable version, for example `0.1.39`. This creates the tag `vX.Y.Z-beta.N`, targeting `beta`.
 - Release Drafter only drafts betas on ref `beta`. For a beta from a feature branch: push an annotated tag `vX.Y.Z-beta.N` (next free number) on the branch head, wait for the `Validate` run on that tag to succeed, then create the draft pre-release by hand from the existing tag with `--target` set to the branch, reusing the body layout of the previous beta.
@@ -160,7 +161,7 @@ The repository currently relies on GitHub Actions workflows for validation, labe
 - Do not add agent-related prefixes or suffixes such as `[codex]`, `[agent]`, or similar markers in branch names, commit titles, or pull request titles.
 - Keep feature branches current with `dev` as needed, but do not rewrite shared history once review is in progress unless explicitly requested.
 - After a feature branch is merged, delete it on GitHub and clean up the local branch as soon as it is no longer needed unless there is an explicit reason to keep it temporarily.
-- `beta` is a long-lived release branch. Do not do feature work on it directly; do it on a feature branch, which can itself serve as the beta (see "Pre-release channel" in section 5).
+- `beta` is a long-lived release branch that always contains everything on `main`. Large features in development reach it through a PR from a feature branch, not by direct commits; see "Pre-release channel" in section 5.
 
 ### Python workflow
 
