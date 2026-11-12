@@ -27,6 +27,12 @@ start_reservation:
       required: true
       selector:
         text: {}
+    zone_id:
+      name: Zone
+      description: The zone to park in, for permits that cover several zones. Leave empty to use the default zone.
+      required: false
+      selector:
+        text: {}
 
 update_reservation:
   name: Update reservation

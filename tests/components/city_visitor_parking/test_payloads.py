@@ -8,6 +8,7 @@ from custom_components.city_visitor_parking.const import STATE_CHARGEABLE, STATE
 from custom_components.city_visitor_parking.models import (
     CoordinatorData,
     TimeRange,
+    Zone,
     ZoneAvailability,
 )
 from custom_components.city_visitor_parking.payloads import build_status_payload
@@ -84,3 +85,65 @@ def test_build_status_payload_uses_null_window_fields_when_no_window_applies() -
     assert payload["window_end"] is None
     assert payload["remaining_balance"] == EXPECTED_REMAINING_MINUTES
     assert payload["balance_unit"] is None
+
+
+def test_build_status_payload_reports_each_zone_with_its_own_window() -> None:
+    """Each zone carries its own state and window; top-level stays the default zone."""
+    now = datetime(2025, 1, 6, 10, 0, tzinfo=UTC)
+    current = TimeRange(start=now - timedelta(hours=1), end=now + timedelta(hours=1))
+    later = TimeRange(start=now + timedelta(hours=1), end=now + timedelta(hours=3))
+    chargeable = ZoneAvailability(
+        is_chargeable_now=True, next_change_time=current.end, windows_today=(current,)
+    )
+    free = ZoneAvailability(
+        is_chargeable_now=False, next_change_time=later.start, windows_today=(later,)
+    )
+    data = CoordinatorData(
+        permit_id="permit-1",
+        permit_remaining_balance=15,
+        permit_balance_unit=None,
+        zone_validity=(current,),
+        reservations=(),
+        favorites=(),
+        zone_availability=chargeable,
+        active_reservations=(),
+        zones=(
+            Zone(
+                zone_id="10",
+                name="10",
+                zone_validity=(current,),
+                zone_availability=chargeable,
+            ),
+            Zone(
+                zone_id="630",
+                name="630",
+                zone_validity=(later,),
+                zone_availability=free,
+            ),
+        ),
+    )
+
+    payload = build_status_payload(data, {}, now)
+
+    # Keep aligned with frontend/src/types.ts:ZoneStatusZone.
+    assert payload["state"] == STATE_CHARGEABLE
+    assert payload["zones"] == [
+        {
+            "zone_id": "10",
+            "name": "10",
+            "state": STATE_CHARGEABLE,
+            "next_change_time": current.end.isoformat(),
+            "window_kind": "current",
+            "window_start": current.start.isoformat(),
+            "window_end": current.end.isoformat(),
+        },
+        {
+            "zone_id": "630",
+            "name": "630",
+            "state": STATE_FREE,
+            "next_change_time": later.start.isoformat(),
+            "window_kind": "next",
+            "window_start": later.start.isoformat(),
+            "window_end": later.end.isoformat(),
+        },
+    ]

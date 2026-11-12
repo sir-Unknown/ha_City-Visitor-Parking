@@ -28,6 +28,7 @@ from custom_components.city_visitor_parking.const import (
     ATTR_NAME,
     ATTR_RESERVATION_ID,
     ATTR_START_TIME,
+    ATTR_ZONE_ID,
     CONF_AUTO_END,
     DOMAIN,
 )
@@ -38,6 +39,7 @@ from custom_components.city_visitor_parking.models import (
     ProviderConfig,
     Reservation,
     TimeRange,
+    Zone,
     ZoneAvailability,
 )
 from custom_components.city_visitor_parking.runtime_data import (
@@ -1321,6 +1323,92 @@ async def test_service_input_error_does_not_renew_session(
     entry.runtime_data.coordinator.async_renew_session.assert_not_awaited()
 
 
+def _coordinator_data(permit_id: str, zones: tuple[Zone, ...] = ()) -> CoordinatorData:
+    """Return empty coordinator data, optionally with selectable zones."""
+    return CoordinatorData(
+        permit_id=permit_id,
+        permit_remaining_balance=0,
+        permit_balance_unit=None,
+        zone_validity=zones[0].zone_validity if zones else (),
+        reservations=(),
+        favorites=(),
+        zone_availability=_FREE,
+        active_reservations=(),
+        zones=zones,
+    )
+
+
+_FREE = ZoneAvailability(
+    is_chargeable_now=False, next_change_time=None, windows_today=()
+)
+
+
+def _zone(zone_id: str) -> Zone:
+    """Return a selectable zone without windows."""
+    return Zone(
+        zone_id=zone_id, name=zone_id, zone_validity=(), zone_availability=_FREE
+    )
+
+
+async def test_service_start_reservation_books_in_the_default_or_requested_zone(
+    hass: HomeAssistant,
+) -> None:
+    """Without zone_id the first (default) zone is used; a known zone_id is passed."""
+    await async_setup_services(hass)
+    entry, device, provider = _create_entry_with_device(hass, "permit1")
+    entry.runtime_data.coordinator.data = _coordinator_data(
+        "permit1", (_zone("630"), _zone("10"))
+    )
+    now = datetime(2025, 1, 1, 12, 0, tzinfo=UTC)
+    call = {
+        ATTR_DEVICE_ID: device.id,
+        ATTR_START_TIME: now + timedelta(hours=1),
+        ATTR_END_TIME: now + timedelta(hours=2),
+        ATTR_LICENSE_PLATE: "AB1234",
+    }
+
+    with freeze_time(now):
+        await hass.services.async_call(
+            DOMAIN, SERVICE_START_RESERVATION, call, blocking=True
+        )
+        await hass.services.async_call(
+            DOMAIN,
+            SERVICE_START_RESERVATION,
+            {**call, ATTR_ZONE_ID: "10"},
+            blocking=True,
+        )
+
+    zones = [c.kwargs["zone_id"] for c in provider.start_reservation.await_args_list]
+    assert zones == ["630", "10"]
+
+
+async def test_service_start_reservation_rejects_unknown_zone(
+    hass: HomeAssistant,
+) -> None:
+    """A zone outside the permit fails before the provider is called."""
+    await async_setup_services(hass)
+    entry, device, provider = _create_entry_with_device(hass, "permit1")
+    entry.runtime_data.coordinator.data = _coordinator_data("permit1", (_zone("10"),))
+    now = datetime(2025, 1, 1, 12, 0, tzinfo=UTC)
+
+    with freeze_time(now), pytest.raises(ServiceValidationError) as excinfo:
+        await hass.services.async_call(
+            DOMAIN,
+            SERVICE_START_RESERVATION,
+            {
+                ATTR_DEVICE_ID: device.id,
+                ATTR_START_TIME: now + timedelta(hours=1),
+                ATTR_END_TIME: now + timedelta(hours=2),
+                ATTR_LICENSE_PLATE: "AB1234",
+                ATTR_ZONE_ID: "999",
+            },
+            blocking=True,
+        )
+
+    assert excinfo.value.translation_key == "invalid_zone"
+    provider.start_reservation.assert_not_awaited()
+
+
 def _create_entry_with_device(
     hass: HomeAssistant, permit_id: str, options: dict[str, object] | None = None
 ) -> tuple[MockConfigEntry, dr.DeviceEntry, AsyncMock]:
@@ -1347,6 +1435,7 @@ def _create_entry_with_device(
     coordinator.async_call_with_relogin = AsyncMock(side_effect=_call_through)
     coordinator.last_update_success = True
     coordinator.config_entry = entry
+    coordinator.data = _coordinator_data(permit_id)
 
     runtime = CityVisitorParkingRuntimeData(
         client=AsyncMock(),

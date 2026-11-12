@@ -36,6 +36,7 @@ class Reservation:
     start_time: datetime
     end_time: datetime
     license_plate: str | None = None
+    zone_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -57,6 +58,16 @@ class ZoneAvailability:
 
 
 @dataclass(frozen=True)
+class Zone:
+    """Normalized zone of the permit with its own chargeable windows."""
+
+    zone_id: str
+    name: str
+    zone_validity: tuple[TimeRange, ...]
+    zone_availability: ZoneAvailability
+
+
+@dataclass(frozen=True)
 class CoordinatorData:
     """Coordinator data for entities and services."""
 
@@ -68,6 +79,15 @@ class CoordinatorData:
     favorites: tuple[Favorite, ...]
     zone_availability: ZoneAvailability
     active_reservations: tuple[Reservation, ...]
+    # Zones a reservation can be started in; the first one is the provider default
+    # and matches ``zone_validity``. Empty when the provider has no zone selection.
+    zones: tuple[Zone, ...] = ()
+
+    def zone(self, zone_id: str | None) -> Zone | None:
+        """Return the zone with ``zone_id``, or None when it is unknown."""
+        if zone_id is None:
+            return None
+        return next((zone for zone in self.zones if zone.zone_id == zone_id), None)
 
 
 def _default_attempts() -> dict[str, datetime]:

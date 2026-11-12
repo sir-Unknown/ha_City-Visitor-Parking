@@ -7,6 +7,8 @@ import type {
   PermitEntry,
   PermitOption,
   ZoneStatus,
+  ZoneStatusResponse,
+  ZoneStatusZone,
 } from "./types";
 import { localize } from "./translations";
 
@@ -119,6 +121,86 @@ export const applyZoneStatus = (
     _remainingMinutes: status?.remainingMinutes ?? null,
     _balanceUnit: status?.balanceUnit ?? null,
   });
+};
+
+type ZoneWindowPayload = {
+  state?: unknown;
+  window_kind?: unknown;
+  window_start?: unknown;
+  window_end?: unknown;
+};
+
+const nonEmptyString = (value: unknown): string | null =>
+  typeof value === "string" && value ? value : null;
+
+/** Normalizes the state and window fields shared by status payloads and zones. */
+const normalizeZoneWindow = (
+  payload: ZoneWindowPayload | null | undefined,
+): Pick<ZoneStatus, "state" | "kind" | "start" | "end"> => {
+  const state =
+    payload?.state === "chargeable" || payload?.state === "free"
+      ? payload.state
+      : null;
+  const kind =
+    payload?.window_kind === "current" || payload?.window_kind === "next"
+      ? payload.window_kind
+      : null;
+  return {
+    state,
+    kind,
+    start: kind ? nonEmptyString(payload?.window_start) : null,
+    end: kind ? nonEmptyString(payload?.window_end) : null,
+  };
+};
+
+/** Normalizes the top-level (default zone) part of a status payload. */
+export const normalizeZoneStatus = (
+  payload: ZoneStatusResponse | null | undefined,
+): ZoneStatus => {
+  const balance = payload?.remaining_balance;
+  return {
+    ...normalizeZoneWindow(payload),
+    remainingMinutes:
+      typeof balance === "number" && Number.isFinite(balance) ? balance : null,
+    balanceUnit: nonEmptyString(payload?.balance_unit),
+  };
+};
+
+/** Returns the usable zone entries of a status payload, default zone first. */
+export const normalizeZones = (
+  payload: ZoneStatusResponse | null | undefined,
+): ZoneStatusZone[] =>
+  Array.isArray(payload?.zones)
+    ? payload.zones.filter((zone) => Boolean(nonEmptyString(zone?.zone_id)))
+    : [];
+
+/** Resolves the remembered zone, falling back to the first (default) zone. */
+export const resolveSelectedZone = (
+  zones: readonly ZoneStatusZone[],
+  selectedZoneId: string | null | undefined,
+): ZoneStatusZone | null =>
+  zones.find((zone) => zone.zone_id === selectedZoneId) ?? zones[0] ?? null;
+
+/**
+ * Replaces the state and window of a status with those of the selected zone.
+ * Balance fields stay permit-wide. A status without state (not loaded or
+ * failed) is returned unchanged so cached zone windows never outlive it.
+ */
+export const applyZoneToStatus = (
+  status: ZoneStatus,
+  zone: ZoneStatusZone | null,
+): ZoneStatus =>
+  zone && status.state !== null
+    ? { ...status, ...normalizeZoneWindow(zone) }
+    : status;
+
+/** Builds the optional `zone_id` part of the `start_reservation` service data. */
+export const buildZoneServiceData = (
+  zones: readonly ZoneStatusZone[],
+  selectedZoneId: string | null | undefined,
+): { zone_id?: string } => {
+  const zone = resolveSelectedZone(zones, selectedZoneId);
+  return zone ? { zone_id: zone.zone_id } : {};
 };
 
 /** Returns whether a config entry should be hidden from permit selection. */

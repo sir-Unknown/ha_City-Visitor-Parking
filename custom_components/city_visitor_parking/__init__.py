@@ -34,6 +34,7 @@ from .config_flow import async_load_providers
 from .const import (
     CONF_API_URL,
     CONF_BASE_URL,
+    CONF_DEFAULT_ZONE,
     CONF_DEMO_MODE,
     CONF_FREE_DATES,
     CONF_FREE_WEEKDAYS,
@@ -348,6 +349,13 @@ async def _async_update_listener(
     if overrides_changed or free_dates_changed or free_weekdays_changed:
         # Reload so the coordinator recomputes availability with new windows.
         await hass.config_entries.async_reload(entry.entry_id)
+        return
+    data = runtime.coordinator.data
+    default_zone = entry.options.get(CONF_DEFAULT_ZONE)
+    if data.zones and data.zones[0].zone_id != default_zone:
+        # The default zone only changes which windows the permit-level state uses;
+        # a refresh recomputes it without reloading the entry.
+        await runtime.coordinator.async_request_refresh()
 
 
 async def async_unload_entry(

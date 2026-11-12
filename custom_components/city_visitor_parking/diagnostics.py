@@ -61,6 +61,19 @@ async def async_get_config_entry_diagnostics(
             "favorites": len(data.favorites),
             "zone_validity_blocks": len(data.zone_validity),
             "zone_is_chargeable_now": data.zone_availability.is_chargeable_now,
+            # Zone ids and names are public area names, not personal data.
+            "zones": [
+                {
+                    "zone_id": zone.zone_id,
+                    "name": zone.name,
+                    "zone_validity_blocks": len(zone.zone_validity),
+                    "is_chargeable_now": zone.zone_availability.is_chargeable_now,
+                }
+                for zone in data.zones
+            ],
+            "reservation_zone_ids": [
+                reservation.zone_id for reservation in data.active_reservations
+            ],
         },
         "options_summary": {
             CONF_AUTO_END: entry.options.get(CONF_AUTO_END, False),

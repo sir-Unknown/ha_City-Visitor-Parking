@@ -30,6 +30,7 @@ from .const import (
     ATTR_NAME,
     ATTR_RESERVATION_ID,
     ATTR_START_TIME,
+    ATTR_ZONE_ID,
     CONF_AUTO_END,
     CONF_PERMIT_ID,
     DOMAIN,
@@ -218,6 +219,7 @@ SERVICE_START_SCHEMA: Final[vol.Schema] = vol.Schema(
         vol.Required(ATTR_START_TIME): cv.datetime,
         vol.Required(ATTR_END_TIME): cv.datetime,
         vol.Required(ATTR_LICENSE_PLATE): cv.string,
+        vol.Optional(ATTR_ZONE_ID): cv.string,
     }
 )
 
@@ -381,6 +383,27 @@ def _renews_session(
     return wrapper
 
 
+def _resolve_zone_id(
+    runtime: CityVisitorParkingRuntimeData, requested: object
+) -> str | None:
+    """Return the zone to book in, or None for a permit without zones.
+
+    Without a requested zone the default zone (the first of the coordinator's
+    zones, which honours the default chosen in the options) is used, so the
+    service and the card book in the same zone.
+    """
+    data = cast("CoordinatorData | None", runtime.coordinator.data)
+    zones = data.zones if data is not None else ()
+    if requested is None:
+        return zones[0].zone_id if zones else None
+    if data is None or data.zone(cast("str", requested)) is None:
+        raise ServiceValidationError(
+            translation_domain=DOMAIN,
+            translation_key="invalid_zone",
+        )
+    return cast("str", requested)
+
+
 @_renews_session
 async def _async_handle_start_reservation(call: ServiceCall) -> None:
     """Handle reservation start service."""
@@ -411,11 +434,14 @@ async def _async_handle_start_reservation(call: ServiceCall) -> None:
             translation_key="end_before_start",
         )
 
+    zone_id = _resolve_zone_id(runtime, call.data.get(ATTR_ZONE_ID))
     try:
         await runtime.provider.start_reservation(
             license_plate=license_plate,
             start_time=start,
             end_time=end,
+            # Only providers with zones accept the argument.
+            **({"zone_id": zone_id} if zone_id is not None else {}),
         )
     except PyCityVisitorParkingError as err:
         ha_cvp_version, pycvp_version = await async_get_versions(call.hass)

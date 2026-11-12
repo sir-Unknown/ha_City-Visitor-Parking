@@ -34,6 +34,7 @@
   "active_editor.value.card_type.new": "New reservation card",
   "active_editor.value.card_type.active": "Active reservations card",
   "field.permit": "Permit",
+  "field.zone": "Zone",
   "field.favorite": "Favorite",
   "field.name": "Name",
   "field.license_plate": "License plate",

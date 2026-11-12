@@ -22,6 +22,7 @@ from .auth import async_provider_login, has_stored_credentials
 from .const import (
     AUTO_END_COOLDOWN,
     CONF_AUTO_END,
+    CONF_DEFAULT_ZONE,
     DEFAULT_UPDATE_INTERVAL,
     IDLE_UPDATE_INTERVAL,
     RELOGIN_COOLDOWN,
@@ -35,6 +36,7 @@ from .models import (
     CoordinatorData,
     Reservation,
     TimeRange,
+    Zone,
     ZoneAvailability,
 )
 from .models import Favorite as CoordinatorFavorite
@@ -190,15 +192,23 @@ class CityVisitorParkingCoordinator(DataUpdateCoordinator[CoordinatorData]):
 
         remaining_balance = _normalize_remaining_balance(permit)
         balance_unit = get_attr(permit, "balance_unit")
-        zone_validity = _normalize_zone_validity(permit)
         normalized_reservations = _normalize_reservations(reservations)
         normalized_favorites = _normalize_favorites(favorites)
         now = dt_util.utcnow()
+        options = self._options()
         active_reservations = _active_reservations(normalized_reservations, now)
-        zone_availability = _compute_zone_availability(
-            zone_validity,
-            self._options(),
-            now,
+        zones = _order_default_zone_first(
+            _normalize_zones(permit, options, now), options.get(CONF_DEFAULT_ZONE)
+        )
+        # The permit-level windows (sensors, status, auto-end fallback) follow the
+        # default zone: the user's choice from the options, else the provider's.
+        zone_validity = (
+            list(zones[0].zone_validity) if zones else _normalize_zone_validity(permit)
+        )
+        zone_availability = (
+            zones[0].zone_availability
+            if zones
+            else _compute_zone_availability(zone_validity, options, now)
         )
 
         data = CoordinatorData(
@@ -210,6 +220,7 @@ class CityVisitorParkingCoordinator(DataUpdateCoordinator[CoordinatorData]):
             favorites=tuple(normalized_favorites),
             zone_availability=zone_availability,
             active_reservations=tuple(active_reservations),
+            zones=tuple(zones),
         )
 
         next_interval = self._compute_next_interval(data, now)
@@ -344,11 +355,9 @@ class CityVisitorParkingCoordinator(DataUpdateCoordinator[CoordinatorData]):
         self._relogin_rejections = 0
 
     async def _async_maybe_auto_end(self, data: CoordinatorData) -> None:
-        """Auto-end reservations when the zone becomes free."""
+        """Auto-end reservations when the zone they are parked in becomes free."""
         options = self._options()
         if not options.get(CONF_AUTO_END, False):
-            return
-        if data.zone_availability.is_chargeable_now:
             return
         if not data.active_reservations:
             return
@@ -357,6 +366,14 @@ class CityVisitorParkingCoordinator(DataUpdateCoordinator[CoordinatorData]):
         self._prune_auto_end_attempts(now)
 
         for reservation in data.active_reservations:
+            # Zones have different paid hours, so judge each reservation by its own
+            # zone; fall back to the permit's default zone when it is unknown.
+            zone = data.zone(reservation.zone_id)
+            availability = (
+                zone.zone_availability if zone is not None else data.zone_availability
+            )
+            if availability.is_chargeable_now:
+                continue
             if not _should_attempt_auto_end(
                 self._auto_end_state,
                 reservation.reservation_id,
@@ -473,9 +490,9 @@ def _parse_time_range(item: object) -> TimeRange | None:
     return TimeRange(start=start_dt, end=end_dt)
 
 
-def _normalize_zone_validity(permit: Permit) -> list[TimeRange]:
-    """Normalize zone validity blocks to TimeRange objects in UTC."""
-    raw_blocks = get_attr(permit, "zone_validity")
+def _normalize_zone_validity(permit_or_zone: object) -> list[TimeRange]:
+    """Normalize the zone validity blocks of a permit or zone to UTC TimeRanges."""
+    raw_blocks = get_attr(permit_or_zone, "zone_validity")
     if not isinstance(raw_blocks, list):
         return []
     return [
@@ -483,6 +500,51 @@ def _normalize_zone_validity(permit: Permit) -> list[TimeRange]:
         for block in cast("list[object]", raw_blocks)
         if (time_range := _parse_time_range(block)) is not None
     ]
+
+
+def _normalize_zones(
+    permit: Permit, options: Mapping[str, object], now: datetime
+) -> list[Zone]:
+    """Normalize the permit's selectable zones, keeping the provider order.
+
+    ``Permit.zones`` only exists in library versions with zone selection, so a
+    missing attribute means the permit has no selectable zones.
+    """
+    raw_zones = get_attr(permit, "zones")
+    if not isinstance(raw_zones, list):
+        return []
+    zones: list[Zone] = []
+    for raw_zone in cast("list[object]", raw_zones):
+        zone_id = get_attr(raw_zone, "id")
+        if zone_id is None:
+            continue
+        name = get_attr(raw_zone, "name")
+        zone_validity = _normalize_zone_validity(raw_zone)
+        zones.append(
+            Zone(
+                zone_id=str(zone_id),
+                name=str(name) if name else str(zone_id),
+                zone_validity=tuple(zone_validity),
+                zone_availability=_compute_zone_availability(
+                    zone_validity, options, now
+                ),
+            )
+        )
+    return zones
+
+
+def _order_default_zone_first(zones: list[Zone], default_zone_id: object) -> list[Zone]:
+    """Move the user's default zone to the front; keep the provider order otherwise.
+
+    A stored default that the permit no longer has is ignored, so the provider's
+    default (its first zone) applies again.
+    """
+    if not isinstance(default_zone_id, str):
+        return zones
+    for index, zone in enumerate(zones):
+        if zone.zone_id == default_zone_id:
+            return [zone, *zones[:index], *zones[index + 1 :]]
+    return zones
 
 
 def _normalize_remaining_balance(permit: Permit) -> float:
@@ -512,12 +574,14 @@ def _normalize_reservations(
         if time_range is None:
             continue
         license_plate = get_attr(reservation, "license_plate")
+        zone_id = get_attr(reservation, "zone_id")
         normalized.append(
             Reservation(
                 reservation_id=str(reservation_id),
                 start_time=time_range.start,
                 end_time=time_range.end,
                 license_plate=str(license_plate) if license_plate else None,
+                zone_id=str(zone_id) if zone_id is not None else None,
             )
         )
     return normalized

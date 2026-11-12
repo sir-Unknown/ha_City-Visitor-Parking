@@ -63,7 +63,11 @@
         "title": "Opties",
         "description": "Pas het parkeergedrag aan voor deze vergunning: stel aangepaste betaaltijden in per dag, configureer gratis parkeerdagen en beheer het automatisch beëindigen van reserveringen.",
         "data": {
-          "auto_end_reservation_when_free": "Reservaties automatisch beëindigen wanneer parkeren gratis is"
+          "auto_end_reservation_when_free": "Reservaties automatisch beëindigen wanneer parkeren gratis is",
+          "default_zone": "Standaardzone"
+        },
+        "data_description": {
+          "default_zone": "Zone die in de kaart vooraf is geselecteerd en wordt gebruikt als een reservering geen zone noemt. De zonestatus-sensoren volgen deze zone."
         },
         "sections": {
           "operating_times": {
@@ -141,6 +145,10 @@
         "license_plate": {
           "name": "Kenteken",
           "description": "Het kenteken van het voertuig."
+        },
+        "zone_id": {
+          "name": "Zone",
+          "description": "De zone waarin geparkeerd wordt, voor vergunningen met meerdere zones. Laat leeg om de standaardzone te gebruiken."
         }
       }
     },
@@ -354,6 +362,9 @@
     },
     "status_operation_failed": {
       "message": "De vergunningstatus kon niet worden geladen. Probeer het later opnieuw."
+    },
+    "invalid_zone": {
+      "message": "De gekozen zone hoort niet bij deze vergunning."
     }
   },
   "entity": {

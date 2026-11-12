@@ -19,6 +19,7 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 import custom_components.city_visitor_parking.coordinator as coord_module
 from custom_components.city_visitor_parking.const import (
     CONF_AUTO_END,
+    CONF_DEFAULT_ZONE,
     CONF_MUNICIPALITY,
     CONF_OPERATING_TIME_OVERRIDES,
     CONF_PROVIDER_ID,
@@ -101,6 +102,96 @@ async def test_auto_end_reservation_once(hass: HomeAssistant) -> None:
         await coordinator.async_refresh()
 
     provider.end_reservation.assert_awaited_once()
+
+
+def _zone_permit(now: datetime) -> dict[str, object]:
+    """Return a permit with zone 10 chargeable now and zone 630 free until later."""
+
+    def window(start_hours: int, end_hours: int) -> dict[str, str]:
+        base = now.replace(hour=0, minute=0)
+        return {
+            "start_time": (base + timedelta(hours=start_hours)).isoformat(),
+            "end_time": (base + timedelta(hours=end_hours)).isoformat(),
+        }
+
+    return {
+        "zone_validity": [window(9, 22)],
+        "zones": [
+            {"id": "10", "name": "10", "zone_validity": [window(9, 22)]},
+            {"id": "630", "name": "630", "zone_validity": [window(11, 21)]},
+        ],
+    }
+
+
+@pytest.mark.parametrize(
+    ("options", "expected_order"),
+    [({}, ["10", "630"]), ({CONF_DEFAULT_ZONE: "630"}, ["630", "10"])],
+)
+async def test_permit_windows_follow_the_default_zone(
+    hass: HomeAssistant, options: dict[str, object], expected_order: list[str]
+) -> None:
+    """The chosen default zone comes first and drives the permit-level state."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={"permit_id": "permit", CONF_PROVIDER_ID: "p", CONF_MUNICIPALITY: "M"},
+        options=options,
+    )
+    entry.add_to_hass(hass)
+    now = datetime(2025, 1, 6, 10, 0, tzinfo=UTC)
+    provider = AsyncMock()
+    provider.fetch_all.return_value = (_zone_permit(now), [], [])
+    coordinator = CityVisitorParkingCoordinator(
+        hass,
+        provider=provider,
+        config_entry=entry,
+        permit_id="permit",
+        auto_end_state=AutoEndState(),
+    )
+
+    with freeze_time(now):
+        await coordinator.async_refresh()
+
+    data = coordinator.data
+    assert [zone.zone_id for zone in data.zones] == expected_order
+    assert data.zone_validity == data.zones[0].zone_validity
+    assert data.zone_availability.is_chargeable_now is (expected_order[0] == "10")
+
+
+async def test_auto_end_judges_each_reservation_by_its_own_zone(
+    hass: HomeAssistant,
+) -> None:
+    """Only the reservation in the zone that is free now is ended."""
+    entry = _create_entry(auto_end=True)
+    entry.add_to_hass(hass)
+    now = datetime(2025, 1, 6, 10, 0, tzinfo=UTC)
+
+    def reservation(reservation_id: str, zone_id: str) -> dict[str, str]:
+        return {
+            "id": reservation_id,
+            "start_time": (now - timedelta(hours=1)).isoformat(),
+            "end_time": (now + timedelta(hours=1)).isoformat(),
+            "zone_id": zone_id,
+        }
+
+    provider = AsyncMock()
+    provider.fetch_all.return_value = (
+        _zone_permit(now),
+        [reservation("in-10", "10"), reservation("in-630", "630")],
+        [],
+    )
+    coordinator = CityVisitorParkingCoordinator(
+        hass,
+        provider=provider,
+        config_entry=entry,
+        permit_id="permit",
+        auto_end_state=AutoEndState(),
+    )
+
+    with freeze_time(now):
+        await coordinator.async_refresh()
+
+    ended = [call.args[0] for call in provider.end_reservation.await_args_list]
+    assert ended == ["in-630"]
 
 
 async def test_auth_failure_triggers_reauth(

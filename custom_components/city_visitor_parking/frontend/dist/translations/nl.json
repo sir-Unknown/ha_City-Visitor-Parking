@@ -34,6 +34,7 @@
   "active_editor.value.card_type.new": "Reservering starten",
   "active_editor.value.card_type.active": "Actieve reserveringen",
   "field.permit": "Vergunning",
+  "field.zone": "Zone",
   "field.favorite": "Favoriet",
   "field.name": "Naam",
   "field.license_plate": "Kenteken",

@@ -7,6 +7,7 @@ import type {
   ProgressButtonElement,
   StatusState,
   StatusType,
+  ZoneStatusZone,
 } from "./types";
 import { getGlobalHass, localize } from "./translations";
 import { DOMAIN, formatBalanceLabel, normalizeMatchValue } from "./helpers";
@@ -221,6 +222,53 @@ export const renderPermitSelect = (params: {
         .label=${params.label}
         .value=${params.value}
         .required=${false}
+        ?disabled=${params.disabled}
+        @value-changed=${params.onSelected}
+      ></ha-selector>
+    </div>
+  `;
+};
+
+/** Renders the zone selector for permits with multiple zones, or a preview. */
+export const renderZoneSelect = (params: {
+  hass: HomeAssistant | null | undefined;
+  label: string;
+  zones: readonly ZoneStatusZone[];
+  value: string;
+  disabled: boolean;
+  preview?: boolean;
+  onSelected: (event: Event) => void;
+}): TemplateResult => {
+  if (params.preview) {
+    return html`
+      <div class="row">
+        <ha-input
+          appearance="material"
+          .label=${params.label}
+          .value=${params.zones.find((zone) => zone.zone_id === params.value)
+            ?.name ?? ""}
+          ?disabled=${true}
+        ></ha-input>
+      </div>
+    `;
+  }
+  return html`
+    <div class="row">
+      <ha-selector
+        id="zoneSelect"
+        .hass=${params.hass}
+        .selector=${{
+          select: {
+            options: params.zones.map((zone) => ({
+              value: zone.zone_id,
+              label: zone.name || zone.zone_id,
+            })),
+            mode: "dropdown",
+          },
+        }}
+        .label=${params.label}
+        .value=${params.value}
+        .required=${true}
         ?disabled=${params.disabled}
         @value-changed=${params.onSelected}
       ></ha-selector>

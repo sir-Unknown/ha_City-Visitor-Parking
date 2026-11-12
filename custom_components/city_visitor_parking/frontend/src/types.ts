@@ -81,6 +81,30 @@ export type ZoneStatus = {
 };
 
 /**
+ * One entry of `ZoneStatusResponse.zones`.
+ *
+ * State and window fields are computed exactly like the top-level
+ * `ZoneStatusResponse` fields (weekday overrides applied), so an entry can
+ * replace them when displaying the status of that zone.
+ */
+export type ZoneStatusZone = {
+  /** Opaque provider zone id; send back unchanged as `zone_id`. */
+  zone_id: string;
+  /** Display name of the zone. */
+  name: string;
+  /** Current effective state of this zone. */
+  state: "chargeable" | "free";
+  /** Kind of the window referenced by `window_start`/`window_end`. */
+  window_kind: "current" | "next" | null;
+  /** UTC ISO8601 start timestamp of the effective window, or `null`. */
+  window_start: string | null;
+  /** UTC ISO8601 end timestamp of the effective window, or `null`. */
+  window_end: string | null;
+  /** UTC ISO8601 timestamp of the next state change, or `null`. */
+  next_change_time: string | null;
+};
+
+/**
  * Payload returned by the Python websocket handler `city_visitor_parking/status`.
  *
  * `build_status_payload()` in `payloads.py` always returns this full key set.
@@ -126,6 +150,13 @@ export type ZoneStatusResponse = {
    * does not expose a string balance unit.
    */
   balance_unit: string | null;
+
+  /**
+   * Zones the permit can park in. The first entry is the provider's default
+   * zone, which the top-level state and window fields describe. Empty when
+   * the provider or permit exposes no zones.
+   */
+  zones: ZoneStatusZone[];
 };
 
 /** HTMLElement variant used for simple input-like value access. */

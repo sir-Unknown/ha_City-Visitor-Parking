@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from homeassistant.util import dt as dt_util
 
@@ -15,12 +15,18 @@ from .time_windows import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable, Mapping
+    from collections.abc import Iterable, Mapping, Sequence
     from datetime import datetime
 
     from pycityvisitorparking import Favorite as ProviderFavorite
 
-    from .models import CoordinatorData, Favorite, Reservation, TimeRange
+    from .models import (
+        CoordinatorData,
+        Favorite,
+        Reservation,
+        TimeRange,
+        ZoneAvailability,
+    )
 
 
 def utc_iso(value: datetime | None) -> str | None:
@@ -84,24 +90,23 @@ def normalize_favorites(
     return normalized
 
 
-def build_status_payload(
-    data: CoordinatorData,
+def _availability_payload(
+    zone_validity: Sequence[TimeRange],
+    availability: ZoneAvailability,
     options: Mapping[str, object],
     now: datetime,
     *,
-    stale: bool = False,
+    stale: bool,
 ) -> dict[str, object]:
-    """Build the shared status response for services and websocket."""
-    provider_windows_today = windows_for_today(data.zone_validity, {}, now)
-    effective_windows_today = windows_for_today(data.zone_validity, options, now)
+    """Return state and current/next effective window for one set of windows."""
+    effective_windows_today = windows_for_today(zone_validity, options, now)
     effective_window = current_or_next_window_with_overrides(
-        data.zone_validity,
+        zone_validity,
         options,
         now,
     )
-    provider_window = current_or_next_window(data.zone_validity, now)
-    is_chargeable_now = data.zone_availability.is_chargeable_now
-    next_change_time = data.zone_availability.next_change_time
+    is_chargeable_now = availability.is_chargeable_now
+    next_change_time = availability.next_change_time
     if stale:
         current_effective_window = next(
             (
@@ -134,6 +139,42 @@ def build_status_payload(
         "window_kind": window_kind,
         "window_start": utc_iso(effective_window.start) if effective_window else None,
         "window_end": utc_iso(effective_window.end) if effective_window else None,
+        "effective_windows_today": effective_windows_today,
+    }
+
+
+def build_status_payload(
+    data: CoordinatorData,
+    options: Mapping[str, object],
+    now: datetime,
+    *,
+    stale: bool = False,
+) -> dict[str, object]:
+    """Build the shared status response for services and websocket.
+
+    Top-level fields describe the default zone. ``zones`` repeats the state and
+    window per selectable zone (default first) so the card can switch zones
+    without another request; it is empty when the permit has no zones.
+    """
+    provider_windows_today = windows_for_today(data.zone_validity, {}, now)
+    provider_window = current_or_next_window(data.zone_validity, now)
+    default_status = _availability_payload(
+        data.zone_validity, data.zone_availability, options, now, stale=stale
+    )
+    effective_windows_today = cast(
+        "list[TimeRange]", default_status.pop("effective_windows_today")
+    )
+    zones: list[dict[str, object]] = []
+    for zone in data.zones:
+        zone_status = _availability_payload(
+            zone.zone_validity, zone.zone_availability, options, now, stale=stale
+        )
+        del zone_status["effective_windows_today"]
+        del zone_status["is_chargeable_now"]
+        zones.append({"zone_id": zone.zone_id, "name": zone.name, **zone_status})
+
+    return {
+        **default_status,
         "effective_windows_today": [
             timerange_payload(window) for window in effective_windows_today
         ],
@@ -150,4 +191,5 @@ def build_status_payload(
         "remaining_balance": max(0.0, data.permit_remaining_balance),
         "balance_unit": data.permit_balance_unit,
         "permit_id": data.permit_id,
+        "zones": zones,
     }

@@ -31,6 +31,7 @@ from .const import (
     CONF_API_URL,
     CONF_AUTO_END,
     CONF_BASE_URL,
+    CONF_DEFAULT_ZONE,
     CONF_DEMO_MODE,
     CONF_FREE_DATES,
     CONF_FREE_WEEKDAYS,
@@ -474,17 +475,35 @@ class CityVisitorParkingOptionsFlow(config_entries.OptionsFlow):
             if errors:
                 return self._show_form(user_input, errors)
 
-            return self.async_create_entry(
-                title="",
-                data={
-                    CONF_AUTO_END: cast("bool", user_input[CONF_AUTO_END]),
-                    CONF_FREE_DATES: free_dates,
-                    CONF_FREE_WEEKDAYS: free_weekdays,
-                    CONF_OPERATING_TIME_OVERRIDES: overrides,
-                },
+            options: dict[str, object] = {
+                CONF_AUTO_END: cast("bool", user_input[CONF_AUTO_END]),
+                CONF_FREE_DATES: free_dates,
+                CONF_FREE_WEEKDAYS: free_weekdays,
+                CONF_OPERATING_TIME_OVERRIDES: overrides,
+            }
+            # Keep the stored default zone when the form could not offer the field
+            # (entry not loaded, or the permit has one zone right now).
+            default_zone = user_input.get(
+                CONF_DEFAULT_ZONE, self._config_entry.options.get(CONF_DEFAULT_ZONE)
             )
+            if isinstance(default_zone, str) and default_zone:
+                options[CONF_DEFAULT_ZONE] = default_zone
+            return self.async_create_entry(title="", data=options)
 
         return self._show_form(user_input, errors)
+
+    def _zone_choices(self) -> list[tuple[str, str]]:
+        """Return ``(zone_id, name)`` for the permit's zones, or [] when unknown.
+
+        Zones come from the running coordinator, so they are only available while
+        the entry is loaded and has fetched data at least once.
+        """
+        if self._config_entry.state is not config_entries.ConfigEntryState.LOADED:
+            return []
+        runtime = getattr(self._config_entry, "runtime_data", None)
+        data = getattr(getattr(runtime, "coordinator", None), "data", None)
+        zones = getattr(data, "zones", ())
+        return [(zone.zone_id, zone.name) for zone in zones]
 
     def _show_form(
         self, user_input: dict[str, object] | None, errors: dict[str, str]
@@ -521,6 +540,30 @@ class CityVisitorParkingOptionsFlow(config_entries.OptionsFlow):
         schema: dict[object, object] = {
             vol.Required(CONF_AUTO_END, default=defaults[CONF_AUTO_END]): cv.boolean,
         }
+
+        zones = self._zone_choices()
+        if len(zones) > 1:
+            # Only a permit with several zones has a default worth choosing. The
+            # stored default may be gone from the permit; fall back to the first.
+            zone_ids = [zone_id for zone_id, _ in zones]
+            default_zone = self._config_entry.options.get(CONF_DEFAULT_ZONE)
+            if user_input is not None and isinstance(
+                user_input.get(CONF_DEFAULT_ZONE), str
+            ):
+                default_zone = user_input[CONF_DEFAULT_ZONE]
+            if default_zone not in zone_ids:
+                default_zone = zone_ids[0]
+            schema[vol.Required(CONF_DEFAULT_ZONE, default=default_zone)] = (
+                selector.SelectSelector(
+                    selector.SelectSelectorConfig(
+                        options=[
+                            selector.SelectOptionDict(value=zone_id, label=name)
+                            for zone_id, name in zones
+                        ],
+                        mode=selector.SelectSelectorMode.DROPDOWN,
+                    )
+                )
+            )
 
         day_schema = _build_day_schema(overrides, free_weekdays, user_input)
         schema[vol.Required(SECTION_OPERATING_TIMES)] = section(

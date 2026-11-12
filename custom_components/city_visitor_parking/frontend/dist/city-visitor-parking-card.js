@@ -726,6 +726,32 @@ var applyZoneStatus = (context, status) => {
     _balanceUnit: status?.balanceUnit ?? null
   });
 };
+var nonEmptyString = (value) => typeof value === "string" && value ? value : null;
+var normalizeZoneWindow = (payload) => {
+  const state = payload?.state === "chargeable" || payload?.state === "free" ? payload.state : null;
+  const kind = payload?.window_kind === "current" || payload?.window_kind === "next" ? payload.window_kind : null;
+  return {
+    state,
+    kind,
+    start: kind ? nonEmptyString(payload?.window_start) : null,
+    end: kind ? nonEmptyString(payload?.window_end) : null
+  };
+};
+var normalizeZoneStatus = (payload) => {
+  const balance = payload?.remaining_balance;
+  return {
+    ...normalizeZoneWindow(payload),
+    remainingMinutes: typeof balance === "number" && Number.isFinite(balance) ? balance : null,
+    balanceUnit: nonEmptyString(payload?.balance_unit)
+  };
+};
+var normalizeZones = (payload) => Array.isArray(payload?.zones) ? payload.zones.filter((zone) => Boolean(nonEmptyString(zone?.zone_id))) : [];
+var resolveSelectedZone = (zones, selectedZoneId) => zones.find((zone) => zone.zone_id === selectedZoneId) ?? zones[0] ?? null;
+var applyZoneToStatus = (status, zone) => zone && status.state !== null ? { ...status, ...normalizeZoneWindow(zone) } : status;
+var buildZoneServiceData = (zones, selectedZoneId) => {
+  const zone = resolveSelectedZone(zones, selectedZoneId);
+  return zone ? { zone_id: zone.zone_id } : {};
+};
 var isPermitEntryDisabled = (entry) => Boolean(entry.disabled_by) || entry.state != null && entry.state !== "loaded" && entry.state !== "setup_in_progress";
 var buildPermitOptions = (entries) => entries.map((entry) => ({
   id: entry.entry_id,
@@ -975,6 +1001,42 @@ var renderPermitSelect = (params) => {
         .label=${params.label}
         .value=${params.value}
         .required=${false}
+        ?disabled=${params.disabled}
+        @value-changed=${params.onSelected}
+      ></ha-selector>
+    </div>
+  `;
+};
+var renderZoneSelect = (params) => {
+  if (params.preview) {
+    return b2`
+      <div class="row">
+        <ha-input
+          appearance="material"
+          .label=${params.label}
+          .value=${params.zones.find((zone) => zone.zone_id === params.value)?.name ?? ""}
+          ?disabled=${true}
+        ></ha-input>
+      </div>
+    `;
+  }
+  return b2`
+    <div class="row">
+      <ha-selector
+        id="zoneSelect"
+        .hass=${params.hass}
+        .selector=${{
+    select: {
+      options: params.zones.map((zone) => ({
+        value: zone.zone_id,
+        label: zone.name || zone.zone_id
+      })),
+      mode: "dropdown"
+    }
+  }}
+        .label=${params.label}
+        .value=${params.value}
+        .required=${true}
         ?disabled=${params.disabled}
         @value-changed=${params.onSelected}
       ></ha-selector>
@@ -1408,6 +1470,10 @@ var CityVisitorParkingNewReservationCard = class extends BaseLocalizedCard {
     this._zoneStatusTsByEntryId = /* @__PURE__ */ new Map();
     this._zoneStatusInFlightByEntryId = /* @__PURE__ */ new Map();
     this._zoneStatusByEntryId = /* @__PURE__ */ new Map();
+    // Zones of the last successful status response; kept on fetch failure so a
+    // chosen zone is not silently replaced by the provider default.
+    this._zonesByEntryId = /* @__PURE__ */ new Map();
+    this._selectedZoneIdByEntryId = /* @__PURE__ */ new Map();
     this._pendingPermitDefaultsEntryId = null;
     this._pendingPermitDefaultsForce = false;
     this._statusRefreshHandle = null;
@@ -1431,6 +1497,7 @@ var CityVisitorParkingNewReservationCard = class extends BaseLocalizedCard {
       this._requestRender();
     };
     this._onPermitSelectChange = (event) => this._handlePermitSelectChange(event);
+    this._onZoneSelectChange = (event) => this._handleZoneSelectChange(event);
     this._onFavoriteSelectChange = (event) => this._handleFavoriteSelectChange(event);
     this._onReservationEnded = (event) => void this._handleReservationEnded(event);
   }
@@ -1671,18 +1738,18 @@ var CityVisitorParkingNewReservationCard = class extends BaseLocalizedCard {
     const loadPromise = (async () => {
       let status;
       try {
-        status = this._normalizeZoneStatus(
-          await hass.callWS({
-            type: WS_GET_STATUS,
-            config_entry_id: entryId
-          })
-        );
+        const payload = await hass.callWS({
+          type: WS_GET_STATUS,
+          config_entry_id: entryId
+        });
+        status = normalizeZoneStatus(payload);
+        this._zonesByEntryId.set(entryId, normalizeZones(payload));
       } catch {
         status = EMPTY_ZONE_STATUS;
       }
       this._zoneStatusByEntryId.set(entryId, status);
       if (entryId === this._getActiveEntryId()) {
-        applyZoneStatus(this, status);
+        applyZoneStatus(this, this._getEffectiveZoneStatus(entryId));
         this._applyPendingPermitDefaults(entryId);
       }
       this._zoneStatusTsByEntryId.set(entryId, Date.now());
@@ -1750,6 +1817,11 @@ var CityVisitorParkingNewReservationCard = class extends BaseLocalizedCard {
     const selectedPermitDisabled = Boolean(
       activeEntryId && this._permitOptions.find((o5) => o5.id === activeEntryId)?.disabled
     );
+    const zones = activeEntryId ? this._zonesByEntryId.get(activeEntryId) ?? [] : [];
+    const selectedZone = activeEntryId ? resolveSelectedZone(
+      zones,
+      this._selectedZoneIdByEntryId.get(activeEntryId)
+    ) : null;
     const { showAddFavorite, showRemoveFavorite, removeFavorite } = this._getFavoriteActionState();
     const favoriteRemoveDisabled = controlsDisabled || this._favoriteRemoveInFlight;
     const favoritesOptions = this._favorites;
@@ -1783,6 +1855,15 @@ var CityVisitorParkingNewReservationCard = class extends BaseLocalizedCard {
       disabled: permitSelectDisabled,
       preview: controlsDisabled,
       onSelected: this._onPermitSelectChange
+    }) : A}
+          ${zones.length >= 2 ? renderZoneSelect({
+      hass: this._hass,
+      label: localizeFn("field.zone"),
+      zones,
+      value: selectedZone?.zone_id ?? "",
+      disabled: controlsDisabled || selectedPermitDisabled,
+      preview: controlsDisabled,
+      onSelected: this._onZoneSelectChange
     }) : A}
           ${renderFavoriteSelect({
       showName,
@@ -1943,6 +2024,34 @@ var CityVisitorParkingNewReservationCard = class extends BaseLocalizedCard {
     const target = event.currentTarget;
     this._handlePermitChange(extractEventValue(event, target));
   }
+  _handleZoneSelectChange(event) {
+    if (this._isInEditor()) return;
+    const entryId = this._getActiveEntryId();
+    const target = event.currentTarget;
+    const zoneId = extractEventValue(event, target);
+    if (!entryId || !zoneId) return;
+    const zones = this._zonesByEntryId.get(entryId) ?? [];
+    if (!zones.some((zone) => zone.zone_id === zoneId)) return;
+    if (resolveSelectedZone(zones, this._selectedZoneIdByEntryId.get(entryId))?.zone_id === zoneId) {
+      return;
+    }
+    this._selectedZoneIdByEntryId.set(entryId, zoneId);
+    applyZoneStatus(this, this._getEffectiveZoneStatus(entryId));
+    this._applyStatusDefaultsToForm(true);
+    this._requestRender();
+  }
+  /** Zone status of an entry with the selected zone's state and window applied. */
+  _getEffectiveZoneStatus(entryId) {
+    const status = this._zoneStatusByEntryId.get(entryId);
+    if (!status) return null;
+    return applyZoneToStatus(
+      status,
+      resolveSelectedZone(
+        this._zonesByEntryId.get(entryId) ?? [],
+        this._selectedZoneIdByEntryId.get(entryId)
+      )
+    );
+  }
   _handleFavoriteSelectChange(event) {
     if (!this._config?.show_favorites || !this._config?.show_name || this._isInEditor())
       return;
@@ -2000,7 +2109,7 @@ var CityVisitorParkingNewReservationCard = class extends BaseLocalizedCard {
     this._resetDeviceState();
     this._suppressFavoriteClear = false;
     this._setInputValue("favorite", "");
-    applyZoneStatus(this, this._zoneStatusByEntryId.get(value) ?? null);
+    applyZoneStatus(this, this._getEffectiveZoneStatus(value));
     this._applyStatusDefaultsToForm(true);
     this._clearStatus();
     this._ensureDeviceId();
@@ -2037,7 +2146,7 @@ var CityVisitorParkingNewReservationCard = class extends BaseLocalizedCard {
     const entryId = this._getActiveEntryId();
     applyZoneStatus(
       this,
-      entryId ? this._zoneStatusByEntryId.get(entryId) ?? null : null
+      entryId ? this._getEffectiveZoneStatus(entryId) : null
     );
     this._applyStatusDefaultsToForm(false);
     if (getConfigEntryId(this._config) && entryId) {
@@ -2112,20 +2221,6 @@ var CityVisitorParkingNewReservationCard = class extends BaseLocalizedCard {
     if (!favoriteValue) return null;
     return this._favoritesByValue.get(favoriteValue) ?? null;
   }
-  _normalizeZoneStatus(payload) {
-    const state = payload?.state === "chargeable" || payload?.state === "free" ? payload.state : null;
-    const kind = payload?.window_kind === "current" || payload?.window_kind === "next" ? payload.window_kind : null;
-    const str = (v2) => typeof v2 === "string" && v2 ? v2 : null;
-    const num = (v2) => typeof v2 === "number" && Number.isFinite(v2) ? v2 : null;
-    return {
-      state,
-      kind,
-      start: kind ? str(payload?.window_start) : null,
-      end: kind ? str(payload?.window_end) : null,
-      remainingMinutes: num(payload?.remaining_balance),
-      balanceUnit: str(payload?.balance_unit)
-    };
-  }
   _selectedFavoriteMatchesLicense(favorite, license) {
     const key = normalizePlateValue(favorite.license_plate || favorite.id);
     return Boolean(key) && key === normalizePlateValue(license);
@@ -2199,11 +2294,16 @@ var CityVisitorParkingNewReservationCard = class extends BaseLocalizedCard {
       this._addFavoriteChecked = false;
     }
     try {
+      const activeEntryId2 = this._getActiveEntryId();
       await this._hass.callService(DOMAIN, "start_reservation", {
         device_id: this._deviceId,
         start_time: start.toISOString(),
         end_time: end.toISOString(),
-        license_plate: license
+        license_plate: license,
+        ...activeEntryId2 ? buildZoneServiceData(
+          this._zonesByEntryId.get(activeEntryId2) ?? [],
+          this._selectedZoneIdByEntryId.get(activeEntryId2)
+        ) : {}
       });
     } catch (err) {
       const message = this._errorMessage(

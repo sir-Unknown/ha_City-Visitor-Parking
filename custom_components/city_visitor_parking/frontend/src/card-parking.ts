@@ -8,6 +8,7 @@ import type {
   PermitOption,
   ZoneStatus,
   ZoneStatusResponse,
+  ZoneStatusZone,
 } from "./types";
 import {
   ensureTranslations,
@@ -20,6 +21,8 @@ import {
   EMPTY_ZONE_STATUS,
   RESERVATION_STARTED_EVENT,
   applyZoneStatus,
+  applyZoneToStatus,
+  buildZoneServiceData,
   buildPermitOptions,
   clearFavoriteTransientState,
   createFavoriteIndex,
@@ -32,7 +35,10 @@ import {
   isHassRunning,
   normalizeMatchValue,
   normalizePlateValue,
+  normalizeZoneStatus,
+  normalizeZones,
   parseDateTimeValue,
+  resolveSelectedZone,
   setPendingPermitDefaults,
 } from "./helpers";
 import {
@@ -42,6 +48,7 @@ import {
   renderFavoriteSelect,
   renderLoadingCard,
   renderPermitSelect,
+  renderZoneSelect,
   triggerProgressButtonFeedback,
 } from "./ui";
 import { BaseLocalizedCard, registerCustomCardWithTranslations } from "./base";
@@ -152,6 +159,10 @@ class CityVisitorParkingNewReservationCard extends BaseLocalizedCard<CardConfig>
   _zoneStatusTsByEntryId = new Map<string, number>();
   _zoneStatusInFlightByEntryId = new Map<string, Promise<void>>();
   _zoneStatusByEntryId = new Map<string, ZoneStatus>();
+  // Zones of the last successful status response; kept on fetch failure so a
+  // chosen zone is not silently replaced by the provider default.
+  _zonesByEntryId = new Map<string, ZoneStatusZone[]>();
+  _selectedZoneIdByEntryId = new Map<string, string>();
   _pendingPermitDefaultsEntryId: string | null = null;
   _pendingPermitDefaultsForce = false;
   _statusRefreshHandle: number | null = null;
@@ -180,6 +191,7 @@ class CityVisitorParkingNewReservationCard extends BaseLocalizedCard<CardConfig>
   };
   _onPermitSelectChange = (event: Event) =>
     this._handlePermitSelectChange(event);
+  _onZoneSelectChange = (event: Event) => this._handleZoneSelectChange(event);
   _onFavoriteSelectChange = (event: Event) =>
     this._handleFavoriteSelectChange(event);
   _onReservationEnded = (event: Event) =>
@@ -453,18 +465,18 @@ class CityVisitorParkingNewReservationCard extends BaseLocalizedCard<CardConfig>
     const loadPromise = (async () => {
       let status: ZoneStatus;
       try {
-        status = this._normalizeZoneStatus(
-          await hass.callWS<ZoneStatusResponse>({
-            type: WS_GET_STATUS,
-            config_entry_id: entryId,
-          }),
-        );
+        const payload = await hass.callWS<ZoneStatusResponse>({
+          type: WS_GET_STATUS,
+          config_entry_id: entryId,
+        });
+        status = normalizeZoneStatus(payload);
+        this._zonesByEntryId.set(entryId, normalizeZones(payload));
       } catch {
         status = EMPTY_ZONE_STATUS;
       }
       this._zoneStatusByEntryId.set(entryId, status);
       if (entryId === this._getActiveEntryId()) {
-        applyZoneStatus(this, status);
+        applyZoneStatus(this, this._getEffectiveZoneStatus(entryId));
         this._applyPendingPermitDefaults(entryId);
       }
       this._zoneStatusTsByEntryId.set(entryId, Date.now());
@@ -554,6 +566,15 @@ class CityVisitorParkingNewReservationCard extends BaseLocalizedCard<CardConfig>
       activeEntryId &&
       this._permitOptions.find((o) => o.id === activeEntryId)?.disabled,
     );
+    const zones = activeEntryId
+      ? (this._zonesByEntryId.get(activeEntryId) ?? [])
+      : [];
+    const selectedZone = activeEntryId
+      ? resolveSelectedZone(
+          zones,
+          this._selectedZoneIdByEntryId.get(activeEntryId),
+        )
+      : null;
     const { showAddFavorite, showRemoveFavorite, removeFavorite } =
       this._getFavoriteActionState();
     const favoriteRemoveDisabled =
@@ -597,6 +618,17 @@ class CityVisitorParkingNewReservationCard extends BaseLocalizedCard<CardConfig>
                 disabled: permitSelectDisabled,
                 preview: controlsDisabled,
                 onSelected: this._onPermitSelectChange,
+              })
+            : nothing}
+          ${zones.length >= 2
+            ? renderZoneSelect({
+                hass: this._hass,
+                label: localizeFn("field.zone"),
+                zones,
+                value: selectedZone?.zone_id ?? "",
+                disabled: controlsDisabled || selectedPermitDisabled,
+                preview: controlsDisabled,
+                onSelected: this._onZoneSelectChange,
               })
             : nothing}
           ${renderFavoriteSelect({
@@ -782,6 +814,41 @@ class CityVisitorParkingNewReservationCard extends BaseLocalizedCard<CardConfig>
     this._handlePermitChange(extractEventValue(event, target));
   }
 
+  _handleZoneSelectChange(event: Event): void {
+    if (this._isInEditor()) return;
+    const entryId = this._getActiveEntryId();
+    const target = event.currentTarget as
+      | (HTMLElement & { value?: string })
+      | null;
+    const zoneId = extractEventValue(event, target);
+    if (!entryId || !zoneId) return;
+    const zones = this._zonesByEntryId.get(entryId) ?? [];
+    if (!zones.some((zone) => zone.zone_id === zoneId)) return;
+    if (
+      resolveSelectedZone(zones, this._selectedZoneIdByEntryId.get(entryId))
+        ?.zone_id === zoneId
+    ) {
+      return;
+    }
+    this._selectedZoneIdByEntryId.set(entryId, zoneId);
+    applyZoneStatus(this, this._getEffectiveZoneStatus(entryId));
+    this._applyStatusDefaultsToForm(true);
+    this._requestRender();
+  }
+
+  /** Zone status of an entry with the selected zone's state and window applied. */
+  _getEffectiveZoneStatus(entryId: string): ZoneStatus | null {
+    const status = this._zoneStatusByEntryId.get(entryId);
+    if (!status) return null;
+    return applyZoneToStatus(
+      status,
+      resolveSelectedZone(
+        this._zonesByEntryId.get(entryId) ?? [],
+        this._selectedZoneIdByEntryId.get(entryId),
+      ),
+    );
+  }
+
   _handleFavoriteSelectChange(event: Event): void {
     if (
       !this._config?.show_favorites ||
@@ -853,7 +920,7 @@ class CityVisitorParkingNewReservationCard extends BaseLocalizedCard<CardConfig>
     this._resetDeviceState();
     this._suppressFavoriteClear = false;
     this._setInputValue("favorite", "");
-    applyZoneStatus(this, this._zoneStatusByEntryId.get(value) ?? null);
+    applyZoneStatus(this, this._getEffectiveZoneStatus(value));
     this._applyStatusDefaultsToForm(true);
     this._clearStatus();
     this._ensureDeviceId();
@@ -896,7 +963,7 @@ class CityVisitorParkingNewReservationCard extends BaseLocalizedCard<CardConfig>
     const entryId = this._getActiveEntryId();
     applyZoneStatus(
       this,
-      entryId ? (this._zoneStatusByEntryId.get(entryId) ?? null) : null,
+      entryId ? this._getEffectiveZoneStatus(entryId) : null,
     );
     this._applyStatusDefaultsToForm(false);
     if (getConfigEntryId(this._config) && entryId) {
@@ -978,31 +1045,6 @@ class CityVisitorParkingNewReservationCard extends BaseLocalizedCard<CardConfig>
     const favoriteValue = normalizeMatchValue(value);
     if (!favoriteValue) return null;
     return this._favoritesByValue.get(favoriteValue) ?? null;
-  }
-
-  _normalizeZoneStatus(
-    payload: ZoneStatusResponse | null | undefined,
-  ): ZoneStatus {
-    const state =
-      payload?.state === "chargeable" || payload?.state === "free"
-        ? payload.state
-        : null;
-    const kind =
-      payload?.window_kind === "current" || payload?.window_kind === "next"
-        ? payload.window_kind
-        : null;
-    const str = (v: unknown): string | null =>
-      typeof v === "string" && v ? v : null;
-    const num = (v: unknown): number | null =>
-      typeof v === "number" && Number.isFinite(v) ? v : null;
-    return {
-      state,
-      kind,
-      start: kind ? str(payload?.window_start) : null,
-      end: kind ? str(payload?.window_end) : null,
-      remainingMinutes: num(payload?.remaining_balance),
-      balanceUnit: str(payload?.balance_unit),
-    };
   }
 
   _selectedFavoriteMatchesLicense(
@@ -1100,11 +1142,18 @@ class CityVisitorParkingNewReservationCard extends BaseLocalizedCard<CardConfig>
       this._addFavoriteChecked = false;
     }
     try {
+      const activeEntryId = this._getActiveEntryId();
       await this._hass.callService(DOMAIN, "start_reservation", {
         device_id: this._deviceId,
         start_time: start!.toISOString(),
         end_time: end!.toISOString(),
         license_plate: license,
+        ...(activeEntryId
+          ? buildZoneServiceData(
+              this._zonesByEntryId.get(activeEntryId) ?? [],
+              this._selectedZoneIdByEntryId.get(activeEntryId),
+            )
+          : {}),
       });
     } catch (err: unknown) {
       const message = this._errorMessage(
