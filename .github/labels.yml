@@ -71,6 +71,3 @@
 - name: "minor"
   color: 0e8a16
   description: "This PR causes a minor version bump in the version number."
-- name: "testing"
-  color: fbca04
-  description: "Related to the testing branch or pre-release testing."
