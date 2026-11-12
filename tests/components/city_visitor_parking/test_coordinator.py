@@ -1139,6 +1139,8 @@ async def test_relogin_is_rate_limited(hass: HomeAssistant) -> None:
     [
         coord_module.RateLimitError("slow down"),
         coord_module.ServiceUnavailableError("maintenance"),
+        # The provider processed the request and refused it; the session works.
+        coord_module.ProviderError("no balance", error_code="provider_rejected"),
     ],
 )
 async def test_throttling_errors_do_not_trigger_relogin(

@@ -174,7 +174,7 @@ def test_reservation_payload_includes_zone_only_when_present() -> None:
             end_time=start + timedelta(hours=1),
             zone_id=zone_id,
         )
-        return reservation_payload(reservation, {}, zones)
+        return reservation_payload(reservation, {}, zones, {}, start)
 
     known = _payload("630")
     assert known["zone_id"] == "630"
@@ -187,3 +187,43 @@ def test_reservation_payload_includes_zone_only_when_present() -> None:
     without_zone = _payload(None)
     assert "zone_id" not in without_zone
     assert "zone_name" not in without_zone
+
+
+def test_reservation_payload_uses_the_paid_window_of_its_own_zone() -> None:
+    """The paid window comes from the reservation's zone and its own time span."""
+    now = datetime(2025, 1, 6, 10, 0, tzinfo=UTC)
+    today = TimeRange(start=now - timedelta(hours=1), end=now + timedelta(hours=11))
+    tomorrow = TimeRange(start=now + timedelta(hours=23), end=now + timedelta(hours=35))
+    zones = (
+        Zone(
+            zone_id="630",
+            name="630",
+            zone_validity=(today, tomorrow),
+            zone_availability=ZoneAvailability(
+                is_chargeable_now=True, next_change_time=today.end, windows_today=()
+            ),
+        ),
+    )
+
+    def _window(start: datetime, hours: int) -> tuple[str | None, str | None]:
+        reservation = Reservation(
+            reservation_id="res",
+            start_time=start,
+            end_time=start + timedelta(hours=hours),
+            zone_id="630",
+        )
+        payload = reservation_payload(reservation, {}, zones, {}, now)
+        return payload.get("zone_window_start"), payload.get("zone_window_end")
+
+    # Running now: the window that is paid right now.
+    assert _window(now - timedelta(minutes=30), 2) == (
+        today.start.isoformat(),
+        today.end.isoformat(),
+    )
+    # Planned for tomorrow: tomorrow's window, not today's.
+    assert _window(now + timedelta(hours=24), 2) == (
+        tomorrow.start.isoformat(),
+        tomorrow.end.isoformat(),
+    )
+    # Entirely in free time (tonight): no paid window applies.
+    assert _window(now + timedelta(hours=12), 2) == (None, None)

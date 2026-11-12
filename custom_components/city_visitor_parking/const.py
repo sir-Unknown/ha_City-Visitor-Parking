@@ -38,6 +38,12 @@ ATTR_ZONE_ID: Final = "zone_id"
 STATE_CHARGEABLE: Final = "chargeable"
 STATE_FREE: Final = "free"
 
+ERROR_CODE_PROVIDER_REJECTED: Final = "provider_rejected"
+"""Library error code: the provider processed the request and refused it.
+
+The session worked, so this never warrants a re-login.
+"""
+
 DEFAULT_UPDATE_INTERVAL: Final = timedelta(minutes=5)
 """Polling interval used when a reservation is active or a zone transition is imminent.
 

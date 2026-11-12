@@ -45,29 +45,58 @@ def timerange_payload(window: TimeRange) -> dict[str, str]:
     }
 
 
+def reservation_zone_payload(
+    reservation: Reservation,
+    zones: Sequence[Zone],
+    options: Mapping[str, object],
+    now: datetime,
+) -> dict[str, str]:
+    """Return the zone keys of a reservation; empty when it has no zone.
+
+    ``zone_name`` falls back to the zone ID when the zone is not in ``zones``.
+    ``zone_window_start``/``zone_window_end`` give the paid window of that zone
+    that applies to the reservation: the window running at its start (or now,
+    once it started), else the next one. They are absent when the zone is
+    unknown or no paid window falls within the reservation.
+    """
+    zone_id = reservation.zone_id
+    if not zone_id:
+        return {}
+    zone = next((zone for zone in zones if zone.zone_id == zone_id), None)
+    payload = {
+        "zone_id": zone_id,
+        "zone_name": zone.name if zone is not None and zone.name else zone_id,
+    }
+    if zone is None:
+        return payload
+    # A reservation's own zone decides when it is paid, not the permit default.
+    reference = max(now, reservation.start_time)
+    window = current_or_next_window_with_overrides(
+        zone.zone_validity, options, reference
+    )
+    if window is not None and window.start < reservation.end_time:
+        payload["zone_window_start"] = utc_iso(window.start) or ""
+        payload["zone_window_end"] = utc_iso(window.end) or ""
+    return payload
+
+
 def reservation_payload(
     reservation: Reservation,
     favorite_by_plate: Mapping[str, Favorite],
     zones: Sequence[Zone],
+    options: Mapping[str, object],
+    now: datetime,
 ) -> dict[str, str]:
     """Build a reservation response payload with favorite and zone metadata.
 
-    ``zone_id`` and ``zone_name`` are only present when the reservation has a
-    zone; the name falls back to the zone ID when the zone is not in ``zones``.
+    Zone keys come from ``reservation_zone_payload``.
     """
     payload: dict[str, str] = {
         "reservation_id": reservation.reservation_id,
         "start_time": utc_iso(reservation.start_time) or "",
         "end_time": utc_iso(reservation.end_time) or "",
+        **reservation_zone_payload(reservation, zones, options, now),
     }
-
-    zone_id = reservation.zone_id
-    if zone_id:
-        payload["zone_id"] = zone_id
-        payload["zone_name"] = next(
-            (zone.name for zone in zones if zone.zone_id == zone_id and zone.name),
-            zone_id,
-        )
 
     license_plate = reservation.license_plate
     plate = normalize_plate(license_plate)

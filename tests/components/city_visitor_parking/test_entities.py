@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 from datetime import UTC, datetime, time, timedelta
 from types import SimpleNamespace
 from typing import TYPE_CHECKING, Any, cast
@@ -754,3 +755,33 @@ async def test_zone_sensors_unavailable_when_zone_disappears(
     assert availability.available is False
     assert availability.native_value == STATE_CHARGEABLE
     assert zone_sensors[f"{_ZONE_ENTRY_ID}:zone:10:availability"].available is True
+
+
+async def test_active_reservations_sensor_lists_zone_windows_without_plates() -> None:
+    """Each active reservation exposes its zone and that zone's paid window."""
+    reservation = Reservation(
+        reservation_id="res-630",
+        start_time=_ZONE_NOW - timedelta(minutes=30),
+        end_time=_ZONE_NOW + timedelta(hours=2),
+        license_plate="AB12CD",
+        zone_id="630",
+    )
+    data = dataclasses.replace(
+        _zone_data([_zone("10", _NEXT_WINDOW), _zone("630", _CURRENT_WINDOW)]),
+        active_reservations=(reservation,),
+    )
+    sensor = ActiveReservationsSensor(
+        _make_coordinator(data), _create_entry("provider:permit1:city")
+    )
+
+    with freeze_time(_ZONE_NOW):
+        sensor._update_from_coordinator()
+
+    assert sensor.native_value == 1
+    (item,) = sensor.extra_state_attributes["reservations"]
+    assert item["zone_id"] == "630"
+    assert item["zone_name"] == "Z630"
+    # The reservation's own zone decides, not the default zone (10).
+    assert item["zone_window_start"] == _CURRENT_WINDOW.start.isoformat()
+    assert item["zone_window_end"] == _CURRENT_WINDOW.end.isoformat()
+    assert "license_plate" not in item

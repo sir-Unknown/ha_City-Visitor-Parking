@@ -334,6 +334,23 @@ export const formatZoneWindow = (
   if (!validKind || !startDate || !endDate || endDate <= startDate) {
     return state === "free" ? localizeFn("label.zone_window_none") : null;
   }
+  const { startText, endText } = formatWindowTimes(startDate, endDate, options);
+  return localizeFn(`label.zone_window_${kind}`)
+    .replace("{start}", startText)
+    .replace("{end}", endText);
+};
+
+/**
+ * Formats the start and end of a paid window in the user's locale.
+ *
+ * A start today shows only its time; other starts add weekday and date. An
+ * end on the start day (or at the midnight closing it) shows only its time.
+ */
+const formatWindowTimes = (
+  startDate: Date,
+  endDate: Date,
+  options: ZoneWindowFormatOptions,
+): { startText: string; endText: string } => {
   const { language, hour12, timeZone } = options;
   const dayKey = createDateTimeFormat("en-CA", {
     timeZone,
@@ -365,9 +382,7 @@ export const formatZoneWindow = (
   const endText = sameDay(new Date(endDate.getTime() - 1), startDate)
     ? timeFormat.format(endDate)
     : dateTimeFormat.format(endDate);
-  return localizeFn(`label.zone_window_${kind}`)
-    .replace("{start}", startText)
-    .replace("{end}", endText);
+  return { startText, endText };
 };
 
 /** Maps Home Assistant's `locale.time_format` to an Intl `hour12` option. */
@@ -386,6 +401,45 @@ export const formatReservationZone = (reservation: {
   zone_name?: string | null;
 }): string | null =>
   nonEmptyString(reservation.zone_name) ?? nonEmptyString(reservation.zone_id);
+
+/**
+ * Formats the paid hours of a reservation's zone as one localized line.
+ *
+ * The window comes from `zone_window_start`/`zone_window_end` of the listed
+ * reservation: the paid window of its own zone that falls within it. Shows
+ * "paid until" when that window already runs at the reservation's start (or
+ * now, once it started), else the window's start and end. Returns the "no
+ * paid parking" text when the reservation has a zone but no paid window, and
+ * `null` without a zone.
+ */
+export const formatReservationZoneWindow = (
+  reservation: {
+    start_time?: string | null;
+    zone_id?: string | null;
+    zone_name?: string | null;
+    zone_window_start?: string | null;
+    zone_window_end?: string | null;
+  },
+  localizeFn: (key: string) => string,
+  options: ZoneWindowFormatOptions = {},
+): string | null => {
+  if (!formatReservationZone(reservation)) return null;
+  const startDate = parseDateTimeValue(reservation.zone_window_start);
+  const endDate = parseDateTimeValue(reservation.zone_window_end);
+  if (!startDate || !endDate || endDate <= startDate) {
+    return localizeFn("label.reservation_zone_free");
+  }
+  const now = options.now ?? new Date();
+  const reservationStart = parseDateTimeValue(reservation.start_time);
+  const reference =
+    reservationStart && reservationStart > now ? reservationStart : now;
+  const { startText, endText } = formatWindowTimes(startDate, endDate, options);
+  return startDate <= reference
+    ? localizeFn("label.reservation_zone_paid_until").replace("{end}", endText)
+    : localizeFn("label.reservation_zone_paid")
+        .replace("{start}", startText)
+        .replace("{end}", endText);
+};
 
 /** Returns whether a config entry should be hidden from permit selection. */
 export const isPermitEntryDisabled = (entry: PermitEntry): boolean =>

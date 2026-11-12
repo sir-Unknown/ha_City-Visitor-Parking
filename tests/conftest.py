@@ -13,7 +13,19 @@ pytest_plugins = "pytest_homeassistant_custom_component"  # pylint: disable=inva
 
 
 class PyCityVisitorParkingError(Exception):
-    """Stub base error."""
+    """Stub base error carrying the library's safe metadata."""
+
+    def __init__(
+        self,
+        message: str = "",
+        *,
+        error_code: str | None = None,
+        detail: str | None = None,
+    ) -> None:
+        """Initialize the stub error like the library does."""
+        super().__init__(message)
+        self.error_code = error_code
+        self.detail = detail
 
 
 class AuthError(PyCityVisitorParkingError):

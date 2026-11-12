@@ -4,6 +4,7 @@ import {
   applyZoneToStatus,
   dropForeignZoneId,
   formatReservationZone,
+  formatReservationZoneWindow,
   formatZoneWindow,
   getZoneEditorVisibility,
   normalizeZoneStatus,
@@ -263,5 +264,62 @@ describe("active reservation zone label", () => {
     ).toBe("Kralingen");
     expect(formatReservationZone({ zone_id: "630" })).toBe("630");
     expect(formatReservationZone({})).toBeNull();
+  });
+});
+
+describe("active reservation zone paid hours", () => {
+  const templates: Record<string, string> = {
+    "label.reservation_zone_paid_until": "Paid parking until {end}",
+    "label.reservation_zone_paid": "Paid parking {start} – {end}",
+    "label.reservation_zone_free": "No paid parking during this reservation",
+  };
+  const localizeFn = (key: string): string => templates[key] ?? key;
+  const options = {
+    language: "en-GB",
+    hour12: false,
+    timeZone: "Europe/Amsterdam",
+    now: new Date("2026-11-12T12:00:00+00:00"),
+  };
+  const zone = { zone_id: "630", zone_name: "630" };
+
+  it("shows until when the zone's window already runs", () => {
+    expect(
+      formatReservationZoneWindow(
+        {
+          ...zone,
+          start_time: "2026-11-12T11:30:00+00:00",
+          zone_window_start: "2026-11-12T08:00:00+00:00",
+          zone_window_end: "2026-11-12T20:00:00+00:00",
+        },
+        localizeFn,
+        options,
+      ),
+    ).toBe("Paid parking until 21:00");
+  });
+
+  it("shows start and end when the window begins during the reservation", () => {
+    expect(
+      formatReservationZoneWindow(
+        {
+          ...zone,
+          start_time: "2026-11-12T06:00:00+00:00",
+          zone_window_start: "2026-11-12T13:00:00+00:00",
+          zone_window_end: "2026-11-12T20:00:00+00:00",
+        },
+        localizeFn,
+        options,
+      ),
+    ).toBe("Paid parking 14:00 – 21:00");
+  });
+
+  it("says so for a zone without paid hours and stays empty without a zone", () => {
+    expect(
+      formatReservationZoneWindow(
+        { ...zone, start_time: "2026-11-12T22:00:00+00:00" },
+        localizeFn,
+        options,
+      ),
+    ).toBe("No paid parking during this reservation");
+    expect(formatReservationZoneWindow({}, localizeFn, options)).toBeNull();
   });
 });

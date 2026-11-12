@@ -720,10 +720,13 @@ async def _async_handle_list_reservations(
         len(reservations),
         time.perf_counter() - request_started,
     )
+    options = config_entry.options if config_entry else {}
     reservation_payloads: list[JsonValueType] = [
         cast(
             "JsonValueType",
-            reservation_payload(reservation, favorite_by_plate, data.zones),
+            reservation_payload(
+                reservation, favorite_by_plate, data.zones, options, now
+            ),
         )
         for reservation in visible
     ]

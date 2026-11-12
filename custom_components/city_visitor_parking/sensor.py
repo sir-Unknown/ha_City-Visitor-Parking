@@ -11,6 +11,7 @@ from homeassistant.util import dt as dt_util
 
 from .const import STATE_CHARGEABLE, STATE_FREE
 from .entity import CityVisitorParkingEntity
+from .payloads import reservation_zone_payload, utc_iso
 from .time_windows import (
     current_or_next_window,
     current_or_next_window_with_overrides,
@@ -91,7 +92,24 @@ class ActiveReservationsSensor(CityVisitorParkingEntity):
 
     def _update_from_coordinator(self) -> None:
         """Update the sensor from coordinator data."""
-        self._attr_native_value = len(self.coordinator.data.active_reservations)
+        data = self.coordinator.data
+        self._attr_native_value = len(data.active_reservations)
+        now = dt_util.utcnow()
+        # License plates stay out of entity attributes (privacy); the zone and its
+        # paid window per reservation let automations act on the right zone.
+        self._attr_extra_state_attributes = {
+            "reservations": [
+                {
+                    "reservation_id": reservation.reservation_id,
+                    "start_time": utc_iso(reservation.start_time),
+                    "end_time": utc_iso(reservation.end_time),
+                    **reservation_zone_payload(
+                        reservation, data.zones, self._entry.options, now
+                    ),
+                }
+                for reservation in data.active_reservations
+            ]
+        }
 
 
 class FutureReservationsSensor(CityVisitorParkingEntity):

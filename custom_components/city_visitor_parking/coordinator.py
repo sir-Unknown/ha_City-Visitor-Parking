@@ -24,6 +24,7 @@ from .const import (
     CONF_AUTO_END,
     CONF_DEFAULT_ZONE,
     DEFAULT_UPDATE_INTERVAL,
+    ERROR_CODE_PROVIDER_REJECTED,
     IDLE_UPDATE_INTERVAL,
     RELOGIN_COOLDOWN,
     RELOGIN_REJECTIONS_BEFORE_REAUTH,
@@ -310,9 +311,12 @@ class CityVisitorParkingCoordinator(DataUpdateCoordinator[CoordinatorData]):
 
         A ``NetworkError`` never reached the provider, rate-limit and
         maintenance responses would only be made worse by an extra login, and a
-        missing item or invalid input is unrelated to the session.
+        missing item, invalid input, or a request the provider refused (for
+        example no balance left) is unrelated to the session.
         """
         if isinstance(err, RateLimitError | ServiceUnavailableError | NotFoundError):
+            return False
+        if err.error_code == ERROR_CODE_PROVIDER_REJECTED:
             return False
         return isinstance(err, AuthError | ProviderError)
 

@@ -1,7 +1,12 @@
 /** Lovelace card for listing and updating active visitor parking reservations. */
 import { css, html, nothing, type TemplateResult } from "lit";
 import type { DeviceEntry, HomeAssistant, ValueElement } from "./types";
-import { ensureTranslations, getGlobalHass, localize } from "./translations";
+import {
+  ensureTranslations,
+  getGlobalHass,
+  getHassLanguage,
+  localize,
+} from "./translations";
 import {
   DOMAIN,
   RESERVATION_ENDED_EVENT,
@@ -11,12 +16,14 @@ import {
   filterDomainDevices,
   formatOptionalDateTimeLocal,
   formatReservationZone,
+  formatReservationZoneWindow,
   getConfigEntryId,
   isHassRunning,
   makeDedupedLoader,
   normalizePlateValue,
   parseDateTimeValue,
   resolvePermitLabelsByDevice,
+  resolveHour12,
 } from "./helpers";
 import {
   BASE_CARD_STYLES,
@@ -51,6 +58,9 @@ type ActiveReservation = {
   zone_id?: string;
   /** Zone display name (falls back to the id server-side), with `zone_id`. */
   zone_name?: string;
+  /** Paid window of the reservation's zone that falls within it, if any. */
+  zone_window_start?: string;
+  zone_window_end?: string;
 };
 type CardConfig = {
   type: string;
@@ -410,6 +420,14 @@ class CityVisitorParkingActiveCard extends BaseLocalizedCard<CardConfig> {
       ? this._permitLabelsByDeviceId.get(reservation.device_id)
       : null;
     const zoneLabel = formatReservationZone(reservation);
+    const zoneWindowLabel = formatReservationZoneWindow(
+      reservation,
+      this._localize,
+      {
+        language: getHassLanguage(this._hass),
+        hour12: resolveHour12(this._hass?.locale),
+      },
+    );
     const updateFlags = this._getReservationUpdateFlags(reservation.device_id);
     const allowStart = Boolean(updateFlags & UPDATE_START_FLAG);
     const allowEnd = Boolean(updateFlags & UPDATE_END_FLAG);
@@ -442,6 +460,11 @@ class CityVisitorParkingActiveCard extends BaseLocalizedCard<CardConfig> {
           ${zoneLabel
             ? html`<div class="active-reservation-label">
                 ${this._localize("field.zone")}: ${zoneLabel}
+              </div>`
+            : nothing}
+          ${zoneWindowLabel
+            ? html`<div class="active-reservation-label">
+                ${zoneWindowLabel}
               </div>`
             : nothing}
         </div>
