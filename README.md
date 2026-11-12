@@ -16,8 +16,23 @@
   </a>
 </p>
 
+<p align="center">
+  <a href="https://my.home-assistant.io/redirect/config_flow_start/?domain=city_visitor_parking">
+    <img src="https://my.home-assistant.io/badges/config_flow_start.svg" alt="Open your Home Assistant instance and start setting up City Visitor Parking.">
+  </a>
+</p>
+
+<!-- ha-marketplace:exclude-start -->
+<p align="center">
+  <a href="https://my.home-assistant.io/redirect/marketplace_repository/?owner=sir-Unknown&repository=ha_City-Visitor-Parking&category=integration">
+    <img src="https://my.home-assistant.io/badges/marketplace_repository.svg" alt="Open your Home Assistant instance and open this repository in the Marketplace.">
+  </a>
+</p>
+
 > [!TIP]
-> Looking for English or Dutch documentation? See the [wiki](https://github.com/sir-Unknown/ha_City-Visitor-Parking/wiki)
+> Looking for Dutch documentation? See the [Dutch README](README.nl.md) or the [wiki](https://github.com/sir-Unknown/ha_City-Visitor-Parking/wiki)
+
+<!-- ha-marketplace:exclude-end -->
 
 ## About this integration
 
@@ -149,7 +164,9 @@ More information:
 ### English
 
 - [Home](https://github.com/sir-Unknown/ha_City-Visitor-Parking/wiki/Home)
+<!-- ha-marketplace:exclude-start -->
 - [Installation](https://github.com/sir-Unknown/ha_City-Visitor-Parking/wiki/Installation)
+<!-- ha-marketplace:exclude-end -->
 - [Configuration](https://github.com/sir-Unknown/ha_City-Visitor-Parking/wiki/Configuration)
 - [Lovelace Cards](https://github.com/sir-Unknown/ha_City-Visitor-Parking/wiki/Lovelace-Cards)
 - [Services](https://github.com/sir-Unknown/ha_City-Visitor-Parking/wiki/Services)
@@ -161,7 +178,9 @@ More information:
 ### Nederlands
 
 - [Home](https://github.com/sir-Unknown/ha_City-Visitor-Parking/wiki/Home)
+<!-- ha-marketplace:exclude-start -->
 - [Installation](https://github.com/sir-Unknown/ha_City-Visitor-Parking/wiki/Installatie)
+<!-- ha-marketplace:exclude-end -->
 - [Configuration](https://github.com/sir-Unknown/ha_City-Visitor-Parking/wiki/Configuratie)
 - [Services](https://github.com/sir-Unknown/ha_City-Visitor-Parking/wiki/Diensten)
 - [Troubleshooting](https://github.com/sir-Unknown/ha_City-Visitor-Parking/wiki/Probleemoplossing)
