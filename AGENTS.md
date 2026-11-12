@@ -95,7 +95,7 @@ Stable releases (`vX.Y.Z`) are built from `main` and pin the latest stable `pyci
 - Draft a beta from `beta` with the `Release Drafter` workflow run on ref `beta` with `prerelease=beta` and `version` set to the next stable version, for example `0.1.39`. This creates the tag `vX.Y.Z-beta.N`, targeting `beta`.
 - Release Drafter only drafts betas on ref `beta`. For a beta from a feature branch: push an annotated tag on the branch head, `vX.Y.Z-beta.N` or `vX.Y.Z-<branch-slug>.N` (for example `v0.1.43-rotterdam-provider.1`; the number is the next free one for that name), wait for the `Validate` run on that tag to succeed, then create the draft pre-release by hand from the existing tag with `--target` set to the branch, reusing the body layout of the previous beta.
 - The beta draft body MUST fill in `PyPI` with the exact library version pinned in the beta; `release.yml` rejects a beta without it.
-- The release title and the top of the body MUST state plainly what the pre-release is for (for example "test Rotterdam provider"), which branch it is built from when that is not `beta`, and what is known to be untested, so testers cannot mistake it for a general update.
+- The top of the release body MUST state plainly what the pre-release is for (for example "test Rotterdam provider"), which branch it is built from when that is not `beta`, and what is known to be untested, so testers cannot mistake it for a general update. Keep the release title to the tag: a feature-branch tag `vX.Y.Z-<branch-slug>.N` already names what is tested.
 - Create releases as drafts and publish only when the maintainer asks for it.
 
 ## 6) CI requirements
