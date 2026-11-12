@@ -782,68 +782,7 @@ var fetchPermitZones = async (hass, entryId) => {
     return [];
   }
 };
-var createDateTimeFormat = (language, options) => {
-  try {
-    return new Intl.DateTimeFormat(language, options);
-  } catch {
-    return new Intl.DateTimeFormat(void 0, options);
-  }
-};
-var formatZoneWindow = (zone, localizeFn, options = {}) => {
-  if (!zone) return null;
-  const { state, kind, start, end } = normalizeZoneWindow(zone);
-  const startDate = parseDateTimeValue(start);
-  const endDate = parseDateTimeValue(end);
-  const validKind = state === "chargeable" && kind === "current" || state === "free" && kind === "next";
-  if (!validKind || !startDate || !endDate || endDate <= startDate) {
-    return state === "free" ? localizeFn("label.zone_window_none") : null;
-  }
-  const { startText, endText } = formatWindowTimes(startDate, endDate, options);
-  return localizeFn(`label.zone_window_${kind}`).replace("{start}", startText).replace("{end}", endText);
-};
-var formatWindowTimes = (startDate, endDate, options) => {
-  const { language, hour12, timeZone } = options;
-  const dayKey = createDateTimeFormat("en-CA", {
-    timeZone,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit"
-  });
-  const sameDay = (first, second) => dayKey.format(first) === dayKey.format(second);
-  const timeFormat = createDateTimeFormat(language, {
-    timeZone,
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12
-  });
-  const dateTimeFormat = createDateTimeFormat(language, {
-    timeZone,
-    weekday: "short",
-    day: "numeric",
-    month: "short",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12
-  });
-  const startText = sameDay(startDate, options.now ?? /* @__PURE__ */ new Date()) ? timeFormat.format(startDate) : dateTimeFormat.format(startDate);
-  const endText = sameDay(new Date(endDate.getTime() - 1), startDate) ? timeFormat.format(endDate) : dateTimeFormat.format(endDate);
-  return { startText, endText };
-};
-var resolveHour12 = (locale) => locale?.time_format === "12" ? true : locale?.time_format === "24" ? false : void 0;
 var formatReservationZone = (reservation) => nonEmptyString(reservation.zone_name) ?? nonEmptyString(reservation.zone_id);
-var formatReservationZoneWindow = (reservation, localizeFn, options = {}) => {
-  if (!formatReservationZone(reservation)) return null;
-  const startDate = parseDateTimeValue(reservation.zone_window_start);
-  const endDate = parseDateTimeValue(reservation.zone_window_end);
-  if (!startDate || !endDate || endDate <= startDate) {
-    return localizeFn("label.reservation_zone_free");
-  }
-  const now = options.now ?? /* @__PURE__ */ new Date();
-  const reservationStart = parseDateTimeValue(reservation.start_time);
-  const reference = reservationStart && reservationStart > now ? reservationStart : now;
-  const { startText, endText } = formatWindowTimes(startDate, endDate, options);
-  return startDate <= reference ? localizeFn("label.reservation_zone_paid_until").replace("{end}", endText) : localizeFn("label.reservation_zone_paid").replace("{start}", startText).replace("{end}", endText);
-};
 var isPermitEntryDisabled = (entry) => Boolean(entry.disabled_by) || entry.state != null && entry.state !== "loaded" && entry.state !== "setup_in_progress";
 var buildPermitOptions = (entries) => entries.map((entry) => ({
   id: entry.entry_id,
@@ -1100,7 +1039,6 @@ var renderPermitSelect = (params) => {
   `;
 };
 var renderZoneSelect = (params) => {
-  const windowLine = params.windowText ? b2`<div class="zone-window">${params.windowText}</div>` : A;
   if (params.preview) {
     return b2`
       <div class="row">
@@ -1110,7 +1048,6 @@ var renderZoneSelect = (params) => {
           .value=${params.zones.find((zone) => zone.zone_id === params.value)?.name ?? ""}
           ?disabled=${true}
         ></ha-input>
-        ${windowLine}
       </div>
     `;
   }
@@ -1134,7 +1071,6 @@ var renderZoneSelect = (params) => {
         ?disabled=${params.disabled}
         @value-changed=${params.onSelected}
       ></ha-selector>
-      ${windowLine}
     </div>
   `;
 };
@@ -2010,10 +1946,6 @@ var CityVisitorParkingNewReservationCard = class extends BaseLocalizedCard {
     const showZoneField = this._config.show_zone !== false && (zones.length >= MIN_SELECTABLE_ZONES || controlsDisabled && !activeEntryId && this._permitOptions.some(
       (option) => (this._zonesByEntryId.get(option.id)?.length ?? 0) >= MIN_SELECTABLE_ZONES
     ));
-    const zoneWindowText = showZoneField && activeEntryId && this._zoneStatusByEntryId.get(activeEntryId)?.state ? formatZoneWindow(selectedZone, localizeFn, {
-      language: getHassLanguage(this._hass),
-      hour12: resolveHour12(this._hass.locale)
-    }) : null;
     const { showAddFavorite, showRemoveFavorite, removeFavorite } = this._getFavoriteActionState();
     const favoriteRemoveDisabled = controlsDisabled || this._favoriteRemoveInFlight;
     const favoritesOptions = this._favorites;
@@ -2053,7 +1985,6 @@ var CityVisitorParkingNewReservationCard = class extends BaseLocalizedCard {
       label: localizeFn("field.zone"),
       zones,
       value: selectedZone?.zone_id ?? "",
-      windowText: zoneWindowText,
       disabled: controlsDisabled || selectedPermitDisabled,
       preview: controlsDisabled,
       onSelected: this._onZoneSelectChange
@@ -2783,11 +2714,6 @@ CityVisitorParkingNewReservationCard.styles = [
       .start-button {
         margin-left: auto;
       }
-      .zone-window {
-        margin-top: var(--ha-space-1);
-        color: var(--secondary-text-color);
-        font-size: var(--ha-font-size-s, 0.875rem);
-      }
     `
 ];
 registerCustomCardWithTranslations(
@@ -3130,14 +3056,6 @@ var CityVisitorParkingActiveCard = class extends BaseLocalizedCard {
     const identify = name || pendingName || license || reservation.reservation_id;
     const permitLabel = reservation.device_id ? this._permitLabelsByDeviceId.get(reservation.device_id) : null;
     const zoneLabel = formatReservationZone(reservation);
-    const zoneWindowLabel = formatReservationZoneWindow(
-      reservation,
-      this._localize,
-      {
-        language: getHassLanguage(this._hass),
-        hour12: resolveHour12(this._hass?.locale)
-      }
-    );
     const updateFlags = this._getReservationUpdateFlags(reservation.device_id);
     const allowStart = Boolean(updateFlags & UPDATE_START_FLAG);
     const allowEnd = Boolean(updateFlags & UPDATE_END_FLAG);
@@ -3161,9 +3079,6 @@ var CityVisitorParkingActiveCard = class extends BaseLocalizedCard {
               </div>` : A}
           ${zoneLabel ? b2`<div class="active-reservation-label">
                 ${this._localize("field.zone")}: ${zoneLabel}
-              </div>` : A}
-          ${zoneWindowLabel ? b2`<div class="active-reservation-label">
-                ${zoneWindowLabel}
               </div>` : A}
         </div>
         <div class="active-reservation-times">

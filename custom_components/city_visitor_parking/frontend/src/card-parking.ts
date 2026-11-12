@@ -31,7 +31,6 @@ import {
   fetchPermitEntries,
   filterDomainDevices,
   formatDateTimeLocal,
-  formatZoneWindow,
   getConfigEntryId,
   invalidateFavoritesCache,
   isHassRunning,
@@ -41,7 +40,6 @@ import {
   normalizeZones,
   parseDateTimeValue,
   resolveCardZone,
-  resolveHour12,
   setPendingPermitDefaults,
 } from "./helpers";
 import {
@@ -126,11 +124,6 @@ class CityVisitorParkingNewReservationCard extends BaseLocalizedCard<CardConfig>
       }
       .start-button {
         margin-left: auto;
-      }
-      .zone-window {
-        margin-top: var(--ha-space-1);
-        color: var(--secondary-text-color);
-        font-size: var(--ha-font-size-s, 0.875rem);
       }
     `,
   ];
@@ -594,17 +587,6 @@ class CityVisitorParkingNewReservationCard extends BaseLocalizedCard<CardConfig>
               (this._zonesByEntryId.get(option.id)?.length ?? 0) >=
               MIN_SELECTABLE_ZONES,
           )));
-    // A failed status refresh keeps cached zones for the picker, but their
-    // windows are no longer reliable, so the window line waits for a status.
-    const zoneWindowText =
-      showZoneField &&
-      activeEntryId &&
-      this._zoneStatusByEntryId.get(activeEntryId)?.state
-        ? formatZoneWindow(selectedZone, localizeFn, {
-            language: getHassLanguage(this._hass),
-            hour12: resolveHour12(this._hass.locale),
-          })
-        : null;
     const { showAddFavorite, showRemoveFavorite, removeFavorite } =
       this._getFavoriteActionState();
     const favoriteRemoveDisabled =
@@ -656,7 +638,6 @@ class CityVisitorParkingNewReservationCard extends BaseLocalizedCard<CardConfig>
                 label: localizeFn("field.zone"),
                 zones,
                 value: selectedZone?.zone_id ?? "",
-                windowText: zoneWindowText,
                 disabled: controlsDisabled || selectedPermitDisabled,
                 preview: controlsDisabled,
                 onSelected: this._onZoneSelectChange,

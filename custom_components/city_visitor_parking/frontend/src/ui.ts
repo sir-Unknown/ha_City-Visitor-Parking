@@ -229,23 +229,16 @@ export const renderPermitSelect = (params: {
   `;
 };
 
-/**
- * Renders the zone selector for permits with multiple zones, or a preview,
- * with the selected zone's paid window below it when `windowText` is set.
- */
+/** Renders the zone selector for permits with multiple zones, or a preview. */
 export const renderZoneSelect = (params: {
   hass: HomeAssistant | null | undefined;
   label: string;
   zones: readonly ZoneStatusZone[];
   value: string;
-  windowText?: string | null;
   disabled: boolean;
   preview?: boolean;
   onSelected: (event: Event) => void;
 }): TemplateResult => {
-  const windowLine = params.windowText
-    ? html`<div class="zone-window">${params.windowText}</div>`
-    : nothing;
   if (params.preview) {
     return html`
       <div class="row">
@@ -256,7 +249,6 @@ export const renderZoneSelect = (params: {
             ?.name ?? ""}
           ?disabled=${true}
         ></ha-input>
-        ${windowLine}
       </div>
     `;
   }
@@ -280,7 +272,6 @@ export const renderZoneSelect = (params: {
         ?disabled=${params.disabled}
         @value-changed=${params.onSelected}
       ></ha-selector>
-      ${windowLine}
     </div>
   `;
 };
