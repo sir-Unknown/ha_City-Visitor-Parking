@@ -10,10 +10,4 @@ template: |
 
   $CHANGES
 
-  #### Install and rollback
-
-  - **Marketplace (Home Assistant 2026.11+):** **Settings** → **Marketplace** → **City Visitor Parking** → **⋮** → **Install another version**.
-  - **HACS (Home Assistant 2026.10):** **HACS** → **City Visitor Parking** → **⋮** → **Redownload**.
-  - **Rollback:** restore your backup, or install the latest stable version the same way.
-
   When reporting a bug, attach the diagnostics file.
