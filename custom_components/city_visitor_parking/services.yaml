@@ -28,8 +28,8 @@ start_reservation:
       selector:
         text: {}
     zone_id:
-      name: Zone
-      description: The zone to park in, for permits that cover several zones. Leave empty to use the default zone.
+      name: Parking area
+      description: The parking area to park in, for permits that cover several parking areas. Leave empty to use the default parking area.
       required: false
       selector:
         text: {}

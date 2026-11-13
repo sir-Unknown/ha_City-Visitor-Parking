@@ -64,10 +64,10 @@
         "description": "Pas het parkeergedrag aan voor deze vergunning: stel aangepaste betaaltijden in per dag, configureer gratis parkeerdagen en beheer het automatisch beëindigen van reserveringen.",
         "data": {
           "auto_end_reservation_when_free": "Reservaties automatisch beëindigen wanneer parkeren gratis is",
-          "default_zone": "Standaardzone"
+          "default_zone": "Standaard parkeergebied"
         },
         "data_description": {
-          "default_zone": "Zone die in de kaart vooraf is geselecteerd en wordt gebruikt als een reservering geen zone noemt. De zonestatus-sensoren volgen deze zone."
+          "default_zone": "Parkeergebied dat in de kaart vooraf is geselecteerd en wordt gebruikt als een reservering geen parkeergebied noemt. De statussensoren van het parkeergebied volgen dit gebied."
         },
         "sections": {
           "operating_times": {
@@ -147,8 +147,8 @@
           "description": "Het kenteken van het voertuig."
         },
         "zone_id": {
-          "name": "Zone",
-          "description": "De zone waarin geparkeerd wordt, voor vergunningen met meerdere zones. Laat leeg om de standaardzone te gebruiken."
+          "name": "Parkeergebied",
+          "description": "Het parkeergebied waarin geparkeerd wordt, voor vergunningen met meerdere parkeergebieden. Laat leeg om het standaard parkeergebied te gebruiken."
         }
       }
     },
@@ -364,7 +364,7 @@
       "message": "De vergunningstatus kon niet worden geladen. Probeer het later opnieuw."
     },
     "invalid_zone": {
-      "message": "De gekozen zone hoort niet bij deze vergunning."
+      "message": "Het gekozen parkeergebied hoort niet bij deze vergunning."
     }
   },
   "entity": {
@@ -398,23 +398,23 @@
         "name": "Einde betaalvenster"
       },
       "zone_availability": {
-        "name": "Beschikbaarheid zone {zone}",
+        "name": "Beschikbaarheid parkeergebied {zone}",
         "state": {
           "chargeable": "Betaald",
           "free": "Gratis"
         }
       },
       "zone_provider_chargeable_start": {
-        "name": "Start provider betaalvenster zone {zone}"
+        "name": "Start provider betaalvenster parkeergebied {zone}"
       },
       "zone_provider_chargeable_end": {
-        "name": "Einde provider betaalvenster zone {zone}"
+        "name": "Einde provider betaalvenster parkeergebied {zone}"
       },
       "zone_next_chargeable_start": {
-        "name": "Start betaalvenster zone {zone}"
+        "name": "Start betaalvenster parkeergebied {zone}"
       },
       "zone_next_chargeable_end": {
-        "name": "Einde betaalvenster zone {zone}"
+        "name": "Einde betaalvenster parkeergebied {zone}"
       },
       "favorites": {
         "name": "Favorieten"

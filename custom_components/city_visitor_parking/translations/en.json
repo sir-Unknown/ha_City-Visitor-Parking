@@ -64,10 +64,10 @@
         "description": "Customize parking behavior for this permit: configure custom chargeable hours per day, set free parking days, and manage automatic reservation ending.",
         "data": {
           "auto_end_reservation_when_free": "Automatically end reservations when parking is free",
-          "default_zone": "Default zone"
+          "default_zone": "Default parking area"
         },
         "data_description": {
-          "default_zone": "Zone that is preselected in the card and used when a reservation does not name a zone. The zone status sensors follow this zone."
+          "default_zone": "Parking area that is preselected in the card and used when a reservation does not name a parking area. The parking area status sensors follow this parking area."
         },
         "sections": {
           "operating_times": {
@@ -147,8 +147,8 @@
           "description": "The vehicle license plate."
         },
         "zone_id": {
-          "name": "Zone",
-          "description": "The zone to park in, for permits that cover several zones. Leave empty to use the default zone."
+          "name": "Parking area",
+          "description": "The parking area to park in, for permits that cover several parking areas. Leave empty to use the default parking area."
         }
       }
     },
@@ -364,7 +364,7 @@
       "message": "The permit status could not be loaded. Try again later."
     },
     "invalid_zone": {
-      "message": "The selected zone is not one of the zones of this permit."
+      "message": "The selected parking area is not one of the parking areas of this permit."
     }
   },
   "entity": {
@@ -398,23 +398,23 @@
         "name": "Chargeable window end"
       },
       "zone_availability": {
-        "name": "Zone {zone} availability",
+        "name": "Parking area {zone} availability",
         "state": {
           "chargeable": "Chargeable",
           "free": "Free"
         }
       },
       "zone_provider_chargeable_start": {
-        "name": "Zone {zone} provider chargeable window start"
+        "name": "Parking area {zone} provider chargeable window start"
       },
       "zone_provider_chargeable_end": {
-        "name": "Zone {zone} provider chargeable window end"
+        "name": "Parking area {zone} provider chargeable window end"
       },
       "zone_next_chargeable_start": {
-        "name": "Zone {zone} chargeable window start"
+        "name": "Parking area {zone} chargeable window start"
       },
       "zone_next_chargeable_end": {
-        "name": "Zone {zone} chargeable window end"
+        "name": "Parking area {zone} chargeable window end"
       },
       "favorites": {
         "name": "Favorites"
