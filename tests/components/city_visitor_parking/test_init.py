@@ -690,7 +690,12 @@ async def _setup_entry(
     entry.mock_state(hass, config_entries.ConfigEntryState.SETUP_IN_PROGRESS)
 
     provider = AsyncMock()
-    provider.fetch_all.return_value = ({"id": "permit", "zone_validity": []}, [], [])
+    provider.fetch_all.return_value = (
+        {"id": "permit", "zone_validity": []},
+        [],
+        [],
+        [],
+    )
 
     client = AsyncMock()
     client.get_provider.return_value = provider
@@ -722,6 +727,7 @@ async def test_each_entry_gets_its_own_session_closed_on_unload(
         provider = AsyncMock()
         provider.fetch_all.return_value = (
             {"id": "permit", "zone_validity": []},
+            [],
             [],
             [],
         )

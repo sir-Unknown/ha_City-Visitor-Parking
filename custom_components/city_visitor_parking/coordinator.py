@@ -58,12 +58,10 @@ else:
     class ProviderProtocol(Protocol):
         """Protocol for runtime provider behavior."""
 
-        async def fetch_all(self) -> tuple[object, list[object], list[object]]:
-            """Return permit, reservations, and favorites in one batch."""
-            raise NotImplementedError
-
-        async def list_reservation_targets(self) -> list[object]:
-            """Return the targets a reservation can be started for."""
+        async def fetch_all(
+            self,
+        ) -> tuple[object, list[object], list[object], list[object]]:
+            """Return permit, reservations, favorites, and reservation targets."""
             raise NotImplementedError
 
         async def end_reservation(
@@ -121,14 +119,14 @@ class CityVisitorParkingCoordinator(DataUpdateCoordinator[CoordinatorData]):
             )
 
             started = time.perf_counter()
-            permit, reservations, favorites = await self.async_call_with_relogin(
-                self._provider.fetch_all
-            )
             # Parking areas are the library's reservation targets; an empty list means
             # the permit has nothing to choose.
-            targets = await self.async_call_with_relogin(
-                self._provider.list_reservation_targets
-            )
+            (
+                permit,
+                reservations,
+                favorites,
+                targets,
+            ) = await self.async_call_with_relogin(self._provider.fetch_all)
             _LOGGER.debug(
                 "Provider %s fetch_all duration: %.3fs — reservations=%s favorites=%s",
                 self._entry_title,

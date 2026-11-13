@@ -121,10 +121,6 @@ class Provider:
         """Return no reservations by default."""
         return []
 
-    async def list_reservation_targets(self) -> list[dict[str, object]]:
-        """Return no reservation targets by default."""
-        return []
-
     async def list_favorites(self) -> list[dict[str, object]]:
         """Return no favorites by default."""
         return []

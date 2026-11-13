@@ -86,7 +86,7 @@ async def test_auto_end_reservation_once(hass: HomeAssistant) -> None:
     }
 
     provider = AsyncMock()
-    provider.fetch_all.return_value = ({"zone_validity": []}, [reservation], [])
+    provider.fetch_all.return_value = ({"zone_validity": []}, [reservation], [], [])
 
     coordinator = CityVisitorParkingCoordinator(
         hass,
@@ -138,8 +138,7 @@ async def test_permit_windows_follow_the_default_parking_area(
     now = datetime(2025, 1, 6, 10, 0, tzinfo=UTC)
     provider = AsyncMock()
     permit, targets = _parking_area_targets(now)
-    provider.fetch_all.return_value = (permit, [], [])
-    provider.list_reservation_targets.return_value = targets
+    provider.fetch_all.return_value = (permit, [], [], targets)
     coordinator = CityVisitorParkingCoordinator(
         hass,
         provider=provider,
@@ -181,8 +180,8 @@ async def test_auto_end_judges_each_reservation_by_its_own_parking_area(
         permit,
         [reservation("in-10", "10"), reservation("in-630", "630")],
         [],
+        targets,
     )
-    provider.list_reservation_targets.return_value = targets
     coordinator = CityVisitorParkingCoordinator(
         hass,
         provider=provider,
@@ -293,7 +292,7 @@ async def test_coordinator_logs_recovery(hass: HomeAssistant) -> None:
     entry.add_to_hass(hass)
 
     provider = AsyncMock()
-    provider.fetch_all.return_value = ({"zone_validity": []}, [], [])
+    provider.fetch_all.return_value = ({"zone_validity": []}, [], [], [])
 
     coordinator = CityVisitorParkingCoordinator(
         hass,
@@ -324,7 +323,7 @@ async def test_auto_end_handles_provider_failure(
     }
 
     provider = AsyncMock()
-    provider.fetch_all.return_value = ({"zone_validity": []}, [reservation], [])
+    provider.fetch_all.return_value = ({"zone_validity": []}, [reservation], [], [])
     provider.end_reservation.side_effect = pv_library.ProviderError
 
     coordinator = CityVisitorParkingCoordinator(
@@ -801,7 +800,7 @@ async def test_adaptive_interval_applied_after_update(hass: HomeAssistant) -> No
     now = datetime(2025, 1, 6, 9, 0, tzinfo=UTC)
     provider = AsyncMock()
     # No active reservation, free parking, no next change → idle interval expected.
-    provider.fetch_all.return_value = ({"zone_validity": []}, [], [])
+    provider.fetch_all.return_value = ({"zone_validity": []}, [], [], [])
 
     coordinator = CityVisitorParkingCoordinator(
         hass,
@@ -831,7 +830,7 @@ async def test_adaptive_interval_fast_when_reservation_active(
         "end_time": (now + timedelta(hours=1)).isoformat(),
     }
     provider = AsyncMock()
-    provider.fetch_all.return_value = ({"zone_validity": []}, [reservation], [])
+    provider.fetch_all.return_value = ({"zone_validity": []}, [reservation], [], [])
 
     coordinator = CityVisitorParkingCoordinator(
         hass,
@@ -889,7 +888,7 @@ def _create_entry(auto_end: bool, *, credentials: bool = False) -> MockConfigEnt
 def _recovering_provider(error: Exception) -> AsyncMock:
     """Return a provider that fails once and succeeds after a re-login."""
     provider = AsyncMock()
-    provider.fetch_all.side_effect = [error, ({"zone_validity": []}, [], [])]
+    provider.fetch_all.side_effect = [error, ({"zone_validity": []}, [], [], [])]
     return provider
 
 
@@ -1027,7 +1026,12 @@ async def test_recovery_allows_immediate_relogin_on_next_expiry(
     entry = _create_entry(auto_end=False, credentials=True)
     entry.add_to_hass(hass)
 
-    ok: tuple[dict[str, Any], list[Any], list[Any]] = ({"zone_validity": []}, [], [])
+    ok: tuple[dict[str, Any], list[Any], list[Any], list[Any]] = (
+        {"zone_validity": []},
+        [],
+        [],
+        [],
+    )
     provider = AsyncMock()
     provider.fetch_all.side_effect = [
         coord_module.ProviderError("status 500"),
