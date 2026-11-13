@@ -186,7 +186,7 @@ export abstract class BaseCardEditor<TConfig> extends LitElement {
 
   protected _handleValueChanged(ev: CustomEvent): void {
     ev.stopPropagation();
-    const config = ev.detail?.value ?? {};
+    const config = this._normalizeConfig(ev.detail?.value ?? {});
     this.dispatchEvent(
       new CustomEvent("config-changed", {
         detail: { config },
@@ -194,6 +194,11 @@ export abstract class BaseCardEditor<TConfig> extends LitElement {
         composed: true,
       }),
     );
+  }
+
+  /** Adjusts an edited config before it is published; editors may override. */
+  protected _normalizeConfig(config: TConfig): TConfig {
+    return config;
   }
 }
 

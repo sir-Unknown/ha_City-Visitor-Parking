@@ -293,6 +293,10 @@ rotterdam:
   base_url: "https://bezoek.rotterdam.nl"
   gui_url: "https://bezoek.rotterdam.nl/"
 
+# rotterdam_demo:
+#   municipality_name: Rotterdam Demo
+#   provider_id: demo
+
 # The Schouwen-Duiveland parking provider is currently not working, so it's commented out for now.
 # It is not working because only LoginMethod=Gebruiker is allowed. Please open an issue if you want this provider enabled.
 # schouwen_duiveland:
@@ -444,4 +448,9 @@ eindhoven_demo:
 
 groningen_demo:
   municipality_name: Groningen Demo
+  provider_id: demo
+
+# Only in the pycityvisitorparking pre-release pinned on beta: a demo permit with parking areas.
+rotterdam_demo:
+  municipality_name: Rotterdam Demo
   provider_id: demo

@@ -21,7 +21,7 @@ from .models import TimeRange
 def current_or_next_window(
     windows: Sequence[TimeRange], now: datetime
 ) -> TimeRange | None:
-    """Return the current or next chargeable window."""
+    """Return the current or next paid window."""
     for window in sorted(windows, key=lambda item: item.start):
         if window.end <= now:
             continue
@@ -30,11 +30,11 @@ def current_or_next_window(
 
 
 def current_or_next_window_with_overrides(
-    zone_validity: Sequence[TimeRange],
+    paid_hours: Sequence[TimeRange],
     options: Mapping[str, object],
     now: datetime,
 ) -> TimeRange | None:
-    """Return the current or next chargeable window, honoring overrides."""
+    """Return the current or next paid window, honoring overrides."""
     overrides = options.get(CONF_OPERATING_TIME_OVERRIDES)
     free_dates_raw = options.get(CONF_FREE_DATES)
     free_weekdays_raw = options.get(CONF_FREE_WEEKDAYS)
@@ -43,49 +43,49 @@ def current_or_next_window_with_overrides(
     has_free_weekdays = isinstance(free_weekdays_raw, list) and bool(free_weekdays_raw)
 
     if not has_free_dates and not has_overrides and not has_free_weekdays:
-        return current_or_next_window(zone_validity, now)
+        return current_or_next_window(paid_hours, now)
 
     windows: list[TimeRange] = []
     # Look ahead 8 days so the same weekday next week is always included,
     # covering the case where all other 6 weekdays are marked as free.
     for offset in range(8):
         windows.extend(
-            windows_for_today(zone_validity, options, now + timedelta(days=offset))
+            windows_for_today(paid_hours, options, now + timedelta(days=offset))
         )
 
     if not windows:
         if has_free_dates or has_free_weekdays:
-            # Lookahead found nothing; scan zone_validity directly so sparse or
+            # Lookahead found nothing; scan paid_hours directly so sparse or
             # seasonal windows beyond the 8-day horizon are still found.
-            for block in sorted(zone_validity, key=lambda b: b.start):
+            for block in sorted(paid_hours, key=lambda b: b.start):
                 if block.end <= now:
                     continue
                 # Probe each calendar day in the block; block.start may be a
-                # free day while later days in the same block are chargeable.
+                # free day while later days in the same block are paid.
                 probe = max(block.start, now)
                 probe = probe.replace(hour=0, minute=0, second=0, microsecond=0)
                 while probe < block.end:
-                    candidate = windows_for_today(zone_validity, options, probe)
+                    candidate = windows_for_today(paid_hours, options, probe)
                     result = current_or_next_window(candidate, now)
                     if result is not None:
                         return result
                     probe += timedelta(days=1)
             return None
-        return current_or_next_window(zone_validity, now)
+        return current_or_next_window(paid_hours, now)
 
     return current_or_next_window(windows, now)
 
 
 def windows_for_today(
-    zone_validity: Sequence[TimeRange],
+    paid_hours: Sequence[TimeRange],
     options: Mapping[str, object],
     now: datetime,
 ) -> list[TimeRange]:
-    """Return chargeable windows for today, applying overrides if present."""
+    """Return paid windows for today, applying overrides if present."""
     local_now = dt_util.as_local(now)
     local_date = local_now.date()
 
-    # Return no chargeable windows when today is a configured free date.
+    # Return no paid windows when today is a configured free date.
     free_dates_raw = options.get(CONF_FREE_DATES)
     if isinstance(free_dates_raw, str) and free_dates_raw.strip():
         today_ddmm = local_now.strftime("%d-%m")
@@ -96,7 +96,7 @@ def windows_for_today(
 
     local_day = WEEKDAY_KEYS[local_now.weekday()]
 
-    # Return no chargeable windows when today is a configured free weekday.
+    # Return no paid windows when today is a configured free weekday.
     free_weekdays_raw = options.get(CONF_FREE_WEEKDAYS)
     if isinstance(free_weekdays_raw, list) and local_day in free_weekdays_raw:
         return []
@@ -133,7 +133,7 @@ def windows_for_today(
     utc_end = dt_util.as_utc(local_end)
 
     windows: list[TimeRange] = []
-    for block in zone_validity:
+    for block in paid_hours:
         if block.end <= utc_start or block.start >= utc_end:
             continue
         windows.append(

@@ -11,13 +11,13 @@ start_reservation:
           integration: city_visitor_parking
     start_time:
       name: Start time
-      description: The UTC start time for the reservation.
+      description: The start time for the reservation. Times without a time zone offset use the Home Assistant time zone.
       required: true
       selector:
         datetime: {}
     end_time:
       name: End time
-      description: The UTC end time for the reservation.
+      description: The end time for the reservation. Times without a time zone offset use the Home Assistant time zone.
       required: true
       selector:
         datetime: {}
@@ -25,6 +25,12 @@ start_reservation:
       name: License plate
       description: The vehicle license plate.
       required: true
+      selector:
+        text: {}
+    parking_area_id:
+      name: Parking area
+      description: The parking area to park in, for permits that cover several parking areas. Leave empty to use the default parking area.
+      required: false
       selector:
         text: {}
 
@@ -47,13 +53,13 @@ update_reservation:
         text: {}
     start_time:
       name: Start time
-      description: New UTC start time for the reservation.
+      description: New start time for the reservation. Times without a time zone offset use the Home Assistant time zone.
       required: false
       selector:
         datetime: {}
     end_time:
       name: End time
-      description: New UTC end time for the reservation.
+      description: New end time for the reservation. Times without a time zone offset use the Home Assistant time zone.
       required: false
       selector:
         datetime: {}
@@ -168,7 +174,7 @@ list_reservations:
 
 get_status:
   name: Get status
-  description: Return the current permit status and effective chargeable windows for a permit.
+  description: Return the current permit status and effective paid parking hours for a permit.
   fields:
     device_id:
       name: Device

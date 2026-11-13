@@ -61,45 +61,49 @@
     "step": {
       "init": {
         "title": "Options",
-        "description": "Customize parking behavior for this permit: configure custom chargeable hours per day, set free parking days, and manage automatic reservation ending.",
+        "description": "Customize parking behavior for this permit: configure custom paid parking hours per day, set free parking days, and manage automatic reservation ending.",
         "data": {
-          "auto_end_reservation_when_free": "Automatically end reservations when parking is free"
+          "auto_end_reservation_when_free": "Automatically end reservations when parking is free",
+          "default_parking_area": "Default parking area"
+        },
+        "data_description": {
+          "default_parking_area": "Parking area that is preselected in the card and used when a reservation does not name a parking area. The parking area status sensors follow this parking area."
         },
         "sections": {
           "operating_times": {
-            "name": "Custom chargeable windows",
-            "description": "Override the default chargeable hours per day. Leave a day empty to keep the default.",
+            "name": "Custom paid parking hours",
+            "description": "Override the default paid parking hours per day. Leave a day empty to keep the default.",
             "data": {
               "monday_free_parking": "Monday free parking",
-              "monday_chargeable_windows": "Monday chargeable windows",
+              "monday_paid_hours": "Monday paid parking hours",
               "tuesday_free_parking": "Tuesday free parking",
-              "tuesday_chargeable_windows": "Tuesday chargeable windows",
+              "tuesday_paid_hours": "Tuesday paid parking hours",
               "wednesday_free_parking": "Wednesday free parking",
-              "wednesday_chargeable_windows": "Wednesday chargeable windows",
+              "wednesday_paid_hours": "Wednesday paid parking hours",
               "thursday_free_parking": "Thursday free parking",
-              "thursday_chargeable_windows": "Thursday chargeable windows",
+              "thursday_paid_hours": "Thursday paid parking hours",
               "friday_free_parking": "Friday free parking",
-              "friday_chargeable_windows": "Friday chargeable windows",
+              "friday_paid_hours": "Friday paid parking hours",
               "saturday_free_parking": "Saturday free parking",
-              "saturday_chargeable_windows": "Saturday chargeable windows",
+              "saturday_paid_hours": "Saturday paid parking hours",
               "sunday_free_parking": "Sunday free parking",
-              "sunday_chargeable_windows": "Sunday chargeable windows"
+              "sunday_paid_hours": "Sunday paid parking hours"
             },
             "data_description": {
               "monday_free_parking": "Permit is not active on Monday; parking is free.",
-              "monday_chargeable_windows": "Enter chargeable windows, for example 09:00-13:00, 14:00-17:30. Leave empty to use the provider's default hours. If free parking is enabled, input in this field will be ignored.",
+              "monday_paid_hours": "Enter paid parking hours, for example 09:00-13:00, 14:00-17:30. Leave empty to use the provider's default hours. If free parking is enabled, input in this field will be ignored.",
               "tuesday_free_parking": "Permit is not active on Tuesday; parking is free.",
-              "tuesday_chargeable_windows": "Enter chargeable windows, for example 09:00-13:00, 14:00-17:30. Leave empty to use the provider's default hours. If free parking is enabled, input in this field will be ignored.",
+              "tuesday_paid_hours": "Enter paid parking hours, for example 09:00-13:00, 14:00-17:30. Leave empty to use the provider's default hours. If free parking is enabled, input in this field will be ignored.",
               "wednesday_free_parking": "Permit is not active on Wednesday; parking is free.",
-              "wednesday_chargeable_windows": "Enter chargeable windows, for example 09:00-13:00, 14:00-17:30. Leave empty to use the provider's default hours. If free parking is enabled, input in this field will be ignored.",
+              "wednesday_paid_hours": "Enter paid parking hours, for example 09:00-13:00, 14:00-17:30. Leave empty to use the provider's default hours. If free parking is enabled, input in this field will be ignored.",
               "thursday_free_parking": "Permit is not active on Thursday; parking is free.",
-              "thursday_chargeable_windows": "Enter chargeable windows, for example 09:00-13:00, 14:00-17:30. Leave empty to use the provider's default hours. If free parking is enabled, input in this field will be ignored.",
+              "thursday_paid_hours": "Enter paid parking hours, for example 09:00-13:00, 14:00-17:30. Leave empty to use the provider's default hours. If free parking is enabled, input in this field will be ignored.",
               "friday_free_parking": "Permit is not active on Friday; parking is free.",
-              "friday_chargeable_windows": "Enter chargeable windows, for example 09:00-13:00, 14:00-17:30. Leave empty to use the provider's default hours. If free parking is enabled, input in this field will be ignored.",
+              "friday_paid_hours": "Enter paid parking hours, for example 09:00-13:00, 14:00-17:30. Leave empty to use the provider's default hours. If free parking is enabled, input in this field will be ignored.",
               "saturday_free_parking": "Permit is not active on Saturday; parking is free.",
-              "saturday_chargeable_windows": "Enter chargeable windows, for example 09:00-13:00, 14:00-17:30. Leave empty to use the provider's default hours. If free parking is enabled, input in this field will be ignored.",
+              "saturday_paid_hours": "Enter paid parking hours, for example 09:00-13:00, 14:00-17:30. Leave empty to use the provider's default hours. If free parking is enabled, input in this field will be ignored.",
               "sunday_free_parking": "Permit is not active on Sunday; parking is free.",
-              "sunday_chargeable_windows": "Enter chargeable windows, for example 09:00-13:00, 14:00-17:30. Leave empty to use the provider's default hours. If free parking is enabled, input in this field will be ignored."
+              "sunday_paid_hours": "Enter paid parking hours, for example 09:00-13:00, 14:00-17:30. Leave empty to use the provider's default hours. If free parking is enabled, input in this field will be ignored."
             }
           },
           "free_parking_dates": {
@@ -117,7 +121,7 @@
     },
     "error": {
       "invalid_time_range": "End time must be after start time.",
-      "invalid_override_format": "Enter time windows in the format HH:MM-HH:MM, separated by commas.",
+      "invalid_override_format": "Enter time ranges in the format HH:MM-HH:MM, separated by commas.",
       "invalid_free_date_format": "Enter dates as DD-MM (e.g. 25-12) or DD-MM-YYYY (e.g. 18-04-2025), separated by commas."
     }
   },
@@ -132,15 +136,19 @@
         },
         "start_time": {
           "name": "Start time",
-          "description": "The UTC start time for the reservation."
+          "description": "The start time for the reservation. Times without a time zone offset use the Home Assistant time zone."
         },
         "end_time": {
           "name": "End time",
-          "description": "The UTC end time for the reservation."
+          "description": "The end time for the reservation. Times without a time zone offset use the Home Assistant time zone."
         },
         "license_plate": {
           "name": "License plate",
           "description": "The vehicle license plate."
+        },
+        "parking_area_id": {
+          "name": "Parking area",
+          "description": "The parking area to park in, for permits that cover several parking areas. Leave empty to use the default parking area."
         }
       }
     },
@@ -158,11 +166,11 @@
         },
         "start_time": {
           "name": "Start time",
-          "description": "New UTC start time for the reservation."
+          "description": "New start time for the reservation. Times without a time zone offset use the Home Assistant time zone."
         },
         "end_time": {
           "name": "End time",
-          "description": "New UTC end time for the reservation."
+          "description": "New end time for the reservation. Times without a time zone offset use the Home Assistant time zone."
         },
         "license_plate": {
           "name": "License plate",
@@ -250,7 +258,7 @@
     },
     "get_status": {
       "name": "Get status",
-      "description": "Return the current permit status and effective chargeable windows for a permit.",
+      "description": "Return the current permit status and effective paid parking hours for a permit.",
       "fields": {
         "device_id": {
           "name": "Device",
@@ -354,6 +362,9 @@
     },
     "status_operation_failed": {
       "message": "The permit status could not be loaded. Try again later."
+    },
+    "invalid_parking_area": {
+      "message": "The selected parking area is not one of the parking areas of this permit."
     }
   },
   "entity": {
@@ -367,24 +378,43 @@
       "remaining_time": {
         "name": "Remaining balance"
       },
-      "permit_zone_availability": {
-        "name": "Permit zone availability",
+      "paid_parking": {
+        "name": "Paid parking",
         "state": {
-          "chargeable": "Chargeable",
-          "free": "Free"
+          "paid": "Yes",
+          "free": "No"
         }
       },
-      "provider_chargeable_start": {
-        "name": "Provider chargeable window start"
+      "provider_paid_parking_start": {
+        "name": "Paid parking start (provider)"
       },
-      "provider_chargeable_end": {
-        "name": "Provider chargeable window end"
+      "provider_paid_parking_end": {
+        "name": "Paid parking end (provider)"
       },
-      "next_chargeable_start": {
-        "name": "Chargeable window start"
+      "paid_parking_start": {
+        "name": "Paid parking start"
       },
-      "next_chargeable_end": {
-        "name": "Chargeable window end"
+      "paid_parking_end": {
+        "name": "Paid parking end"
+      },
+      "parking_area_paid_parking": {
+        "name": "Parking area {parking_area} paid parking",
+        "state": {
+          "paid": "Yes",
+          "free": "No"
+        }
+      },
+      "parking_area_provider_paid_parking_start": {
+        "name": "Parking area {parking_area} paid parking start (provider)"
+      },
+      "parking_area_provider_paid_parking_end": {
+        "name": "Parking area {parking_area} paid parking end (provider)"
+      },
+      "parking_area_paid_parking_start": {
+        "name": "Parking area {parking_area} paid parking start"
+      },
+      "parking_area_paid_parking_end": {
+        "name": "Parking area {parking_area} paid parking end"
       },
       "favorites": {
         "name": "Favorites"

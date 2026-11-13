@@ -669,9 +669,11 @@ var getHassLanguage = (hass) => {
 
 // src/helpers.ts
 var DOMAIN = "city_visitor_parking";
+var WS_GET_STATUS = "city_visitor_parking/status";
+var WS_LIST_RESERVATIONS = "city_visitor_parking/reservations";
 var RESERVATION_STARTED_EVENT = "city-visitor-parking-reservation-started";
 var RESERVATION_ENDED_EVENT = "city-visitor-parking-reservation-ended";
-var EMPTY_ZONE_STATUS = {
+var EMPTY_PAID_PARKING_STATUS = {
   state: null,
   kind: null,
   start: null,
@@ -716,9 +718,9 @@ var setPendingPermitDefaults = (context, entryId, force = false) => {
     _pendingPermitDefaultsForce: force
   });
 };
-var applyZoneStatus = (context, status) => {
+var applyPaidParkingStatus = (context, status) => {
   Object.assign(context, {
-    _zoneState: status?.state ?? null,
+    _paidState: status?.state ?? null,
     _windowKind: status?.kind ?? null,
     _windowStartIso: status?.start ?? null,
     _windowEndIso: status?.end ?? null,
@@ -726,6 +728,85 @@ var applyZoneStatus = (context, status) => {
     _balanceUnit: status?.balanceUnit ?? null
   });
 };
+var nonEmptyString = (value) => typeof value === "string" && value ? value : null;
+var normalizeParkingAreaPaidWindow = (payload) => {
+  const state = payload?.state === "paid" || payload?.state === "free" ? payload.state : null;
+  const kind = payload?.window_kind === "current" || payload?.window_kind === "next" ? payload.window_kind : null;
+  return {
+    state,
+    kind,
+    start: kind ? nonEmptyString(payload?.window_start) : null,
+    end: kind ? nonEmptyString(payload?.window_end) : null
+  };
+};
+var normalizePaidParkingStatus = (payload) => {
+  const balance = payload?.remaining_balance;
+  return {
+    ...normalizeParkingAreaPaidWindow(payload),
+    remainingMinutes: typeof balance === "number" && Number.isFinite(balance) ? balance : null,
+    balanceUnit: nonEmptyString(payload?.balance_unit)
+  };
+};
+var normalizeParkingAreas = (payload) => Array.isArray(payload?.parking_areas) ? payload.parking_areas.filter(
+  (parkingArea) => Boolean(nonEmptyString(parkingArea?.parking_area_id))
+) : [];
+var applyParkingAreaToStatus = (status, parkingArea) => parkingArea && status.state !== null ? { ...status, ...normalizeParkingAreaPaidWindow(parkingArea) } : status;
+var dropForeignParkingAreaId = (config, previousEntryId, parkingAreasByEntryId) => {
+  if (!config.parking_area_id || config.config_entry_id === previousEntryId) {
+    return config;
+  }
+  const parkingAreas = config.config_entry_id ? parkingAreasByEntryId.get(config.config_entry_id) : void 0;
+  if (parkingAreas?.some(
+    (parkingArea) => parkingArea.parking_area_id === config.parking_area_id
+  ))
+    return config;
+  const next = { ...config };
+  delete next.parking_area_id;
+  return next;
+};
+var MIN_SELECTABLE_PARKING_AREAS = 2;
+var resolveCardParkingArea = (parkingAreas, options) => {
+  const find = (parkingAreaId) => parkingAreaId ? parkingAreas.find(
+    (parkingArea) => parkingArea.parking_area_id === parkingAreaId
+  ) : void 0;
+  return (options.showParkingArea ? find(options.pickedParkingAreaId) : void 0) ?? find(options.configParkingAreaId) ?? parkingAreas[0] ?? null;
+};
+var getParkingAreaEditorVisibility = (params) => {
+  const permitHasParkingAreas = params.permitConfigured && params.permitParkingAreaCount >= MIN_SELECTABLE_PARKING_AREAS;
+  return {
+    showParkingAreaSelect: permitHasParkingAreas,
+    showParkingAreaToggle: params.permitConfigured ? permitHasParkingAreas : params.anyPermitHasParkingAreas
+  };
+};
+var fetchReservations = async (hass, device, fresh) => {
+  if (!fresh && device.config_entry_id) {
+    return hass.callWS({
+      type: WS_LIST_RESERVATIONS,
+      config_entry_id: device.config_entry_id
+    });
+  }
+  const result = await hass.callWS({
+    type: "call_service",
+    domain: DOMAIN,
+    service: "list_reservations",
+    return_response: true,
+    service_data: { device_id: device.id }
+  });
+  return "response" in result ? result.response : result;
+};
+var fetchPermitParkingAreas = async (hass, entryId) => {
+  try {
+    return normalizeParkingAreas(
+      await hass.callWS({
+        type: WS_GET_STATUS,
+        config_entry_id: entryId
+      })
+    );
+  } catch {
+    return [];
+  }
+};
+var formatReservationParkingArea = (reservation) => nonEmptyString(reservation.parking_area_name) ?? nonEmptyString(reservation.parking_area_id);
 var isPermitEntryDisabled = (entry) => Boolean(entry.disabled_by) || entry.state != null && entry.state !== "loaded" && entry.state !== "setup_in_progress";
 var buildPermitOptions = (entries) => entries.map((entry) => ({
   id: entry.entry_id,
@@ -975,6 +1056,44 @@ var renderPermitSelect = (params) => {
         .label=${params.label}
         .value=${params.value}
         .required=${false}
+        ?disabled=${params.disabled}
+        @value-changed=${params.onSelected}
+      ></ha-selector>
+    </div>
+  `;
+};
+var renderParkingAreaSelect = (params) => {
+  if (params.preview) {
+    return b2`
+      <div class="row">
+        <ha-input
+          appearance="material"
+          .label=${params.label}
+          .value=${params.parkingAreas.find(
+      (parkingArea) => parkingArea.parking_area_id === params.value
+    )?.name ?? ""}
+          ?disabled=${true}
+        ></ha-input>
+      </div>
+    `;
+  }
+  return b2`
+    <div class="row">
+      <ha-selector
+        id="parkingAreaSelect"
+        .hass=${params.hass}
+        .selector=${{
+    select: {
+      options: params.parkingAreas.map((parkingArea) => ({
+        value: parkingArea.parking_area_id,
+        label: parkingArea.name || parkingArea.parking_area_id
+      })),
+      mode: "dropdown"
+    }
+  }}
+        .label=${params.label}
+        .value=${params.value}
+        .required=${true}
         ?disabled=${params.disabled}
         @value-changed=${params.onSelected}
       ></ha-selector>
@@ -1238,7 +1357,7 @@ var BaseCardEditor = class extends i4 {
   }
   _handleValueChanged(ev) {
     ev.stopPropagation();
-    const config = ev.detail?.value ?? {};
+    const config = this._normalizeConfig(ev.detail?.value ?? {});
     this.dispatchEvent(
       new CustomEvent("config-changed", {
         detail: { config },
@@ -1246,6 +1365,10 @@ var BaseCardEditor = class extends i4 {
         composed: true
       })
     );
+  }
+  /** Adjusts an edited config before it is published; editors may override. */
+  _normalizeConfig(config) {
+    return config;
   }
 };
 
@@ -1275,7 +1398,11 @@ var buildCardTypeOptions = (localizeTarget, prefix) => {
     ]
   ];
 };
-var buildCardEditorSchema = (cardTypeOptions, displayOptionsExpanded) => [
+var NO_PARKING_AREA_FIELDS = {
+  parkingAreaOptions: null,
+  showParkingAreaToggle: false
+};
+var buildCardEditorSchema = (cardTypeOptions, displayOptionsExpanded, parkingAreaFields = NO_PARKING_AREA_FIELDS) => [
   {
     type: "select",
     name: "type",
@@ -1295,6 +1422,25 @@ var buildCardEditorSchema = (cardTypeOptions, displayOptionsExpanded) => [
         selector: { config_entry: { integration: DOMAIN } },
         required: false
       },
+      ...parkingAreaFields.parkingAreaOptions ? [
+        {
+          name: "parking_area_id",
+          selector: {
+            select: {
+              options: parkingAreaFields.parkingAreaOptions,
+              mode: "dropdown"
+            }
+          },
+          required: false
+        }
+      ] : [],
+      ...parkingAreaFields.showParkingAreaToggle ? [
+        {
+          name: "show_parking_area",
+          selector: { boolean: {} },
+          default: true
+        }
+      ] : [],
       { name: "show_name", selector: { boolean: {} }, default: true },
       { name: "show_favorites", selector: { boolean: {} }, default: true },
       { name: "show_start_time", selector: { boolean: {} }, default: true },
@@ -1308,6 +1454,18 @@ var buildCardEditorSchema = (cardTypeOptions, displayOptionsExpanded) => [
   }
 ];
 var CityVisitorParkingCardEditor = class extends BaseCardEditor {
+  constructor() {
+    super(...arguments);
+    // Parking areas per permit from the status websocket; empty when a fetch failed.
+    this._parkingAreasByEntryId = /* @__PURE__ */ new Map();
+    this._parkingAreasLoading = /* @__PURE__ */ new Set();
+    // Enabled permits, loaded only while no permit is configured.
+    this._permitIds = null;
+    this._permitIdsLoading = false;
+  }
+  willUpdate() {
+    if (this.hass) this._ensureParkingAreas(this.hass);
+  }
   render() {
     if (!this.hass) return b2``;
     const localizeTarget = this.hass;
@@ -1318,7 +1476,7 @@ var CityVisitorParkingCardEditor = class extends BaseCardEditor {
     );
     const cardTypeOptions = buildCardTypeOptions(localizeTarget, "editor");
     const displayOptionsExpanded = Boolean(
-      this._config?.config_entry_id || this._config?.show_name === false || this._config?.show_favorites === false || this._config?.show_start_time === false || this._config?.show_end_time === false || this._config?.default_license_plate
+      this._config?.config_entry_id || this._config?.parking_area_id || this._config?.show_parking_area === false || this._config?.show_name === false || this._config?.show_favorites === false || this._config?.show_start_time === false || this._config?.show_end_time === false || this._config?.default_license_plate
     );
     return b2`
       <ha-form
@@ -1326,13 +1484,76 @@ var CityVisitorParkingCardEditor = class extends BaseCardEditor {
         .data=${this._config ?? {}}
         .schema=${buildCardEditorSchema(
       cardTypeOptions,
-      displayOptionsExpanded
+      displayOptionsExpanded,
+      this._getParkingAreaFields()
     )}
         .computeLabel=${computeLabel}
         .computeHelper=${computeHelper}
         @value-changed=${this._handleValueChanged}
       ></ha-form>
     `;
+  }
+  _normalizeConfig(config) {
+    return dropForeignParkingAreaId(
+      config,
+      this._config?.config_entry_id,
+      this._parkingAreasByEntryId
+    );
+  }
+  /** Parking area settings for the current config; see `getParkingAreaEditorVisibility`. */
+  _getParkingAreaFields() {
+    const entryId = this._config?.config_entry_id;
+    const permitParkingAreas = entryId ? this._parkingAreasByEntryId.get(entryId) ?? [] : [];
+    const { showParkingAreaSelect, showParkingAreaToggle } = getParkingAreaEditorVisibility({
+      permitConfigured: Boolean(entryId),
+      permitParkingAreaCount: permitParkingAreas.length,
+      anyPermitHasParkingAreas: (this._permitIds ?? []).some(
+        (id) => (this._parkingAreasByEntryId.get(id)?.length ?? 0) >= MIN_SELECTABLE_PARKING_AREAS
+      )
+    });
+    return {
+      parkingAreaOptions: showParkingAreaSelect ? permitParkingAreas.map((parkingArea) => ({
+        value: parkingArea.parking_area_id,
+        label: parkingArea.name || parkingArea.parking_area_id
+      })) : null,
+      showParkingAreaToggle
+    };
+  }
+  /**
+   * Loads the parking areas that decide which parking area settings are shown: those of the
+   * configured permit, or, without one, those of every enabled permit.
+   */
+  _ensureParkingAreas(hass) {
+    const entryId = this._config?.config_entry_id;
+    if (entryId) {
+      this._loadParkingAreas(hass, entryId);
+      return;
+    }
+    if (this._permitIds) {
+      for (const id of this._permitIds) this._loadParkingAreas(hass, id);
+      return;
+    }
+    if (this._permitIdsLoading) return;
+    this._permitIdsLoading = true;
+    void fetchPermitEntries(hass).then((entries) => {
+      this._permitIds = entries.filter((entry) => !isPermitEntryDisabled(entry)).map((entry) => entry.entry_id);
+    }).catch(() => {
+      this._permitIds = [];
+    }).finally(() => {
+      this._permitIdsLoading = false;
+      this.requestUpdate();
+    });
+  }
+  _loadParkingAreas(hass, entryId) {
+    if (this._parkingAreasByEntryId.has(entryId) || this._parkingAreasLoading.has(entryId)) {
+      return;
+    }
+    this._parkingAreasLoading.add(entryId);
+    void fetchPermitParkingAreas(hass, entryId).then((parkingAreas) => {
+      this._parkingAreasByEntryId.set(entryId, parkingAreas);
+      this._parkingAreasLoading.delete(entryId);
+      this.requestUpdate();
+    });
   }
 };
 defineElementIfMissing(
@@ -1361,7 +1582,6 @@ var getCardConfigForm = createConfigFormGetter(
 // src/card-parking.ts
 var CARD_TYPE = "city-visitor-parking-card";
 var WS_LIST_FAVORITES = "city_visitor_parking/favorites";
-var WS_GET_STATUS = "city_visitor_parking/status";
 var STATUS_THROTTLE_MS = 6e4;
 var STATUS_REFRESH_MS = 3e5;
 var INPUT_VALUE_IDS = /* @__PURE__ */ new Set([
@@ -1399,15 +1619,19 @@ var CityVisitorParkingNewReservationCard = class extends BaseLocalizedCard {
     this._favoriteRemoveInFlight = false;
     this._addFavoriteChecked = false;
     this._suppressFavoriteClear = false;
-    this._zoneState = null;
+    this._paidState = null;
     this._windowKind = null;
     this._windowStartIso = null;
     this._windowEndIso = null;
     this._remainingMinutes = null;
     this._balanceUnit = null;
-    this._zoneStatusTsByEntryId = /* @__PURE__ */ new Map();
-    this._zoneStatusInFlightByEntryId = /* @__PURE__ */ new Map();
-    this._zoneStatusByEntryId = /* @__PURE__ */ new Map();
+    this._paidParkingStatusTsByEntryId = /* @__PURE__ */ new Map();
+    this._paidParkingStatusInFlightByEntryId = /* @__PURE__ */ new Map();
+    this._paidParkingStatusByEntryId = /* @__PURE__ */ new Map();
+    // Parking areas of the last successful status response; kept on fetch failure so a
+    // chosen parking area is not silently replaced by the provider default.
+    this._parkingAreasByEntryId = /* @__PURE__ */ new Map();
+    this._selectedParkingAreaIdByEntryId = /* @__PURE__ */ new Map();
     this._pendingPermitDefaultsEntryId = null;
     this._pendingPermitDefaultsForce = false;
     this._statusRefreshHandle = null;
@@ -1431,6 +1655,7 @@ var CityVisitorParkingNewReservationCard = class extends BaseLocalizedCard {
       this._requestRender();
     };
     this._onPermitSelectChange = (event) => this._handlePermitSelectChange(event);
+    this._onParkingAreaSelectChange = (event) => this._handleParkingAreaSelectChange(event);
     this._onFavoriteSelectChange = (event) => this._handleFavoriteSelectChange(event);
     this._onReservationEnded = (event) => void this._handleReservationEnded(event);
   }
@@ -1465,6 +1690,7 @@ var CityVisitorParkingNewReservationCard = class extends BaseLocalizedCard {
       show_favorites: config.show_favorites !== false,
       show_start_time: config.show_start_time !== false,
       show_end_time: config.show_end_time !== false,
+      show_parking_area: config.show_parking_area !== false,
       ...config
     };
     if (this._config.default_license_plate && !this._formValues["licensePlate"]) {
@@ -1505,7 +1731,7 @@ var CityVisitorParkingNewReservationCard = class extends BaseLocalizedCard {
     }
     if (prev !== "RUNNING" && hass.config?.state === "RUNNING") {
       invalidateFavoritesCache(this, { resetRetryAfter: true });
-      this._zoneStatusTsByEntryId.clear();
+      this._paidParkingStatusTsByEntryId.clear();
     }
     this._syncEntryState(false);
   }
@@ -1658,38 +1884,44 @@ var CityVisitorParkingNewReservationCard = class extends BaseLocalizedCard {
       this._requestRender();
     }
   }
-  async _loadZoneStatusForEntry(entryId) {
+  async _loadPaidParkingStatusForEntry(entryId) {
     if (!this._hass || !entryId) return;
     const hass = this._hass;
     const force = this._pendingPermitDefaultsEntryId === entryId;
     const now = Date.now();
-    const lastTs = this._zoneStatusTsByEntryId.get(entryId);
+    const lastTs = this._paidParkingStatusTsByEntryId.get(entryId);
     if (!force && lastTs !== void 0 && now - lastTs < STATUS_THROTTLE_MS)
       return;
-    const inFlight = this._zoneStatusInFlightByEntryId.get(entryId);
+    const inFlight = this._paidParkingStatusInFlightByEntryId.get(entryId);
     if (inFlight) return inFlight;
     const loadPromise = (async () => {
       let status;
       try {
-        status = this._normalizeZoneStatus(
-          await hass.callWS({
-            type: WS_GET_STATUS,
-            config_entry_id: entryId
-          })
+        const payload = await hass.callWS({
+          type: WS_GET_STATUS,
+          config_entry_id: entryId
+        });
+        status = normalizePaidParkingStatus(payload);
+        this._parkingAreasByEntryId.set(
+          entryId,
+          normalizeParkingAreas(payload)
         );
       } catch {
-        status = EMPTY_ZONE_STATUS;
+        status = EMPTY_PAID_PARKING_STATUS;
       }
-      this._zoneStatusByEntryId.set(entryId, status);
+      this._paidParkingStatusByEntryId.set(entryId, status);
       if (entryId === this._getActiveEntryId()) {
-        applyZoneStatus(this, status);
+        applyPaidParkingStatus(
+          this,
+          this._getEffectivePaidParkingStatus(entryId)
+        );
         this._applyPendingPermitDefaults(entryId);
       }
-      this._zoneStatusTsByEntryId.set(entryId, Date.now());
-      this._zoneStatusInFlightByEntryId.delete(entryId);
+      this._paidParkingStatusTsByEntryId.set(entryId, Date.now());
+      this._paidParkingStatusInFlightByEntryId.delete(entryId);
       this._requestRender();
     })();
-    this._zoneStatusInFlightByEntryId.set(entryId, loadPromise);
+    this._paidParkingStatusInFlightByEntryId.set(entryId, loadPromise);
     return loadPromise;
   }
   _getFavoriteActionState() {
@@ -1750,6 +1982,11 @@ var CityVisitorParkingNewReservationCard = class extends BaseLocalizedCard {
     const selectedPermitDisabled = Boolean(
       activeEntryId && this._permitOptions.find((o5) => o5.id === activeEntryId)?.disabled
     );
+    const parkingAreas = activeEntryId ? this._parkingAreasByEntryId.get(activeEntryId) ?? [] : [];
+    const selectedParkingArea = activeEntryId ? this._resolveParkingArea(activeEntryId) : null;
+    const showParkingAreaField = this._config.show_parking_area !== false && (parkingAreas.length >= MIN_SELECTABLE_PARKING_AREAS || controlsDisabled && !activeEntryId && this._permitOptions.some(
+      (option) => (this._parkingAreasByEntryId.get(option.id)?.length ?? 0) >= MIN_SELECTABLE_PARKING_AREAS
+    ));
     const { showAddFavorite, showRemoveFavorite, removeFavorite } = this._getFavoriteActionState();
     const favoriteRemoveDisabled = controlsDisabled || this._favoriteRemoveInFlight;
     const favoritesOptions = this._favorites;
@@ -1783,6 +2020,15 @@ var CityVisitorParkingNewReservationCard = class extends BaseLocalizedCard {
       disabled: permitSelectDisabled,
       preview: controlsDisabled,
       onSelected: this._onPermitSelectChange
+    }) : A}
+          ${showParkingAreaField ? renderParkingAreaSelect({
+      hass: this._hass,
+      label: localizeFn("field.parking_area"),
+      parkingAreas,
+      value: selectedParkingArea?.parking_area_id ?? "",
+      disabled: controlsDisabled || selectedPermitDisabled,
+      preview: controlsDisabled,
+      onSelected: this._onParkingAreaSelectChange
     }) : A}
           ${renderFavoriteSelect({
       showName,
@@ -1869,12 +2115,27 @@ var CityVisitorParkingNewReservationCard = class extends BaseLocalizedCard {
     if (!this._config) return;
     const controlsDisabled = this._isInEditor();
     this.toggleAttribute("data-preview", controlsDisabled);
+    if (controlsDisabled) this._loadPreviewPermitParkingAreas();
     if (this._addFavoriteChecked) {
       const { showAddFavorite } = this._getFavoriteActionState();
       if (!showAddFavorite) {
         this._addFavoriteChecked = false;
         this._requestRender();
       }
+    }
+  }
+  /**
+   * The preview's permit picker is read-only, so without a configured permit
+   * no permit gets selected and no parking areas load. Load the parking areas of every permit
+   * so the preview can still show the parking area field the dashboard card offers.
+   */
+  _loadPreviewPermitParkingAreas() {
+    if (this._getActiveEntryId() || !this._permitOptionsLoaded) return;
+    for (const option of this._permitOptions) {
+      if (option.disabled || this._paidParkingStatusTsByEntryId.has(option.id)) {
+        continue;
+      }
+      void this._loadPaidParkingStatusForEntry(option.id);
     }
   }
   _scheduleFavoriteActionsUpdate() {
@@ -1943,6 +2204,42 @@ var CityVisitorParkingNewReservationCard = class extends BaseLocalizedCard {
     const target = event.currentTarget;
     this._handlePermitChange(extractEventValue(event, target));
   }
+  _handleParkingAreaSelectChange(event) {
+    if (this._isInEditor()) return;
+    const entryId = this._getActiveEntryId();
+    const target = event.currentTarget;
+    const parkingAreaId = extractEventValue(event, target);
+    if (!entryId || !parkingAreaId) return;
+    const parkingAreas = this._parkingAreasByEntryId.get(entryId) ?? [];
+    if (!parkingAreas.some(
+      (parkingArea) => parkingArea.parking_area_id === parkingAreaId
+    ))
+      return;
+    if (this._resolveParkingArea(entryId)?.parking_area_id === parkingAreaId)
+      return;
+    this._selectedParkingAreaIdByEntryId.set(entryId, parkingAreaId);
+    applyPaidParkingStatus(this, this._getEffectivePaidParkingStatus(entryId));
+    this._applyStatusDefaultsToForm(true);
+    this._requestRender();
+  }
+  /** Parking area the card uses for an entry: user pick, configured preset, or default. */
+  _resolveParkingArea(entryId) {
+    return resolveCardParkingArea(
+      this._parkingAreasByEntryId.get(entryId) ?? [],
+      {
+        showParkingArea: this._config?.show_parking_area !== false,
+        // The configured parking area preset belongs to the configured permit only.
+        configParkingAreaId: getConfigEntryId(this._config) === entryId ? this._config?.parking_area_id : null,
+        pickedParkingAreaId: this._selectedParkingAreaIdByEntryId.get(entryId)
+      }
+    );
+  }
+  /** Parking area status of an entry with the selected parking area's state and window applied. */
+  _getEffectivePaidParkingStatus(entryId) {
+    const status = this._paidParkingStatusByEntryId.get(entryId);
+    if (!status) return null;
+    return applyParkingAreaToStatus(status, this._resolveParkingArea(entryId));
+  }
   _handleFavoriteSelectChange(event) {
     if (!this._config?.show_favorites || !this._config?.show_name || this._isInEditor())
       return;
@@ -2000,12 +2297,12 @@ var CityVisitorParkingNewReservationCard = class extends BaseLocalizedCard {
     this._resetDeviceState();
     this._suppressFavoriteClear = false;
     this._setInputValue("favorite", "");
-    applyZoneStatus(this, this._zoneStatusByEntryId.get(value) ?? null);
+    applyPaidParkingStatus(this, this._getEffectivePaidParkingStatus(value));
     this._applyStatusDefaultsToForm(true);
     this._clearStatus();
     this._ensureDeviceId();
     this._maybeLoadFavorites();
-    void this._loadZoneStatusForEntry(value);
+    void this._loadPaidParkingStatusForEntry(value);
     void this._loadActivePlates(value);
     this._setupStatusRefresh(value);
   }
@@ -2020,7 +2317,7 @@ var CityVisitorParkingNewReservationCard = class extends BaseLocalizedCard {
   _resetDeviceState() {
     this._deviceId = null;
     this._deviceEntryId = null;
-    applyZoneStatus(this, null);
+    applyPaidParkingStatus(this, null);
     this._resetFavoritesState();
     this._activeReservationsByPlate = /* @__PURE__ */ new Map();
     this._activeReservationsLoadedFor = null;
@@ -2035,9 +2332,9 @@ var CityVisitorParkingNewReservationCard = class extends BaseLocalizedCard {
   }
   _syncEntryState(forceSetupRefresh) {
     const entryId = this._getActiveEntryId();
-    applyZoneStatus(
+    applyPaidParkingStatus(
       this,
-      entryId ? this._zoneStatusByEntryId.get(entryId) ?? null : null
+      entryId ? this._getEffectivePaidParkingStatus(entryId) : null
     );
     this._applyStatusDefaultsToForm(false);
     if (getConfigEntryId(this._config) && entryId) {
@@ -2047,7 +2344,7 @@ var CityVisitorParkingNewReservationCard = class extends BaseLocalizedCard {
     this._ensureDeviceId();
     this._ensurePermitOptions();
     this._maybeSelectSinglePermit();
-    if (entryId) void this._loadZoneStatusForEntry(entryId);
+    if (entryId) void this._loadPaidParkingStatusForEntry(entryId);
     if (forceSetupRefresh || this._statusRefreshHandle === null) {
       this._setupStatusRefresh(entryId);
     }
@@ -2062,7 +2359,7 @@ var CityVisitorParkingNewReservationCard = class extends BaseLocalizedCard {
       const activeEntryId = this._getActiveEntryId();
       if (!activeEntryId || activeEntryId !== entryId) return;
       setPendingPermitDefaults(this, entryId);
-      void this._loadZoneStatusForEntry(entryId);
+      void this._loadPaidParkingStatusForEntry(entryId);
       this._activeReservationsLoadedFor = null;
       void this._loadActivePlates(entryId);
     };
@@ -2111,20 +2408,6 @@ var CityVisitorParkingNewReservationCard = class extends BaseLocalizedCard {
     const favoriteValue = normalizeMatchValue(value);
     if (!favoriteValue) return null;
     return this._favoritesByValue.get(favoriteValue) ?? null;
-  }
-  _normalizeZoneStatus(payload) {
-    const state = payload?.state === "chargeable" || payload?.state === "free" ? payload.state : null;
-    const kind = payload?.window_kind === "current" || payload?.window_kind === "next" ? payload.window_kind : null;
-    const str = (v2) => typeof v2 === "string" && v2 ? v2 : null;
-    const num = (v2) => typeof v2 === "number" && Number.isFinite(v2) ? v2 : null;
-    return {
-      state,
-      kind,
-      start: kind ? str(payload?.window_start) : null,
-      end: kind ? str(payload?.window_end) : null,
-      remainingMinutes: num(payload?.remaining_balance),
-      balanceUnit: str(payload?.balance_unit)
-    };
   }
   _selectedFavoriteMatchesLicense(favorite, license) {
     const key = normalizePlateValue(favorite.license_plate || favorite.id);
@@ -2199,11 +2482,15 @@ var CityVisitorParkingNewReservationCard = class extends BaseLocalizedCard {
       this._addFavoriteChecked = false;
     }
     try {
+      const activeEntryId2 = this._getActiveEntryId();
+      const parkingArea = activeEntryId2 ? this._resolveParkingArea(activeEntryId2) : null;
       await this._hass.callService(DOMAIN, "start_reservation", {
         device_id: this._deviceId,
         start_time: start.toISOString(),
         end_time: end.toISOString(),
-        license_plate: license
+        license_plate: license,
+        // Permits without parking areas send no parking_area_id at all.
+        ...parkingArea ? { parking_area_id: parkingArea.parking_area_id } : {}
       });
     } catch (err) {
       const message = this._errorMessage(
@@ -2228,7 +2515,7 @@ var CityVisitorParkingNewReservationCard = class extends BaseLocalizedCard {
     this._scheduleFavoriteActionsUpdate();
     this._activeReservationsLoadedFor = null;
     const activeEntryId = this._getActiveEntryId();
-    if (activeEntryId) void this._loadActivePlates(activeEntryId);
+    if (activeEntryId) void this._loadActivePlates(activeEntryId, false);
     this._requestRender();
     await triggerProgressButtonFeedback(this, "#startReservation", "success");
     window.dispatchEvent(
@@ -2309,7 +2596,7 @@ var CityVisitorParkingNewReservationCard = class extends BaseLocalizedCard {
     return { start, end };
   }
   _getRelevantWindowTimes() {
-    const validKind = this._zoneState === "chargeable" && this._windowKind === "current" || this._zoneState === "free" && this._windowKind === "next";
+    const validKind = this._paidState === "paid" && this._windowKind === "current" || this._paidState === "free" && this._windowKind === "next";
     if (!validKind) return null;
     const start = parseDateTimeValue(this._windowStartIso);
     const end = parseDateTimeValue(this._windowEndIso);
@@ -2371,7 +2658,13 @@ var CityVisitorParkingNewReservationCard = class extends BaseLocalizedCard {
     await this.updateComplete;
     this._scheduleFavoriteActionsUpdate();
   }
-  async _loadActivePlates(entryId) {
+  /**
+   * Loads the plates with a running or upcoming reservation for a permit.
+   *
+   * `fresh` fetches from the provider; pass `false` after a write from a card,
+   * whose service already refreshed the coordinator.
+   */
+  async _loadActivePlates(entryId, fresh = true) {
     if (!this._hass || !entryId) return;
     if (this._activeReservationsLoadedFor === entryId) return;
     this._activeReservationsLoadedFor = entryId;
@@ -2385,15 +2678,7 @@ var CityVisitorParkingNewReservationCard = class extends BaseLocalizedCard {
       );
       const byPlate = /* @__PURE__ */ new Map();
       const results = await Promise.allSettled(
-        domainDevices.map(
-          (device) => hass.callWS({
-            type: "call_service",
-            domain: DOMAIN,
-            service: "list_reservations",
-            return_response: true,
-            service_data: { device_id: device.id }
-          })
-        )
+        domainDevices.map((device) => fetchReservations(hass, device, fresh))
       );
       let anyFailed = false;
       for (const [index, settled] of results.entries()) {
@@ -2405,9 +2690,7 @@ var CityVisitorParkingNewReservationCard = class extends BaseLocalizedCard {
           );
           continue;
         }
-        const result = settled.value;
-        const response = result?.response ?? result;
-        const reservations = response?.reservations;
+        const reservations = settled.value?.reservations;
         if (Array.isArray(reservations)) {
           for (const r4 of reservations) {
             const plate = normalizePlateValue(r4.license_plate);
@@ -2439,7 +2722,7 @@ var CityVisitorParkingNewReservationCard = class extends BaseLocalizedCard {
     const deviceId = (detail?.device_id ?? "").trim();
     if (deviceId && this._deviceId && deviceId !== this._deviceId) return;
     this._activeReservationsLoadedFor = null;
-    await this._loadActivePlates(activeEntryId);
+    await this._loadActivePlates(activeEntryId, false);
   }
   _getActiveEntryId() {
     return getConfigEntryId(this._config) || this._selectedEntryId;
@@ -2570,7 +2853,6 @@ var getActiveCardConfigForm = createConfigFormGetter(
 
 // src/card-active.ts
 var CARD_TYPE2 = "city-visitor-parking-active-card";
-var SERVICE_LIST_RESERVATIONS = "list_reservations";
 var SERVICE_UPDATE_RESERVATION = "update_reservation";
 var SERVICE_END_RESERVATION = "end_reservation";
 var UPDATE_START_FLAG = 1;
@@ -2614,7 +2896,7 @@ var CityVisitorParkingActiveCard = class extends BaseLocalizedCard {
       if (deviceId && licensePlate && name) {
         this._setPendingReservationName(deviceId, licensePlate, name);
       }
-      void this._maybeLoadActiveReservations(true);
+      void this._maybeLoadActiveReservations(true, false);
     };
     window.addEventListener(
       RESERVATION_STARTED_EVENT,
@@ -2671,7 +2953,13 @@ var CityVisitorParkingActiveCard = class extends BaseLocalizedCard {
       min_rows: 4
     };
   }
-  async _maybeLoadActiveReservations(force = false) {
+  /**
+   * Loads the reservations shown by the card.
+   *
+   * `fresh` fetches from the provider; pass `false` after this card's own
+   * writes, whose services already refreshed the coordinator.
+   */
+  async _maybeLoadActiveReservations(force = false, fresh = true) {
     if (!this._hass || !this._config) return;
     if (!isHassRunning(this._hass)) return;
     const entryId = this._getActiveEntryId();
@@ -2701,16 +2989,9 @@ var CityVisitorParkingActiveCard = class extends BaseLocalizedCard {
         devices,
         entryTitles
       );
+      const hass = this._hass;
       const results = await Promise.allSettled(
-        devices.map(
-          (device) => this._hass.callWS({
-            type: "call_service",
-            domain: DOMAIN,
-            service: SERVICE_LIST_RESERVATIONS,
-            return_response: true,
-            service_data: { device_id: device.id }
-          })
-        )
+        devices.map((device) => fetchReservations(hass, device, fresh))
       );
       const collected = [];
       const collectedById = /* @__PURE__ */ new Map();
@@ -2722,8 +3003,7 @@ var CityVisitorParkingActiveCard = class extends BaseLocalizedCard {
           failedDevices.push(device.name ?? device.id);
           continue;
         }
-        const result = settled.value;
-        const response = result?.response ?? result;
+        const response = settled.value;
         const activeReservations = response?.reservations;
         const updateFields = response?.reservation_update_fields;
         if (Array.isArray(updateFields)) {
@@ -2816,6 +3096,7 @@ var CityVisitorParkingActiveCard = class extends BaseLocalizedCard {
     const pendingName = !name && reservation.device_id ? this._getPendingReservationName(reservation.device_id, license) : null;
     const identify = name || pendingName || license || reservation.reservation_id;
     const permitLabel = reservation.device_id ? this._permitLabelsByDeviceId.get(reservation.device_id) : null;
+    const parkingAreaLabel = formatReservationParkingArea(reservation);
     const updateFlags = this._getReservationUpdateFlags(reservation.device_id);
     const allowStart = Boolean(updateFlags & UPDATE_START_FLAG);
     const allowEnd = Boolean(updateFlags & UPDATE_END_FLAG);
@@ -2836,6 +3117,9 @@ var CityVisitorParkingActiveCard = class extends BaseLocalizedCard {
               </div>` : A}
           ${permitLabel ? b2`<div class="active-reservation-label">
                 ${this._localize("field.permit")}: ${permitLabel}
+              </div>` : A}
+          ${parkingAreaLabel ? b2`<div class="active-reservation-label">
+                ${this._localize("field.parking_area")}: ${parkingAreaLabel}
               </div>` : A}
         </div>
         <div class="active-reservation-times">
@@ -3078,7 +3362,7 @@ var CityVisitorParkingActiveCard = class extends BaseLocalizedCard {
       reservationId,
       "message.reservation_updated"
     );
-    await this._maybeLoadActiveReservations(true);
+    await this._maybeLoadActiveReservations(true, false);
   }
   async _handleActiveReservationEnd(reservationId) {
     if (!this._hass || !reservationId) return;
@@ -3123,7 +3407,7 @@ var CityVisitorParkingActiveCard = class extends BaseLocalizedCard {
       "success"
     );
     this._activeReservationsLoadedFor = null;
-    await this._maybeLoadActiveReservations(true);
+    await this._maybeLoadActiveReservations(true, false);
   }
   async _getConfigEntryTitles() {
     if (!this._hass) return /* @__PURE__ */ new Map();

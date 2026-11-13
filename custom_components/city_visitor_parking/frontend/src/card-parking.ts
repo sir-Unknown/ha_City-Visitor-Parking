@@ -6,8 +6,9 @@ import type {
   FavoriteItem,
   HomeAssistant,
   PermitOption,
-  ZoneStatus,
-  ZoneStatusResponse,
+  PaidParkingStatus,
+  PaidParkingStatusResponse,
+  ParkingAreaStatus,
 } from "./types";
 import {
   ensureTranslations,
@@ -16,15 +17,19 @@ import {
 } from "./translations";
 import {
   DOMAIN,
+  MIN_SELECTABLE_PARKING_AREAS,
   RESERVATION_ENDED_EVENT,
-  EMPTY_ZONE_STATUS,
+  EMPTY_PAID_PARKING_STATUS,
   RESERVATION_STARTED_EVENT,
-  applyZoneStatus,
+  WS_GET_STATUS,
+  applyPaidParkingStatus,
+  applyParkingAreaToStatus,
   buildPermitOptions,
   clearFavoriteTransientState,
   createFavoriteIndex,
   extractEventValue,
   fetchPermitEntries,
+  fetchReservations,
   filterDomainDevices,
   formatDateTimeLocal,
   getConfigEntryId,
@@ -32,7 +37,10 @@ import {
   isHassRunning,
   normalizeMatchValue,
   normalizePlateValue,
+  normalizePaidParkingStatus,
+  normalizeParkingAreas,
   parseDateTimeValue,
+  resolveCardParkingArea,
   setPendingPermitDefaults,
 } from "./helpers";
 import {
@@ -42,6 +50,7 @@ import {
   renderFavoriteSelect,
   renderLoadingCard,
   renderPermitSelect,
+  renderParkingAreaSelect,
   triggerProgressButtonFeedback,
 } from "./ui";
 import { BaseLocalizedCard, registerCustomCardWithTranslations } from "./base";
@@ -49,10 +58,9 @@ import { getCardConfigForm } from "./editor-parking";
 
 const CARD_TYPE = "city-visitor-parking-card";
 const WS_LIST_FAVORITES = "city_visitor_parking/favorites";
-const WS_GET_STATUS = "city_visitor_parking/status";
 // Minimum interval between status fetches triggered by hass updates.
 const STATUS_THROTTLE_MS = 60000;
-// Background polling interval for zone status (and on page visibility restore).
+// Background polling interval for parking area status (and on page visibility restore).
 // The coordinator already polls at 5–30 min; no need to fetch more often than that.
 const STATUS_REFRESH_MS = 300000;
 
@@ -66,6 +74,8 @@ type CardConfig = {
   show_end_time?: boolean;
   default_license_plate?: string;
   config_entry_id?: string;
+  parking_area_id?: string;
+  show_parking_area?: boolean;
   device_id?: string;
 };
 type CheckedElement = HTMLElement & { checked: boolean; disabled?: boolean };
@@ -143,15 +153,19 @@ class CityVisitorParkingNewReservationCard extends BaseLocalizedCard<CardConfig>
   _favoriteRemoveInFlight = false;
   _addFavoriteChecked = false;
   _suppressFavoriteClear = false;
-  _zoneState: "chargeable" | "free" | null = null;
+  _paidState: "paid" | "free" | null = null;
   _windowKind: "current" | "next" | null = null;
   _windowStartIso: string | null = null;
   _windowEndIso: string | null = null;
   _remainingMinutes: number | null = null;
   _balanceUnit: string | null = null;
-  _zoneStatusTsByEntryId = new Map<string, number>();
-  _zoneStatusInFlightByEntryId = new Map<string, Promise<void>>();
-  _zoneStatusByEntryId = new Map<string, ZoneStatus>();
+  _paidParkingStatusTsByEntryId = new Map<string, number>();
+  _paidParkingStatusInFlightByEntryId = new Map<string, Promise<void>>();
+  _paidParkingStatusByEntryId = new Map<string, PaidParkingStatus>();
+  // Parking areas of the last successful status response; kept on fetch failure so a
+  // chosen parking area is not silently replaced by the provider default.
+  _parkingAreasByEntryId = new Map<string, ParkingAreaStatus[]>();
+  _selectedParkingAreaIdByEntryId = new Map<string, string>();
   _pendingPermitDefaultsEntryId: string | null = null;
   _pendingPermitDefaultsForce = false;
   _statusRefreshHandle: number | null = null;
@@ -180,6 +194,8 @@ class CityVisitorParkingNewReservationCard extends BaseLocalizedCard<CardConfig>
   };
   _onPermitSelectChange = (event: Event) =>
     this._handlePermitSelectChange(event);
+  _onParkingAreaSelectChange = (event: Event) =>
+    this._handleParkingAreaSelectChange(event);
   _onFavoriteSelectChange = (event: Event) =>
     this._handleFavoriteSelectChange(event);
   _onReservationEnded = (event: Event) =>
@@ -222,6 +238,7 @@ class CityVisitorParkingNewReservationCard extends BaseLocalizedCard<CardConfig>
       show_favorites: config.show_favorites !== false,
       show_start_time: config.show_start_time !== false,
       show_end_time: config.show_end_time !== false,
+      show_parking_area: config.show_parking_area !== false,
       ...config,
     };
     if (
@@ -269,7 +286,7 @@ class CityVisitorParkingNewReservationCard extends BaseLocalizedCard<CardConfig>
     }
     if (prev !== "RUNNING" && hass.config?.state === "RUNNING") {
       invalidateFavoritesCache(this, { resetRetryAfter: true });
-      this._zoneStatusTsByEntryId.clear();
+      this._paidParkingStatusTsByEntryId.clear();
     }
     this._syncEntryState(false);
   }
@@ -440,38 +457,44 @@ class CityVisitorParkingNewReservationCard extends BaseLocalizedCard<CardConfig>
     }
   }
 
-  async _loadZoneStatusForEntry(entryId: string): Promise<void> {
+  async _loadPaidParkingStatusForEntry(entryId: string): Promise<void> {
     if (!this._hass || !entryId) return;
     const hass = this._hass;
     const force = this._pendingPermitDefaultsEntryId === entryId;
     const now = Date.now();
-    const lastTs = this._zoneStatusTsByEntryId.get(entryId);
+    const lastTs = this._paidParkingStatusTsByEntryId.get(entryId);
     if (!force && lastTs !== undefined && now - lastTs < STATUS_THROTTLE_MS)
       return;
-    const inFlight = this._zoneStatusInFlightByEntryId.get(entryId);
+    const inFlight = this._paidParkingStatusInFlightByEntryId.get(entryId);
     if (inFlight) return inFlight;
     const loadPromise = (async () => {
-      let status: ZoneStatus;
+      let status: PaidParkingStatus;
       try {
-        status = this._normalizeZoneStatus(
-          await hass.callWS<ZoneStatusResponse>({
-            type: WS_GET_STATUS,
-            config_entry_id: entryId,
-          }),
+        const payload = await hass.callWS<PaidParkingStatusResponse>({
+          type: WS_GET_STATUS,
+          config_entry_id: entryId,
+        });
+        status = normalizePaidParkingStatus(payload);
+        this._parkingAreasByEntryId.set(
+          entryId,
+          normalizeParkingAreas(payload),
         );
       } catch {
-        status = EMPTY_ZONE_STATUS;
+        status = EMPTY_PAID_PARKING_STATUS;
       }
-      this._zoneStatusByEntryId.set(entryId, status);
+      this._paidParkingStatusByEntryId.set(entryId, status);
       if (entryId === this._getActiveEntryId()) {
-        applyZoneStatus(this, status);
+        applyPaidParkingStatus(
+          this,
+          this._getEffectivePaidParkingStatus(entryId),
+        );
         this._applyPendingPermitDefaults(entryId);
       }
-      this._zoneStatusTsByEntryId.set(entryId, Date.now());
-      this._zoneStatusInFlightByEntryId.delete(entryId);
+      this._paidParkingStatusTsByEntryId.set(entryId, Date.now());
+      this._paidParkingStatusInFlightByEntryId.delete(entryId);
       this._requestRender();
     })();
-    this._zoneStatusInFlightByEntryId.set(entryId, loadPromise);
+    this._paidParkingStatusInFlightByEntryId.set(entryId, loadPromise);
     return loadPromise;
   }
 
@@ -554,6 +577,24 @@ class CityVisitorParkingNewReservationCard extends BaseLocalizedCard<CardConfig>
       activeEntryId &&
       this._permitOptions.find((o) => o.id === activeEntryId)?.disabled,
     );
+    const parkingAreas = activeEntryId
+      ? (this._parkingAreasByEntryId.get(activeEntryId) ?? [])
+      : [];
+    const selectedParkingArea = activeEntryId
+      ? this._resolveParkingArea(activeEntryId)
+      : null;
+    // Without a permit only the preview shows an (empty) parking area field: there the
+    // permit picker is read-only, so any permit with parking areas stands in for it.
+    const showParkingAreaField =
+      this._config.show_parking_area !== false &&
+      (parkingAreas.length >= MIN_SELECTABLE_PARKING_AREAS ||
+        (controlsDisabled &&
+          !activeEntryId &&
+          this._permitOptions.some(
+            (option) =>
+              (this._parkingAreasByEntryId.get(option.id)?.length ?? 0) >=
+              MIN_SELECTABLE_PARKING_AREAS,
+          )));
     const { showAddFavorite, showRemoveFavorite, removeFavorite } =
       this._getFavoriteActionState();
     const favoriteRemoveDisabled =
@@ -597,6 +638,17 @@ class CityVisitorParkingNewReservationCard extends BaseLocalizedCard<CardConfig>
                 disabled: permitSelectDisabled,
                 preview: controlsDisabled,
                 onSelected: this._onPermitSelectChange,
+              })
+            : nothing}
+          ${showParkingAreaField
+            ? renderParkingAreaSelect({
+                hass: this._hass,
+                label: localizeFn("field.parking_area"),
+                parkingAreas,
+                value: selectedParkingArea?.parking_area_id ?? "",
+                disabled: controlsDisabled || selectedPermitDisabled,
+                preview: controlsDisabled,
+                onSelected: this._onParkingAreaSelectChange,
               })
             : nothing}
           ${renderFavoriteSelect({
@@ -696,12 +748,31 @@ class CityVisitorParkingNewReservationCard extends BaseLocalizedCard<CardConfig>
     if (!this._config) return;
     const controlsDisabled = this._isInEditor();
     this.toggleAttribute("data-preview", controlsDisabled);
+    if (controlsDisabled) this._loadPreviewPermitParkingAreas();
     if (this._addFavoriteChecked) {
       const { showAddFavorite } = this._getFavoriteActionState();
       if (!showAddFavorite) {
         this._addFavoriteChecked = false;
         this._requestRender();
       }
+    }
+  }
+
+  /**
+   * The preview's permit picker is read-only, so without a configured permit
+   * no permit gets selected and no parking areas load. Load the parking areas of every permit
+   * so the preview can still show the parking area field the dashboard card offers.
+   */
+  _loadPreviewPermitParkingAreas(): void {
+    if (this._getActiveEntryId() || !this._permitOptionsLoaded) return;
+    for (const option of this._permitOptions) {
+      if (
+        option.disabled ||
+        this._paidParkingStatusTsByEntryId.has(option.id)
+      ) {
+        continue;
+      }
+      void this._loadPaidParkingStatusForEntry(option.id);
     }
   }
 
@@ -782,6 +853,52 @@ class CityVisitorParkingNewReservationCard extends BaseLocalizedCard<CardConfig>
     this._handlePermitChange(extractEventValue(event, target));
   }
 
+  _handleParkingAreaSelectChange(event: Event): void {
+    if (this._isInEditor()) return;
+    const entryId = this._getActiveEntryId();
+    const target = event.currentTarget as
+      | (HTMLElement & { value?: string })
+      | null;
+    const parkingAreaId = extractEventValue(event, target);
+    if (!entryId || !parkingAreaId) return;
+    const parkingAreas = this._parkingAreasByEntryId.get(entryId) ?? [];
+    if (
+      !parkingAreas.some(
+        (parkingArea) => parkingArea.parking_area_id === parkingAreaId,
+      )
+    )
+      return;
+    if (this._resolveParkingArea(entryId)?.parking_area_id === parkingAreaId)
+      return;
+    this._selectedParkingAreaIdByEntryId.set(entryId, parkingAreaId);
+    applyPaidParkingStatus(this, this._getEffectivePaidParkingStatus(entryId));
+    this._applyStatusDefaultsToForm(true);
+    this._requestRender();
+  }
+
+  /** Parking area the card uses for an entry: user pick, configured preset, or default. */
+  _resolveParkingArea(entryId: string): ParkingAreaStatus | null {
+    return resolveCardParkingArea(
+      this._parkingAreasByEntryId.get(entryId) ?? [],
+      {
+        showParkingArea: this._config?.show_parking_area !== false,
+        // The configured parking area preset belongs to the configured permit only.
+        configParkingAreaId:
+          getConfigEntryId(this._config) === entryId
+            ? this._config?.parking_area_id
+            : null,
+        pickedParkingAreaId: this._selectedParkingAreaIdByEntryId.get(entryId),
+      },
+    );
+  }
+
+  /** Parking area status of an entry with the selected parking area's state and window applied. */
+  _getEffectivePaidParkingStatus(entryId: string): PaidParkingStatus | null {
+    const status = this._paidParkingStatusByEntryId.get(entryId);
+    if (!status) return null;
+    return applyParkingAreaToStatus(status, this._resolveParkingArea(entryId));
+  }
+
   _handleFavoriteSelectChange(event: Event): void {
     if (
       !this._config?.show_favorites ||
@@ -853,12 +970,12 @@ class CityVisitorParkingNewReservationCard extends BaseLocalizedCard<CardConfig>
     this._resetDeviceState();
     this._suppressFavoriteClear = false;
     this._setInputValue("favorite", "");
-    applyZoneStatus(this, this._zoneStatusByEntryId.get(value) ?? null);
+    applyPaidParkingStatus(this, this._getEffectivePaidParkingStatus(value));
     this._applyStatusDefaultsToForm(true);
     this._clearStatus();
     this._ensureDeviceId();
     this._maybeLoadFavorites();
-    void this._loadZoneStatusForEntry(value);
+    void this._loadPaidParkingStatusForEntry(value);
     void this._loadActivePlates(value);
     this._setupStatusRefresh(value);
   }
@@ -875,7 +992,7 @@ class CityVisitorParkingNewReservationCard extends BaseLocalizedCard<CardConfig>
   _resetDeviceState(): void {
     this._deviceId = null;
     this._deviceEntryId = null;
-    applyZoneStatus(this, null);
+    applyPaidParkingStatus(this, null);
     this._resetFavoritesState();
     this._activeReservationsByPlate = new Map();
     this._activeReservationsLoadedFor = null;
@@ -894,9 +1011,9 @@ class CityVisitorParkingNewReservationCard extends BaseLocalizedCard<CardConfig>
 
   _syncEntryState(forceSetupRefresh: boolean): void {
     const entryId = this._getActiveEntryId();
-    applyZoneStatus(
+    applyPaidParkingStatus(
       this,
-      entryId ? (this._zoneStatusByEntryId.get(entryId) ?? null) : null,
+      entryId ? this._getEffectivePaidParkingStatus(entryId) : null,
     );
     this._applyStatusDefaultsToForm(false);
     if (getConfigEntryId(this._config) && entryId) {
@@ -906,7 +1023,7 @@ class CityVisitorParkingNewReservationCard extends BaseLocalizedCard<CardConfig>
     this._ensureDeviceId();
     this._ensurePermitOptions();
     this._maybeSelectSinglePermit();
-    if (entryId) void this._loadZoneStatusForEntry(entryId);
+    if (entryId) void this._loadPaidParkingStatusForEntry(entryId);
     if (forceSetupRefresh || this._statusRefreshHandle === null) {
       this._setupStatusRefresh(entryId);
     }
@@ -922,7 +1039,7 @@ class CityVisitorParkingNewReservationCard extends BaseLocalizedCard<CardConfig>
       const activeEntryId = this._getActiveEntryId();
       if (!activeEntryId || activeEntryId !== entryId) return;
       setPendingPermitDefaults(this, entryId);
-      void this._loadZoneStatusForEntry(entryId);
+      void this._loadPaidParkingStatusForEntry(entryId);
       // Invalidate active-plate cache so the next render re-fetches and
       // picks up reservations ended or changed outside this card.
       this._activeReservationsLoadedFor = null;
@@ -978,31 +1095,6 @@ class CityVisitorParkingNewReservationCard extends BaseLocalizedCard<CardConfig>
     const favoriteValue = normalizeMatchValue(value);
     if (!favoriteValue) return null;
     return this._favoritesByValue.get(favoriteValue) ?? null;
-  }
-
-  _normalizeZoneStatus(
-    payload: ZoneStatusResponse | null | undefined,
-  ): ZoneStatus {
-    const state =
-      payload?.state === "chargeable" || payload?.state === "free"
-        ? payload.state
-        : null;
-    const kind =
-      payload?.window_kind === "current" || payload?.window_kind === "next"
-        ? payload.window_kind
-        : null;
-    const str = (v: unknown): string | null =>
-      typeof v === "string" && v ? v : null;
-    const num = (v: unknown): number | null =>
-      typeof v === "number" && Number.isFinite(v) ? v : null;
-    return {
-      state,
-      kind,
-      start: kind ? str(payload?.window_start) : null,
-      end: kind ? str(payload?.window_end) : null,
-      remainingMinutes: num(payload?.remaining_balance),
-      balanceUnit: str(payload?.balance_unit),
-    };
   }
 
   _selectedFavoriteMatchesLicense(
@@ -1100,11 +1192,19 @@ class CityVisitorParkingNewReservationCard extends BaseLocalizedCard<CardConfig>
       this._addFavoriteChecked = false;
     }
     try {
+      const activeEntryId = this._getActiveEntryId();
+      const parkingArea = activeEntryId
+        ? this._resolveParkingArea(activeEntryId)
+        : null;
       await this._hass.callService(DOMAIN, "start_reservation", {
         device_id: this._deviceId,
         start_time: start!.toISOString(),
         end_time: end!.toISOString(),
         license_plate: license,
+        // Permits without parking areas send no parking_area_id at all.
+        ...(parkingArea
+          ? { parking_area_id: parkingArea.parking_area_id }
+          : {}),
       });
     } catch (err: unknown) {
       const message = this._errorMessage(
@@ -1129,7 +1229,8 @@ class CityVisitorParkingNewReservationCard extends BaseLocalizedCard<CardConfig>
     this._scheduleFavoriteActionsUpdate();
     this._activeReservationsLoadedFor = null;
     const activeEntryId = this._getActiveEntryId();
-    if (activeEntryId) void this._loadActivePlates(activeEntryId);
+    // The start service refreshed the coordinator before it returned.
+    if (activeEntryId) void this._loadActivePlates(activeEntryId, false);
     this._requestRender();
     await triggerProgressButtonFeedback(this, "#startReservation", "success");
     window.dispatchEvent(
@@ -1231,8 +1332,8 @@ class CityVisitorParkingNewReservationCard extends BaseLocalizedCard<CardConfig>
 
   _getRelevantWindowTimes(): { start: Date; end: Date } | null {
     const validKind =
-      (this._zoneState === "chargeable" && this._windowKind === "current") ||
-      (this._zoneState === "free" && this._windowKind === "next");
+      (this._paidState === "paid" && this._windowKind === "current") ||
+      (this._paidState === "free" && this._windowKind === "next");
     if (!validKind) return null;
     const start = parseDateTimeValue(this._windowStartIso);
     const end = parseDateTimeValue(this._windowEndIso);
@@ -1306,25 +1407,17 @@ class CityVisitorParkingNewReservationCard extends BaseLocalizedCard<CardConfig>
     this._scheduleFavoriteActionsUpdate();
   }
 
-  async _loadActivePlates(entryId: string): Promise<void> {
+  /**
+   * Loads the plates with a running or upcoming reservation for a permit.
+   *
+   * `fresh` fetches from the provider; pass `false` after a write from a card,
+   * whose service already refreshed the coordinator.
+   */
+  async _loadActivePlates(entryId: string, fresh = true): Promise<void> {
     if (!this._hass || !entryId) return;
     if (this._activeReservationsLoadedFor === entryId) return;
     this._activeReservationsLoadedFor = entryId;
     try {
-      type ActiveReservationsResult = {
-        reservations?: Array<{
-          license_plate?: string;
-          start_time?: string;
-          end_time?: string;
-        }>;
-        response?: {
-          reservations?: Array<{
-            license_plate?: string;
-            start_time?: string;
-            end_time?: string;
-          }>;
-        };
-      };
       const hass = this._hass;
       const devices = await hass.callWS<DeviceEntry[]>({
         type: "config/device_registry/list",
@@ -1334,15 +1427,7 @@ class CityVisitorParkingNewReservationCard extends BaseLocalizedCard<CardConfig>
       );
       const byPlate = new Map<string, Array<{ start: Date; end: Date }>>();
       const results = await Promise.allSettled(
-        domainDevices.map((device) =>
-          hass.callWS<ActiveReservationsResult>({
-            type: "call_service",
-            domain: DOMAIN,
-            service: "list_reservations",
-            return_response: true,
-            service_data: { device_id: device.id },
-          }),
-        ),
+        domainDevices.map((device) => fetchReservations(hass, device, fresh)),
       );
       let anyFailed = false;
       for (const [index, settled] of results.entries()) {
@@ -1354,9 +1439,7 @@ class CityVisitorParkingNewReservationCard extends BaseLocalizedCard<CardConfig>
           );
           continue;
         }
-        const result = settled.value;
-        const response = result?.response ?? result;
-        const reservations = response?.reservations;
+        const reservations = settled.value?.reservations;
         if (Array.isArray(reservations)) {
           for (const r of reservations) {
             const plate = normalizePlateValue(r.license_plate);
@@ -1396,7 +1479,8 @@ class CityVisitorParkingNewReservationCard extends BaseLocalizedCard<CardConfig>
     const deviceId = (detail?.device_id ?? "").trim();
     if (deviceId && this._deviceId && deviceId !== this._deviceId) return;
     this._activeReservationsLoadedFor = null;
-    await this._loadActivePlates(activeEntryId);
+    // The end service refreshed the coordinator before it returned.
+    await this._loadActivePlates(activeEntryId, false);
   }
 
   _getActiveEntryId(): string | null {

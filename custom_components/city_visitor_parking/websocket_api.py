@@ -10,11 +10,17 @@ import probatio as vol
 from homeassistant import config_entries
 from homeassistant.components import websocket_api
 from homeassistant.const import ATTR_CONFIG_ENTRY_ID
+from homeassistant.core import callback
 from homeassistant.util import dt as dt_util
 from pycityvisitorparking.exceptions import PyCityVisitorParkingError
 
 from .const import DOMAIN
-from .payloads import build_status_payload, normalize_favorites
+from .payloads import (
+    build_reservations_payload,
+    build_status_payload,
+    normalize_favorites,
+    reservation_update_fields,
+)
 
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
@@ -31,6 +37,7 @@ else:
 
 WEBSOCKET_LIST_FAVORITES: Final[str] = "city_visitor_parking/favorites"
 WEBSOCKET_GET_STATUS: Final[str] = "city_visitor_parking/status"
+WEBSOCKET_LIST_RESERVATIONS: Final[str] = "city_visitor_parking/reservations"
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -39,6 +46,7 @@ async def async_setup_websocket(hass: HomeAssistant) -> None:
     """Set up WebSocket commands."""
     websocket_api.async_register_command(hass, _ws_list_favorites)
     websocket_api.async_register_command(hass, _ws_get_status)
+    websocket_api.async_register_command(hass, _ws_list_reservations)
 
 
 def _get_loaded_entry(
@@ -156,4 +164,49 @@ async def _ws_get_status(
         payload["state"],
         payload["window_kind"],
         time.perf_counter() - request_started,
+    )
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): WEBSOCKET_LIST_RESERVATIONS,
+        vol.Required(ATTR_CONFIG_ENTRY_ID): str,
+    }
+)
+@callback
+def _ws_list_reservations(
+    hass: HomeAssistant,
+    connection: websocket_api.ActiveConnection,
+    msg: dict[str, object],
+) -> None:
+    """Return the reservations held by the coordinator, without a provider fetch.
+
+    The cards use this after their own writes: the write services refresh the
+    coordinator before they return, so the data is already current. Loads that
+    must pick up changes made outside Home Assistant use the
+    ``list_reservations`` service, which fetches from the provider.
+    """
+    msg_id = cast("int", msg["id"])
+    entry = _get_loaded_entry(hass, connection, msg)
+    if entry is None:
+        return
+
+    runtime: CityVisitorParkingRuntimeData = entry.runtime_data
+    data = cast("CoordinatorData | None", runtime.coordinator.data)
+    if data is None:
+        connection.send_error(msg_id, "reservations_failed", "No data available")
+        return
+    payload = build_reservations_payload(
+        data,
+        entry.options,
+        dt_util.utcnow(),
+        reservation_update_fields(runtime.provider),
+        stale=not runtime.coordinator.last_update_success,
+    )
+    connection.send_result(msg_id, payload)
+    _LOGGER.debug(
+        "Reservations websocket response for %s (permit %s): %s reservations",
+        entry.title,
+        runtime.permit_id,
+        payload["count"],
     )

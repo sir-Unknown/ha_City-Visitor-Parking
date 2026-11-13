@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+from types import SimpleNamespace
 from typing import TYPE_CHECKING
 
+from homeassistant import config_entries
 from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
@@ -12,6 +14,7 @@ from custom_components.city_visitor_parking.config_flow import (
 )
 from custom_components.city_visitor_parking.const import (
     CONF_AUTO_END,
+    CONF_DEFAULT_PARKING_AREA,
     CONF_FREE_DATES,
     CONF_MUNICIPALITY,
     CONF_OPERATING_TIME_OVERRIDES,
@@ -19,6 +22,7 @@ from custom_components.city_visitor_parking.const import (
     CONF_PROVIDER_ID,
     DOMAIN,
 )
+from custom_components.city_visitor_parking.models import PaidParkingStatus, ParkingArea
 
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
@@ -37,7 +41,7 @@ async def test_options_flow_save_overrides(hass: HomeAssistant) -> None:
         {
             CONF_AUTO_END: True,
             "operating_times": {
-                "monday_chargeable_windows": "09:00-13:00, 14:00-17:30",
+                "monday_paid_hours": "09:00-13:00, 14:00-17:30",
             },
             "free_parking_dates": {CONF_FREE_DATES: ""},
         },
@@ -63,7 +67,7 @@ async def test_options_flow_invalid_range(hass: HomeAssistant) -> None:
         result["flow_id"],
         {
             CONF_AUTO_END: False,
-            "operating_times": {"monday_chargeable_windows": "18:00-08:00"},
+            "operating_times": {"monday_paid_hours": "18:00-08:00"},
             "free_parking_dates": {CONF_FREE_DATES: ""},
         },
     )
@@ -82,7 +86,7 @@ async def test_options_flow_incomplete_override(hass: HomeAssistant) -> None:
         result["flow_id"],
         {
             CONF_AUTO_END: False,
-            "operating_times": {"monday_chargeable_windows": "08:00-"},
+            "operating_times": {"monday_paid_hours": "08:00-"},
             "free_parking_dates": {CONF_FREE_DATES: ""},
         },
     )
@@ -130,6 +134,64 @@ async def test_options_flow_expands_with_overrides(hass: HomeAssistant) -> None:
     result = await hass.config_entries.options.async_init(entry.entry_id)
 
     assert result["type"] == "form"
+
+
+async def test_options_flow_stores_the_default_parking_area(
+    hass: HomeAssistant,
+) -> None:
+    """A permit with several parking areas offers and stores a default area."""
+    entry = _create_entry()
+    entry.add_to_hass(hass)
+    entry.mock_state(hass, config_entries.ConfigEntryState.LOADED)
+    free = PaidParkingStatus(is_paid_now=False, next_change_time=None, windows_today=())
+    parking_areas = tuple(
+        ParkingArea(
+            parking_area_id=parking_area_id,
+            name=parking_area_id,
+            paid_hours=(),
+            paid_parking_status=free,
+        )
+        for parking_area_id in ("10", "630")
+    )
+    entry.runtime_data = SimpleNamespace(
+        coordinator=SimpleNamespace(data=SimpleNamespace(parking_areas=parking_areas))
+    )
+
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    assert CONF_DEFAULT_PARKING_AREA in result["data_schema"].schema
+
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {
+            CONF_AUTO_END: False,
+            CONF_DEFAULT_PARKING_AREA: "630",
+            "operating_times": {},
+            "free_parking_dates": {CONF_FREE_DATES: ""},
+        },
+    )
+
+    assert result["data"][CONF_DEFAULT_PARKING_AREA] == "630"
+
+
+async def test_options_flow_keeps_the_default_area_when_areas_are_unknown(
+    hass: HomeAssistant,
+) -> None:
+    """Saving without known parking areas must keep the stored default area."""
+    entry = _create_entry(options={CONF_DEFAULT_PARKING_AREA: "630"})
+    entry.add_to_hass(hass)
+
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    assert CONF_DEFAULT_PARKING_AREA not in result["data_schema"].schema
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {
+            CONF_AUTO_END: False,
+            "operating_times": {},
+            "free_parking_dates": {CONF_FREE_DATES: ""},
+        },
+    )
+
+    assert result["data"][CONF_DEFAULT_PARKING_AREA] == "630"
 
 
 def _create_entry(

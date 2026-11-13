@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-import inspect
 import logging
 import time
-from collections.abc import Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING, Final, Protocol, cast
 
@@ -21,6 +20,7 @@ from homeassistant.exceptions import (
 )
 from homeassistant.helpers import aiohttp_client
 from homeassistant.helpers import config_validation as cv
+from homeassistant.helpers import entity_registry as er
 from homeassistant.setup import async_when_setup
 from pycityvisitorparking import AuthError, NetworkError
 from pycityvisitorparking.exceptions import (
@@ -34,6 +34,7 @@ from .config_flow import async_load_providers
 from .const import (
     CONF_API_URL,
     CONF_BASE_URL,
+    CONF_DEFAULT_PARKING_AREA,
     CONF_DEMO_MODE,
     CONF_FREE_DATES,
     CONF_FREE_WEEKDAYS,
@@ -71,6 +72,19 @@ _API_URL_MIGRATION_MINOR_VERSION: Final = 2
 _LEGACY_RESOLVED_LOGIN_PARAMS_KEY: Final = "resolved_login_params"
 # Minor config entry version that dropped the persisted login state.
 _RESOLVED_PARAMS_MIGRATION_MINOR_VERSION: Final = 3
+# Minor config entry version that renamed the paid parking sensor keys.
+_PAID_PARKING_MIGRATION_MINOR_VERSION: Final = 4
+# Sensor keys (the unique ID suffix after ``<entry.unique_id>:``) from before the
+# paid parking rename, mapped to their current keys. Options keep no renamed
+# field: the weekday overrides are stored under ``operating_time_overrides``
+# keyed by weekday, so only the entity registry needs rewriting.
+_LEGACY_SENSOR_KEYS: Final[Mapping[str, str]] = {
+    "permit_paid_parking_status": "paid_parking",
+    "provider_chargeable_start": "provider_paid_parking_start",
+    "provider_chargeable_end": "provider_paid_parking_end",
+    "next_chargeable_start": "paid_parking_start",
+    "next_chargeable_end": "paid_parking_end",
+}
 
 
 class _ResourceStorage(Protocol):
@@ -161,7 +175,42 @@ async def async_migrate_entry(
             },
             minor_version=_RESOLVED_PARAMS_MIGRATION_MINOR_VERSION,
         )
+
+    if entry.minor_version < _PAID_PARKING_MIGRATION_MINOR_VERSION:
+        # 1.3 -> 1.4: sensor keys moved from "chargeable"/"zone availability" to
+        # "paid parking". Rewrite the unique IDs so entity IDs and history stay.
+        await er.async_migrate_entries(
+            hass, entry.entry_id, _legacy_sensor_unique_id_update(hass, entry)
+        )
+        hass.config_entries.async_update_entry(
+            entry, minor_version=_PAID_PARKING_MIGRATION_MINOR_VERSION
+        )
     return True
+
+
+def _legacy_sensor_unique_id_update(
+    hass: HomeAssistant, entry: CityVisitorParkingConfigEntry
+) -> Callable[[er.RegistryEntry], dict[str, str] | None]:
+    """Return the registry callback that renames this entry's legacy sensor IDs."""
+    registry = er.async_get(hass)
+    prefix = f"{entry.unique_id}:"
+
+    def _update(registry_entry: er.RegistryEntry) -> dict[str, str] | None:
+        unique_id = registry_entry.unique_id
+        if not unique_id.startswith(prefix):
+            return None
+        new_key = _LEGACY_SENSOR_KEYS.get(unique_id.removeprefix(prefix))
+        if new_key is None:
+            return None
+        new_unique_id = f"{prefix}{new_key}"
+        # Never collide with an entity that already owns the new unique ID.
+        if registry.async_get_entity_id(
+            registry_entry.domain, registry_entry.platform, new_unique_id
+        ):
+            return None
+        return {"new_unique_id": new_unique_id}
+
+    return _update
 
 
 def _migrate_legacy_api_url(
@@ -230,7 +279,6 @@ async def async_setup_entry(
         ha_cvp_version=ha_cvp_version,
         pycvp_version=pycvp_version,
     )
-    _install_zone_validity_logging(provider)
     try:
         await async_provider_login(entry, provider)
     except AuthError as err:
@@ -277,52 +325,6 @@ async def async_setup_entry(
     return True
 
 
-def _install_zone_validity_logging(provider: object) -> None:
-    """Add extra debug logging when zone validity falls back to the zone block."""
-    map_zone_validity = getattr(provider, "_map_zone_validity", None)
-    provider_id = getattr(provider, "provider_id", "unknown")
-    if not callable(map_zone_validity):
-        return
-
-    def _summarize_raw(raw: object) -> str:
-        if raw is None:
-            return "raw=None"
-        if isinstance(raw, list):
-            raw_list = cast("list[object]", raw)
-            return f"raw=list(count={len(raw_list)})"
-        return f"raw={type(raw).__name__}"
-
-    accepts_fallback = (
-        "fallback_zone" in inspect.signature(map_zone_validity).parameters
-    )
-
-    def _wrap(raw: object, *, fallback_zone: object | None = None) -> object:
-        if isinstance(fallback_zone, Mapping):
-            fallback = cast("Mapping[str, object]", fallback_zone)
-            start_raw = fallback.get("start_time")
-            end_raw = fallback.get("end_time")
-            has_candidates = isinstance(raw, list) and any(
-                isinstance(item, Mapping)
-                and cast("Mapping[str, object]", item).get("start_time")
-                and cast("Mapping[str, object]", item).get("end_time")
-                for item in cast("list[object]", raw)
-            )
-            if not has_candidates and start_raw and end_raw:
-                _LOGGER.debug(
-                    "Provider %s zone validity fallback details %s "
-                    "fallback_start=%s fallback_end=%s",
-                    provider_id,
-                    _summarize_raw(cast("object", raw)),
-                    start_raw,
-                    end_raw,
-                )
-        if accepts_fallback:
-            return map_zone_validity(raw, fallback_zone=fallback_zone)
-        return map_zone_validity(raw)
-
-    cast("object", provider)._map_zone_validity = _wrap  # type: ignore[attr-defined]  # pylint: disable=protected-access
-
-
 def _normalize_operating_time_overrides(
     options: Mapping[str, object],
 ) -> OperatingTimeOverrides:
@@ -366,6 +368,16 @@ async def _async_update_listener(
     if overrides_changed or free_dates_changed or free_weekdays_changed:
         # Reload so the coordinator recomputes availability with new windows.
         await hass.config_entries.async_reload(entry.entry_id)
+        return
+    data = runtime.coordinator.data
+    default_parking_area = entry.options.get(CONF_DEFAULT_PARKING_AREA)
+    if (
+        data.parking_areas
+        and data.parking_areas[0].parking_area_id != default_parking_area
+    ):
+        # The default parking area only changes which windows the permit-level state
+        # uses; a refresh recomputes it without reloading the entry.
+        await runtime.coordinator.async_request_refresh()
 
 
 async def async_unload_entry(

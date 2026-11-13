@@ -22,6 +22,7 @@ from homeassistant.exceptions import (
     ConfigEntryNotReady,
 )
 from homeassistant.helpers import aiohttp_client
+from homeassistant.helpers import entity_registry as er
 from pycityvisitorparking.exceptions import ServiceUnavailableError
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
@@ -533,6 +534,137 @@ async def test_migrate_entry_rejects_newer_major_version(hass: HomeAssistant) ->
     assert not await init_module.async_migrate_entry(hass, entry)
 
 
+_PAID_PARKING_UNIQUE_ID = "dvsportal:permit:venlo"
+_LEGACY_SENSOR_KEYS = {
+    "permit_paid_parking_status": "paid_parking",
+    "provider_chargeable_start": "provider_paid_parking_start",
+    "provider_chargeable_end": "provider_paid_parking_end",
+    "next_chargeable_start": "paid_parking_start",
+    "next_chargeable_end": "paid_parking_end",
+}
+
+
+def _paid_parking_entry(minor_version: int) -> MockConfigEntry:
+    """Create an entry with weekday overrides at the given minor version."""
+    return MockConfigEntry(
+        domain=DOMAIN,
+        data={CONF_PROVIDER_ID: "dvsportal", CONF_PERMIT_ID: "permit"},
+        options={
+            CONF_AUTO_END: True,
+            CONF_OPERATING_TIME_OVERRIDES: {
+                "mon": [{"start": "08:00", "end": "09:00"}]
+            },
+        },
+        unique_id=_PAID_PARKING_UNIQUE_ID,
+        title="Venlo - permit",
+        version=1,
+        minor_version=minor_version,
+    )
+
+
+def _register_sensors(
+    hass: HomeAssistant, entry: MockConfigEntry, keys: list[str]
+) -> dict[str, str]:
+    """Register one sensor per key and return the entity ID by key."""
+    registry = er.async_get(hass)
+    return {
+        key: registry.async_get_or_create(
+            "sensor",
+            DOMAIN,
+            f"{_PAID_PARKING_UNIQUE_ID}:{key}",
+            config_entry=entry,
+            suggested_object_id=f"permit_{key}",
+        ).entity_id
+        for key in keys
+    }
+
+
+async def test_migrate_entry_renames_sensor_unique_ids(hass: HomeAssistant) -> None:
+    """Legacy sensor unique IDs get the paid parking keys; entity IDs stay."""
+    entry = _paid_parking_entry(minor_version=3)
+    entry.add_to_hass(hass)
+    other = _paid_parking_entry(minor_version=3)
+    other.add_to_hass(hass)
+    entity_ids = _register_sensors(hass, entry, [*_LEGACY_SENSOR_KEYS, "balance"])
+    registry = er.async_get(hass)
+    # Another entry's sensors are not this entry's to rewrite.
+    foreign = registry.async_get_or_create(
+        "sensor",
+        DOMAIN,
+        "other:permit_paid_parking_status",
+        config_entry=other,
+        suggested_object_id="foreign",
+    )
+
+    assert await init_module.async_migrate_entry(hass, entry)
+
+    assert entry.minor_version == CityVisitorParkingConfigFlow.MINOR_VERSION
+    for old_key, new_key in _LEGACY_SENSOR_KEYS.items():
+        migrated = registry.async_get(entity_ids[old_key])
+        assert migrated is not None
+        assert migrated.entity_id == entity_ids[old_key]
+        assert migrated.unique_id == f"{_PAID_PARKING_UNIQUE_ID}:{new_key}"
+    untouched = registry.async_get(entity_ids["balance"])
+    assert untouched is not None
+    assert untouched.unique_id == f"{_PAID_PARKING_UNIQUE_ID}:balance"
+    assert registry.async_get(foreign.entity_id) == foreign
+    # Weekday overrides are stored by weekday, so the options need no rewrite.
+    assert entry.options[CONF_AUTO_END] is True
+    assert entry.options[CONF_OPERATING_TIME_OVERRIDES] == {
+        "mon": [{"start": "08:00", "end": "09:00"}]
+    }
+
+
+async def test_migrate_entry_leaves_migrated_entry_untouched(
+    hass: HomeAssistant,
+) -> None:
+    """An entry already on the current minor version is not rewritten."""
+    entry = _paid_parking_entry(
+        minor_version=CityVisitorParkingConfigFlow.MINOR_VERSION
+    )
+    entry.add_to_hass(hass)
+    entity_ids = _register_sensors(hass, entry, list(_LEGACY_SENSOR_KEYS.values()))
+    legacy_ids = _register_sensors(hass, entry, ["permit_paid_parking_status"])
+    registry = er.async_get(hass)
+
+    assert await init_module.async_migrate_entry(hass, entry)
+
+    for key, entity_id in entity_ids.items():
+        stored = registry.async_get(entity_id)
+        assert stored is not None
+        assert stored.unique_id == f"{_PAID_PARKING_UNIQUE_ID}:{key}"
+    legacy = registry.async_get(legacy_ids["permit_paid_parking_status"])
+    assert legacy is not None
+    assert legacy.unique_id == f"{_PAID_PARKING_UNIQUE_ID}:permit_paid_parking_status"
+
+
+async def test_migrate_entry_skips_taken_unique_id(hass: HomeAssistant) -> None:
+    """A legacy sensor whose new unique ID already exists is left as it is."""
+    entry = _paid_parking_entry(minor_version=3)
+    entry.add_to_hass(hass)
+    entity_ids = _register_sensors(
+        hass, entry, ["permit_paid_parking_status", "paid_parking"]
+    )
+    registry = er.async_get(hass)
+
+    assert await init_module.async_migrate_entry(hass, entry)
+
+    legacy = registry.async_get(entity_ids["permit_paid_parking_status"])
+    assert legacy is not None
+    assert legacy.unique_id == f"{_PAID_PARKING_UNIQUE_ID}:permit_paid_parking_status"
+    assert entry.minor_version == CityVisitorParkingConfigFlow.MINOR_VERSION
+
+
+async def test_migrate_entry_without_registered_sensors(hass: HomeAssistant) -> None:
+    """An entry with no registry entries still reaches the current version."""
+    entry = _paid_parking_entry(minor_version=3)
+    entry.add_to_hass(hass)
+
+    assert await init_module.async_migrate_entry(hass, entry)
+
+    assert entry.minor_version == CityVisitorParkingConfigFlow.MINOR_VERSION
+
+
 def _create_entry() -> MockConfigEntry:
     """Create a mock entry for setup tests."""
     return MockConfigEntry(
@@ -558,7 +690,12 @@ async def _setup_entry(
     entry.mock_state(hass, config_entries.ConfigEntryState.SETUP_IN_PROGRESS)
 
     provider = AsyncMock()
-    provider.fetch_all.return_value = ({"id": "permit", "zone_validity": []}, [], [])
+    provider.fetch_all.return_value = (
+        {"id": "permit", "paid_hours": []},
+        [],
+        [],
+        [],
+    )
 
     client = AsyncMock()
     client.get_provider.return_value = provider
@@ -589,7 +726,8 @@ async def test_each_entry_gets_its_own_session_closed_on_unload(
         sessions.append(session)
         provider = AsyncMock()
         provider.fetch_all.return_value = (
-            {"id": "permit", "zone_validity": []},
+            {"id": "permit", "paid_hours": []},
+            [],
             [],
             [],
         )

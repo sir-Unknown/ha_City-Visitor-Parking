@@ -22,7 +22,9 @@ from .auth import async_provider_login, has_stored_credentials
 from .const import (
     AUTO_END_COOLDOWN,
     CONF_AUTO_END,
+    CONF_DEFAULT_PARKING_AREA,
     DEFAULT_UPDATE_INTERVAL,
+    ERROR_CODE_PROVIDER_REJECTED,
     IDLE_UPDATE_INTERVAL,
     RELOGIN_COOLDOWN,
     RELOGIN_REJECTIONS_BEFORE_REAUTH,
@@ -33,9 +35,10 @@ from .helpers import get_attr
 from .models import (
     AutoEndState,
     CoordinatorData,
+    PaidParkingStatus,
+    ParkingArea,
     Reservation,
     TimeRange,
-    ZoneAvailability,
 )
 from .models import Favorite as CoordinatorFavorite
 from .time_windows import windows_for_today
@@ -55,8 +58,10 @@ else:
     class ProviderProtocol(Protocol):
         """Protocol for runtime provider behavior."""
 
-        async def fetch_all(self) -> tuple[object, list[object], list[object]]:
-            """Return permit, reservations, and favorites in one batch."""
+        async def fetch_all(
+            self,
+        ) -> tuple[object, list[object], list[object], list[object]]:
+            """Return permit, reservations, favorites, and reservation targets."""
             raise NotImplementedError
 
         async def end_reservation(
@@ -114,9 +119,14 @@ class CityVisitorParkingCoordinator(DataUpdateCoordinator[CoordinatorData]):
             )
 
             started = time.perf_counter()
-            permit, reservations, favorites = await self.async_call_with_relogin(
-                self._provider.fetch_all
-            )
+            # Parking areas are the library's reservation targets; an empty list means
+            # the permit has nothing to choose.
+            (
+                permit,
+                reservations,
+                favorites,
+                targets,
+            ) = await self.async_call_with_relogin(self._provider.fetch_all)
             _LOGGER.debug(
                 "Provider %s fetch_all duration: %.3fs — reservations=%s favorites=%s",
                 self._entry_title,
@@ -140,7 +150,7 @@ class CityVisitorParkingCoordinator(DataUpdateCoordinator[CoordinatorData]):
                         "error": str(err),
                     },
                     provider=self._provider.provider_id,
-                    city=getattr(self._provider, "_request_context_name", None)
+                    city=getattr(self._provider, "request_context_name", None)
                     or "unknown",
                     ha_cvp_version=ha_cvp_version,
                     pycvp_version=pycvp_version,
@@ -160,7 +170,7 @@ class CityVisitorParkingCoordinator(DataUpdateCoordinator[CoordinatorData]):
                         "error": str(err),
                     },
                     provider=self._provider.provider_id,
-                    city=getattr(self._provider, "_request_context_name", None)
+                    city=getattr(self._provider, "request_context_name", None)
                     or "unknown",
                     ha_cvp_version=ha_cvp_version,
                     pycvp_version=pycvp_version,
@@ -180,7 +190,7 @@ class CityVisitorParkingCoordinator(DataUpdateCoordinator[CoordinatorData]):
                         "error": str(err),
                     },
                     provider=self._provider.provider_id,
-                    city=getattr(self._provider, "_request_context_name", None)
+                    city=getattr(self._provider, "request_context_name", None)
                     or "unknown",
                     ha_cvp_version=ha_cvp_version,
                     pycvp_version=pycvp_version,
@@ -190,26 +200,38 @@ class CityVisitorParkingCoordinator(DataUpdateCoordinator[CoordinatorData]):
 
         remaining_balance = _normalize_remaining_balance(permit)
         balance_unit = get_attr(permit, "balance_unit")
-        zone_validity = _normalize_zone_validity(permit)
         normalized_reservations = _normalize_reservations(reservations)
         normalized_favorites = _normalize_favorites(favorites)
         now = dt_util.utcnow()
+        options = self._options()
         active_reservations = _active_reservations(normalized_reservations, now)
-        zone_availability = _compute_zone_availability(
-            zone_validity,
-            self._options(),
-            now,
+        parking_areas = _order_default_parking_area_first(
+            _normalize_parking_areas(targets, options, now),
+            options.get(CONF_DEFAULT_PARKING_AREA),
+        )
+        # The permit-level windows (sensors, status, auto-end fallback) follow the
+        # default parking area: the user's choice from the options, else the provider's.
+        paid_hours = (
+            list(parking_areas[0].paid_hours)
+            if parking_areas
+            else _normalize_paid_hours(permit)
+        )
+        paid_parking_status = (
+            parking_areas[0].paid_parking_status
+            if parking_areas
+            else _compute_paid_parking_status(paid_hours, options, now)
         )
 
         data = CoordinatorData(
             permit_id=self._permit_id,
             permit_remaining_balance=remaining_balance,
             permit_balance_unit=balance_unit if isinstance(balance_unit, str) else None,
-            zone_validity=tuple(zone_validity),
+            paid_hours=tuple(paid_hours),
             reservations=tuple(normalized_reservations),
             favorites=tuple(normalized_favorites),
-            zone_availability=zone_availability,
+            paid_parking_status=paid_parking_status,
             active_reservations=tuple(active_reservations),
+            parking_areas=tuple(parking_areas),
         )
 
         next_interval = self._compute_next_interval(data, now)
@@ -299,9 +321,12 @@ class CityVisitorParkingCoordinator(DataUpdateCoordinator[CoordinatorData]):
 
         A ``NetworkError`` never reached the provider, rate-limit and
         maintenance responses would only be made worse by an extra login, and a
-        missing item or invalid input is unrelated to the session.
+        missing item, invalid input, or a request the provider refused (for
+        example no balance left) is unrelated to the session.
         """
         if isinstance(err, RateLimitError | ServiceUnavailableError | NotFoundError):
+            return False
+        if err.error_code == ERROR_CODE_PROVIDER_REJECTED:
             return False
         return isinstance(err, AuthError | ProviderError)
 
@@ -344,11 +369,9 @@ class CityVisitorParkingCoordinator(DataUpdateCoordinator[CoordinatorData]):
         self._relogin_rejections = 0
 
     async def _async_maybe_auto_end(self, data: CoordinatorData) -> None:
-        """Auto-end reservations when the zone becomes free."""
+        """Auto-end reservations whose parking area is no longer paid."""
         options = self._options()
         if not options.get(CONF_AUTO_END, False):
-            return
-        if data.zone_availability.is_chargeable_now:
             return
         if not data.active_reservations:
             return
@@ -357,6 +380,17 @@ class CityVisitorParkingCoordinator(DataUpdateCoordinator[CoordinatorData]):
         self._prune_auto_end_attempts(now)
 
         for reservation in data.active_reservations:
+            # Parking areas have different paid hours, so judge each reservation by its
+            # own parking area; fall back to the permit's default parking area when it
+            # is unknown.
+            parking_area = data.parking_area(reservation.parking_area_id)
+            availability = (
+                parking_area.paid_parking_status
+                if parking_area is not None
+                else data.paid_parking_status
+            )
+            if availability.is_paid_now:
+                continue
             if not _should_attempt_auto_end(
                 self._auto_end_state,
                 reservation.reservation_id,
@@ -413,17 +447,17 @@ class CityVisitorParkingCoordinator(DataUpdateCoordinator[CoordinatorData]):
            the auto-end feature needs to fire on time, and the user expects
            timely sensor updates.
 
-        2. **Zone currently chargeable** → ``DEFAULT_UPDATE_INTERVAL``
-           Even without a current reservation the zone is "open for business";
+        2. **ParkingArea currently paid** → ``DEFAULT_UPDATE_INTERVAL``
+           Even without a current reservation paid parking is "open for business";
            a reservation could be started at any moment and should appear in HA
            promptly.
 
-        3. **Zone transition imminent** (within ``TRANSITION_LOOKAHEAD``) →
+        3. **ParkingArea transition imminent** (within ``TRANSITION_LOOKAHEAD``) →
            ``DEFAULT_UPDATE_INTERVAL``
-           Polling at full speed ensures the zone-state sensor flips as soon as
+           Polling at full speed ensures the paid parking sensor flips as soon as
            the paid-parking window opens or closes.
 
-        4. **Zone transition known, not imminent** → precise interval
+        4. **ParkingArea transition known, not imminent** → precise interval
            Schedule the next update to arrive ``TRANSITION_BUFFER`` before the
            upcoming transition, capped at ``IDLE_UPDATE_INTERVAL``.  This
            combines two goals: the coordinator wakes up just in time to catch
@@ -438,11 +472,11 @@ class CityVisitorParkingCoordinator(DataUpdateCoordinator[CoordinatorData]):
         if data.active_reservations:
             return DEFAULT_UPDATE_INTERVAL
 
-        # 2. Zone is chargeable right now — stay responsive.
-        if data.zone_availability.is_chargeable_now:
+        # 2. Paid parking is active right now — stay responsive.
+        if data.paid_parking_status.is_paid_now:
             return DEFAULT_UPDATE_INTERVAL
 
-        next_change = data.zone_availability.next_change_time
+        next_change = data.paid_parking_status.next_change_time
         if next_change is not None:
             time_until_change = next_change - now
 
@@ -473,9 +507,9 @@ def _parse_time_range(item: object) -> TimeRange | None:
     return TimeRange(start=start_dt, end=end_dt)
 
 
-def _normalize_zone_validity(permit: Permit) -> list[TimeRange]:
-    """Normalize zone validity blocks to TimeRange objects in UTC."""
-    raw_blocks = get_attr(permit, "zone_validity")
+def _normalize_paid_hours(permit_or_parking_area: object) -> list[TimeRange]:
+    """Normalize paid hours blocks of a permit or parking area to UTC."""
+    raw_blocks = get_attr(permit_or_parking_area, "paid_hours")
     if not isinstance(raw_blocks, list):
         return []
     return [
@@ -483,6 +517,52 @@ def _normalize_zone_validity(permit: Permit) -> list[TimeRange]:
         for block in cast("list[object]", raw_blocks)
         if (time_range := _parse_time_range(block)) is not None
     ]
+
+
+def _normalize_parking_areas(
+    targets: object, options: Mapping[str, object], now: datetime
+) -> list[ParkingArea]:
+    """Normalize the library's reservation targets to parking areas, in order.
+
+    The first target is the provider default. A list that is not a list of targets
+    means the permit has nothing to choose.
+    """
+    if not isinstance(targets, list):
+        return []
+    parking_areas: list[ParkingArea] = []
+    for raw_parking_area in cast("list[object]", targets):
+        parking_area_id = get_attr(raw_parking_area, "id")
+        if parking_area_id is None:
+            continue
+        name = get_attr(raw_parking_area, "name")
+        paid_hours = _normalize_paid_hours(raw_parking_area)
+        parking_areas.append(
+            ParkingArea(
+                parking_area_id=str(parking_area_id),
+                name=str(name) if name else str(parking_area_id),
+                paid_hours=tuple(paid_hours),
+                paid_parking_status=_compute_paid_parking_status(
+                    paid_hours, options, now
+                ),
+            )
+        )
+    return parking_areas
+
+
+def _order_default_parking_area_first(
+    parking_areas: list[ParkingArea], default_parking_area_id: object
+) -> list[ParkingArea]:
+    """Move the user's default parking area to the front; keep other order.
+
+    A stored default that the permit no longer has is ignored, so the provider's
+    default (its first parking area) applies again.
+    """
+    if not isinstance(default_parking_area_id, str):
+        return parking_areas
+    for index, parking_area in enumerate(parking_areas):
+        if parking_area.parking_area_id == default_parking_area_id:
+            return [parking_area, *parking_areas[:index], *parking_areas[index + 1 :]]
+    return parking_areas
 
 
 def _normalize_remaining_balance(permit: Permit) -> float:
@@ -512,12 +592,16 @@ def _normalize_reservations(
         if time_range is None:
             continue
         license_plate = get_attr(reservation, "license_plate")
+        parking_area_id = get_attr(reservation, "reservation_target_id")
         normalized.append(
             Reservation(
                 reservation_id=str(reservation_id),
                 start_time=time_range.start,
                 end_time=time_range.end,
                 license_plate=str(license_plate) if license_plate else None,
+                parking_area_id=str(parking_area_id)
+                if parking_area_id is not None
+                else None,
             )
         )
     return normalized
@@ -555,20 +639,18 @@ def _active_reservations(
     ]
 
 
-def _compute_zone_availability(
-    zone_validity: list[TimeRange],
+def _compute_paid_parking_status(
+    paid_hours: list[TimeRange],
     options: Mapping[str, object],
     now: datetime,
-) -> ZoneAvailability:
-    """Compute zone availability using validity blocks and overrides."""
-    windows_today = windows_for_today(zone_validity, options, now)
-    is_chargeable_now = any(
-        window.start <= now < window.end for window in windows_today
-    )
+) -> PaidParkingStatus:
+    """Compute paid parking availability using validity blocks and overrides."""
+    windows_today = windows_for_today(paid_hours, options, now)
+    is_paid_now = any(window.start <= now < window.end for window in windows_today)
 
     next_change_time = None
     if windows_today:
-        if is_chargeable_now:
+        if is_paid_now:
             next_change_time = min(
                 (
                     window.end
@@ -583,8 +665,8 @@ def _compute_zone_availability(
                 default=None,
             )
 
-    return ZoneAvailability(
-        is_chargeable_now=is_chargeable_now,
+    return PaidParkingStatus(
+        is_paid_now=is_paid_now,
         next_change_time=next_change_time,
         windows_today=tuple(windows_today),
     )

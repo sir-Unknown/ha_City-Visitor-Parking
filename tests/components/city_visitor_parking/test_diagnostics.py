@@ -24,10 +24,10 @@ from custom_components.city_visitor_parking.models import (
     AutoEndState,
     CoordinatorData,
     Favorite,
+    PaidParkingStatus,
     ProviderConfig,
     Reservation,
     TimeRange,
-    ZoneAvailability,
 )
 from custom_components.city_visitor_parking.runtime_data import (
     CityVisitorParkingRuntimeData,
@@ -63,8 +63,8 @@ async def test_diagnostics_redacts_sensitive_data(hass: HomeAssistant) -> None:
     )
     entry.add_to_hass(hass)
 
-    availability = ZoneAvailability(
-        is_chargeable_now=True,
+    availability = PaidParkingStatus(
+        is_paid_now=True,
         next_change_time=None,
         windows_today=(),
     )
@@ -72,7 +72,7 @@ async def test_diagnostics_redacts_sensitive_data(hass: HomeAssistant) -> None:
         permit_id="permit",
         permit_remaining_balance=30,
         permit_balance_unit=None,
-        zone_validity=(
+        paid_hours=(
             TimeRange(
                 start=datetime(2025, 1, 1, 8, 0, tzinfo=UTC),
                 end=datetime(2025, 1, 1, 18, 0, tzinfo=UTC),
@@ -86,7 +86,7 @@ async def test_diagnostics_redacts_sensitive_data(hass: HomeAssistant) -> None:
             ),
         ),
         favorites=(Favorite(favorite_id="fav1"),),
-        zone_availability=availability,
+        paid_parking_status=availability,
         active_reservations=(),
     )
     coordinator = SimpleNamespace(
@@ -122,5 +122,5 @@ async def test_diagnostics_redacts_sensitive_data(hass: HomeAssistant) -> None:
     assert entry_data[CONF_USERNAME] == REDACTED
     assert entry_data[CONF_PASSWORD] == REDACTED
     assert runtime["permit_id"] == "permit"
-    assert runtime["zone_validity_blocks"] == 1
+    assert runtime["paid_hours_blocks"] == 1
     assert runtime["favorites"] == 1

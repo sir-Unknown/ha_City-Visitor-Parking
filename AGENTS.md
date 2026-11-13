@@ -93,7 +93,7 @@ Stable releases (`vX.Y.Z`) are built from `main` and pin the latest stable `pyci
 - When testers need exactly one change, a beta MAY instead be built directly from a feature branch (manual flow below). Such a branch MUST also contain everything on `main`.
 - Beta-only changes (the pre-release pin and the entries above) MUST NOT be merged back to `main`. Once the library publishes the provider in a stable release, move the entry to `main` in a normal PR together with the stable pin, then merge `main` into `beta` and drop the pre-release pin.
 - Draft a beta from `beta` with the `Release Drafter` workflow run on ref `beta` with `prerelease=beta` and `version` set to the next stable version, for example `0.1.39`. This creates the tag `vX.Y.Z-beta.N`, targeting `beta`.
-- Release Drafter only drafts betas on ref `beta`. For a beta from a feature branch: push an annotated tag `vX.Y.Z-beta.N` (next free number) on the branch head, wait for the `Validate` run on that tag to succeed, then create the draft pre-release by hand from the existing tag with `--target` set to the branch, reusing the body layout of the previous beta.
+- Release Drafter only drafts betas on ref `beta`. For a beta from a feature branch: push an annotated tag on the branch head, `vX.Y.Z-beta.N` or `vX.Y.Z-<branch-slug>.N` (for example `v0.1.43-rotterdam-provider.1`; the number is the next free one for that name), wait for the `Validate` run on that tag to succeed, then create the draft pre-release by hand from the existing tag with `--target` set to the branch, reusing the body layout of the previous beta.
 - The beta draft body MUST fill in `PyPI` with the exact library version pinned in the beta; `release.yml` rejects a beta without it.
 - The release title and the top of the body MUST state plainly what the pre-release is for (for example "test Rotterdam provider"), which branch it is built from when that is not `beta`, and what is known to be untested, so testers cannot mistake it for a general update.
 - Create releases as drafts and publish only when the maintainer asks for it.
@@ -270,13 +270,13 @@ Recommended steps:
 
 - Options flow MUST support per-weekday overrides for operating times across all 7 days.
 - Store overrides in `entry.options`.
-- Default is no override, meaning provider or library-derived chargeable windows are used.
+- Default is no override, meaning provider or library-derived paid parking hours are used.
 - Validate each day entry; if both start and end exist, enforce `end > start`.
 
 ### Auto-end reservation when free
 
 - Add option `auto_end_reservation_when_free` as a boolean, default `false`.
-- When enabled, automatically end an active reservation early if the permit zone is currently not chargeable according to computed `permit.zone_availability`.
+- When enabled, automatically end an active reservation early if paid parking is currently not active according to computed `permit.zone_availability`.
 - Scope this behavior to the single config entry only.
 - Implement safeguards:
   - track reservation IDs already auto-ended or attempted
@@ -323,7 +323,7 @@ Entities are defined in `custom_components/city_visitor_parking/sensor.py`; the 
 - Count sensors (active reservations, future reservations, favorites) MUST be integers with `SensorStateClass.MEASUREMENT` so Home Assistant records statistics and draws graphs.
 - The remaining balance sensor follows the permit balance unit (duration in hours, `times`, or a currency). Its device class and unit are set dynamically in `_update_from_coordinator`. Do not give it `MEASUREMENT` together with the `MONETARY` device class; Home Assistant only allows `TOTAL` for monetary sensors.
 - Timestamp sensors use `SensorDeviceClass.TIMESTAMP` and have no `state_class`.
-- Availability is derived from chargeable-only validity plus the user's weekday overrides. The state is `chargeable` or `free`.
+- Availability is derived from paid-only validity plus the user's weekday overrides. The state is `paid` or `free`.
 - A new sensor MUST update `sensor.py`, both translation files, the entity tests, and the wiki entities/sensors page. Attribute names are part of the user-visible contract, so do not rename them silently.
 
 ### Stability requirements

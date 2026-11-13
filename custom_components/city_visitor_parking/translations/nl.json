@@ -63,43 +63,47 @@
         "title": "Opties",
         "description": "Pas het parkeergedrag aan voor deze vergunning: stel aangepaste betaaltijden in per dag, configureer gratis parkeerdagen en beheer het automatisch beëindigen van reserveringen.",
         "data": {
-          "auto_end_reservation_when_free": "Reservaties automatisch beëindigen wanneer parkeren gratis is"
+          "auto_end_reservation_when_free": "Reservaties automatisch beëindigen wanneer parkeren gratis is",
+          "default_parking_area": "Standaard parkeergebied"
+        },
+        "data_description": {
+          "default_parking_area": "Parkeergebied dat in de kaart vooraf is geselecteerd en wordt gebruikt als een reservering geen parkeergebied noemt. De statussensoren van het parkeergebied volgen dit gebied."
         },
         "sections": {
           "operating_times": {
-            "name": "Aangepaste betaalvensters",
+            "name": "Aangepaste betaaltijden",
             "description": "Overschrijf de standaard betaaltijden per dag. Laat een dag leeg om de standaardinstelling te behouden.",
             "data": {
               "monday_free_parking": "Maandag vrij parkeren",
-              "monday_chargeable_windows": "Maandag betaalvensters",
+              "monday_paid_hours": "Maandag betaaltijden",
               "tuesday_free_parking": "Dinsdag vrij parkeren",
-              "tuesday_chargeable_windows": "Dinsdag betaalvensters",
+              "tuesday_paid_hours": "Dinsdag betaaltijden",
               "wednesday_free_parking": "Woensdag vrij parkeren",
-              "wednesday_chargeable_windows": "Woensdag betaalvensters",
+              "wednesday_paid_hours": "Woensdag betaaltijden",
               "thursday_free_parking": "Donderdag vrij parkeren",
-              "thursday_chargeable_windows": "Donderdag betaalvensters",
+              "thursday_paid_hours": "Donderdag betaaltijden",
               "friday_free_parking": "Vrijdag vrij parkeren",
-              "friday_chargeable_windows": "Vrijdag betaalvensters",
+              "friday_paid_hours": "Vrijdag betaaltijden",
               "saturday_free_parking": "Zaterdag vrij parkeren",
-              "saturday_chargeable_windows": "Zaterdag betaalvensters",
+              "saturday_paid_hours": "Zaterdag betaaltijden",
               "sunday_free_parking": "Zondag vrij parkeren",
-              "sunday_chargeable_windows": "Zondag betaalvensters"
+              "sunday_paid_hours": "Zondag betaaltijden"
             },
             "data_description": {
               "monday_free_parking": "Vergunning is niet actief op maandag; parkeren is gratis.",
-              "monday_chargeable_windows": "Betaaltijden voor maandag, bijvoorbeeld 09:00-13:00, 14:00-17:30. Laat leeg om de standaard betaaltijden van de provider te gebruiken. Als vrij parkeren is ingeschakeld, wordt de invoer in dit veld genegeerd.",
+              "monday_paid_hours": "Betaaltijden voor maandag, bijvoorbeeld 09:00-13:00, 14:00-17:30. Laat leeg om de standaard betaaltijden van de provider te gebruiken. Als vrij parkeren is ingeschakeld, wordt de invoer in dit veld genegeerd.",
               "tuesday_free_parking": "Vergunning is niet actief op dinsdag; parkeren is gratis.",
-              "tuesday_chargeable_windows": "Betaaltijden voor dinsdag, bijvoorbeeld 09:00-13:00, 14:00-17:30. Laat leeg om de standaard betaaltijden van de provider te gebruiken. Als vrij parkeren is ingeschakeld, wordt de invoer in dit veld genegeerd.",
+              "tuesday_paid_hours": "Betaaltijden voor dinsdag, bijvoorbeeld 09:00-13:00, 14:00-17:30. Laat leeg om de standaard betaaltijden van de provider te gebruiken. Als vrij parkeren is ingeschakeld, wordt de invoer in dit veld genegeerd.",
               "wednesday_free_parking": "Vergunning is niet actief op woensdag; parkeren is gratis.",
-              "wednesday_chargeable_windows": "Betaaltijden voor woensdag, bijvoorbeeld 09:00-13:00, 14:00-17:30. Laat leeg om de standaard betaaltijden van de provider te gebruiken. Als vrij parkeren is ingeschakeld, wordt de invoer in dit veld genegeerd.",
+              "wednesday_paid_hours": "Betaaltijden voor woensdag, bijvoorbeeld 09:00-13:00, 14:00-17:30. Laat leeg om de standaard betaaltijden van de provider te gebruiken. Als vrij parkeren is ingeschakeld, wordt de invoer in dit veld genegeerd.",
               "thursday_free_parking": "Vergunning is niet actief op donderdag; parkeren is gratis.",
-              "thursday_chargeable_windows": "Betaaltijden voor donderdag, bijvoorbeeld 09:00-13:00, 14:00-17:30. Laat leeg om de standaard betaaltijden van de provider te gebruiken. Als vrij parkeren is ingeschakeld, wordt de invoer in dit veld genegeerd.",
+              "thursday_paid_hours": "Betaaltijden voor donderdag, bijvoorbeeld 09:00-13:00, 14:00-17:30. Laat leeg om de standaard betaaltijden van de provider te gebruiken. Als vrij parkeren is ingeschakeld, wordt de invoer in dit veld genegeerd.",
               "friday_free_parking": "Vergunning is niet actief op vrijdag; parkeren is gratis.",
-              "friday_chargeable_windows": "Betaaltijden voor vrijdag, bijvoorbeeld 09:00-13:00, 14:00-17:30. Laat leeg om de standaard betaaltijden van de provider te gebruiken. Als vrij parkeren is ingeschakeld, wordt de invoer in dit veld genegeerd.",
+              "friday_paid_hours": "Betaaltijden voor vrijdag, bijvoorbeeld 09:00-13:00, 14:00-17:30. Laat leeg om de standaard betaaltijden van de provider te gebruiken. Als vrij parkeren is ingeschakeld, wordt de invoer in dit veld genegeerd.",
               "saturday_free_parking": "Vergunning is niet actief op zaterdag; parkeren is gratis.",
-              "saturday_chargeable_windows": "Betaaltijden voor zaterdag, bijvoorbeeld 09:00-13:00, 14:00-17:30. Laat leeg om de standaard betaaltijden van de provider te gebruiken. Als vrij parkeren is ingeschakeld, wordt de invoer in dit veld genegeerd.",
+              "saturday_paid_hours": "Betaaltijden voor zaterdag, bijvoorbeeld 09:00-13:00, 14:00-17:30. Laat leeg om de standaard betaaltijden van de provider te gebruiken. Als vrij parkeren is ingeschakeld, wordt de invoer in dit veld genegeerd.",
               "sunday_free_parking": "Vergunning is niet actief op zondag; parkeren is gratis.",
-              "sunday_chargeable_windows": "Betaaltijden voor zondag, bijvoorbeeld 09:00-13:00, 14:00-17:30. Laat leeg om de standaard betaaltijden van de provider te gebruiken. Als vrij parkeren is ingeschakeld, wordt de invoer in dit veld genegeerd."
+              "sunday_paid_hours": "Betaaltijden voor zondag, bijvoorbeeld 09:00-13:00, 14:00-17:30. Laat leeg om de standaard betaaltijden van de provider te gebruiken. Als vrij parkeren is ingeschakeld, wordt de invoer in dit veld genegeerd."
             }
           },
           "free_parking_dates": {
@@ -132,15 +136,19 @@
         },
         "start_time": {
           "name": "Starttijd",
-          "description": "De UTC-starttijd van de reservering."
+          "description": "De starttijd van de reservering. Tijden zonder tijdzone-offset gebruiken de tijdzone van Home Assistant."
         },
         "end_time": {
           "name": "Eindtijd",
-          "description": "De UTC-eindtijd van de reservering."
+          "description": "De eindtijd van de reservering. Tijden zonder tijdzone-offset gebruiken de tijdzone van Home Assistant."
         },
         "license_plate": {
           "name": "Kenteken",
           "description": "Het kenteken van het voertuig."
+        },
+        "parking_area_id": {
+          "name": "Parkeergebied",
+          "description": "Het parkeergebied waarin geparkeerd wordt, voor vergunningen met meerdere parkeergebieden. Laat leeg om het standaard parkeergebied te gebruiken."
         }
       }
     },
@@ -158,11 +166,11 @@
         },
         "start_time": {
           "name": "Starttijd",
-          "description": "Nieuwe UTC-starttijd van de reservering."
+          "description": "Nieuwe starttijd van de reservering. Tijden zonder tijdzone-offset gebruiken de tijdzone van Home Assistant."
         },
         "end_time": {
           "name": "Eindtijd",
-          "description": "Nieuwe UTC-eindtijd van de reservering."
+          "description": "Nieuwe eindtijd van de reservering. Tijden zonder tijdzone-offset gebruiken de tijdzone van Home Assistant."
         },
         "license_plate": {
           "name": "Kenteken",
@@ -250,7 +258,7 @@
     },
     "get_status": {
       "name": "Status ophalen",
-      "description": "Geeft de huidige vergunningstatus en effectieve betaalvensters voor een vergunning terug.",
+      "description": "Geeft de huidige vergunningstatus en effectieve betaaltijden voor een vergunning terug.",
       "fields": {
         "device_id": {
           "name": "Apparaat",
@@ -354,6 +362,9 @@
     },
     "status_operation_failed": {
       "message": "De vergunningstatus kon niet worden geladen. Probeer het later opnieuw."
+    },
+    "invalid_parking_area": {
+      "message": "Het gekozen parkeergebied hoort niet bij deze vergunning."
     }
   },
   "entity": {
@@ -367,24 +378,43 @@
       "remaining_time": {
         "name": "Resterend saldo"
       },
-      "permit_zone_availability": {
-        "name": "Beschikbaarheid parkeerzone",
+      "paid_parking": {
+        "name": "Betaald parkeren",
         "state": {
-          "chargeable": "Betaald",
-          "free": "Gratis"
+          "paid": "Ja",
+          "free": "Nee"
         }
       },
-      "provider_chargeable_start": {
-        "name": "Start provider betaalvenster"
+      "provider_paid_parking_start": {
+        "name": "Start betaald parkeren (provider)"
       },
-      "provider_chargeable_end": {
-        "name": "Einde provider betaalvenster"
+      "provider_paid_parking_end": {
+        "name": "Einde betaald parkeren (provider)"
       },
-      "next_chargeable_start": {
-        "name": "Start betaalvenster"
+      "paid_parking_start": {
+        "name": "Start betaald parkeren"
       },
-      "next_chargeable_end": {
-        "name": "Einde betaalvenster"
+      "paid_parking_end": {
+        "name": "Einde betaald parkeren"
+      },
+      "parking_area_paid_parking": {
+        "name": "Parkeergebied {parking_area}: betaald parkeren",
+        "state": {
+          "paid": "Ja",
+          "free": "Nee"
+        }
+      },
+      "parking_area_provider_paid_parking_start": {
+        "name": "Parkeergebied {parking_area}: start betaald parkeren (provider)"
+      },
+      "parking_area_provider_paid_parking_end": {
+        "name": "Parkeergebied {parking_area}: einde betaald parkeren (provider)"
+      },
+      "parking_area_paid_parking_start": {
+        "name": "Parkeergebied {parking_area}: start betaald parkeren"
+      },
+      "parking_area_paid_parking_end": {
+        "name": "Parkeergebied {parking_area}: einde betaald parkeren"
       },
       "favorites": {
         "name": "Favorieten"

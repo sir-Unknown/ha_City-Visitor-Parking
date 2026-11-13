@@ -36,6 +36,7 @@ class Reservation:
     start_time: datetime
     end_time: datetime
     license_plate: str | None = None
+    parking_area_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -48,12 +49,22 @@ class Favorite:
 
 
 @dataclass(frozen=True)
-class ZoneAvailability:
-    """Computed zone availability state."""
+class PaidParkingStatus:
+    """Computed paid parking availability state."""
 
-    is_chargeable_now: bool
+    is_paid_now: bool
     next_change_time: datetime | None
     windows_today: tuple[TimeRange, ...]
+
+
+@dataclass(frozen=True)
+class ParkingArea:
+    """Normalized parking area of the permit with its own paid windows."""
+
+    parking_area_id: str
+    name: str
+    paid_hours: tuple[TimeRange, ...]
+    paid_parking_status: PaidParkingStatus
 
 
 @dataclass(frozen=True)
@@ -63,11 +74,28 @@ class CoordinatorData:
     permit_id: str
     permit_remaining_balance: float
     permit_balance_unit: str | None
-    zone_validity: tuple[TimeRange, ...]
+    paid_hours: tuple[TimeRange, ...]
     reservations: tuple[Reservation, ...]
     favorites: tuple[Favorite, ...]
-    zone_availability: ZoneAvailability
+    paid_parking_status: PaidParkingStatus
     active_reservations: tuple[Reservation, ...]
+    # Parking areas a reservation can be started in; the first one is the provider
+    # default and matches ``paid_hours``. Empty when the provider has no parking area
+    # selection.
+    parking_areas: tuple[ParkingArea, ...] = ()
+
+    def parking_area(self, parking_area_id: str | None) -> ParkingArea | None:
+        """Return the parking area with ``parking_area_id``, or None when unknown."""
+        if parking_area_id is None:
+            return None
+        return next(
+            (
+                parking_area
+                for parking_area in self.parking_areas
+                if parking_area.parking_area_id == parking_area_id
+            ),
+            None,
+        )
 
 
 def _default_attempts() -> dict[str, datetime]:

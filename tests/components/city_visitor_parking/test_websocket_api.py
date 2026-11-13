@@ -20,15 +20,17 @@ from custom_components.city_visitor_parking.const import (
     CONF_PERMIT_ID,
     CONF_PROVIDER_ID,
     DOMAIN,
-    STATE_CHARGEABLE,
     STATE_FREE,
+    STATE_PAID,
 )
 from custom_components.city_visitor_parking.models import (
     AutoEndState,
     CoordinatorData,
+    Favorite,
+    PaidParkingStatus,
     ProviderConfig,
+    Reservation,
     TimeRange,
-    ZoneAvailability,
 )
 from custom_components.city_visitor_parking.runtime_data import (
     CityVisitorParkingRuntimeData,
@@ -36,6 +38,7 @@ from custom_components.city_visitor_parking.runtime_data import (
 from custom_components.city_visitor_parking.websocket_api import (
     _ws_get_status,
     _ws_list_favorites,
+    _ws_list_reservations,
 )
 
 if TYPE_CHECKING:
@@ -153,7 +156,7 @@ async def test_ws_list_favorites_provider_error(hass: HomeAssistant) -> None:
 
 
 async def test_ws_get_status_current_window(hass: HomeAssistant) -> None:
-    """Websocket should return current chargeable window details."""
+    """Websocket should return current paid window details."""
     entry = _create_entry()
     entry.add_to_hass(hass)
     entry.mock_state(hass, config_entries.ConfigEntryState.LOADED)
@@ -167,11 +170,11 @@ async def test_ws_get_status_current_window(hass: HomeAssistant) -> None:
         permit_id="permit",
         permit_remaining_balance=0,
         permit_balance_unit=None,
-        zone_validity=(window,),
+        paid_hours=(window,),
         reservations=(),
         favorites=(),
-        zone_availability=ZoneAvailability(
-            is_chargeable_now=True,
+        paid_parking_status=PaidParkingStatus(
+            is_paid_now=True,
             next_change_time=window.end,
             windows_today=(window,),
         ),
@@ -190,7 +193,7 @@ async def test_ws_get_status_current_window(hass: HomeAssistant) -> None:
         await hass.async_block_till_done()
 
     response = _first_result(raw_connection)
-    assert response["state"] == STATE_CHARGEABLE
+    assert response["state"] == STATE_PAID
     assert response["window_kind"] == "current"
     assert response["window_start"] == dt_util.as_utc(window.start).isoformat()
     assert response["window_end"] == dt_util.as_utc(window.end).isoformat()
@@ -211,11 +214,11 @@ async def test_ws_get_status_next_window_override(hass: HomeAssistant) -> None:
         permit_id="permit",
         permit_remaining_balance=0,
         permit_balance_unit=None,
-        zone_validity=(),
+        paid_hours=(),
         reservations=(),
         favorites=(),
-        zone_availability=ZoneAvailability(
-            is_chargeable_now=False,
+        paid_parking_status=PaidParkingStatus(
+            is_paid_now=False,
             next_change_time=None,
             windows_today=(),
         ),
@@ -267,6 +270,94 @@ async def test_ws_get_status_failure_response(hass: HomeAssistant) -> None:
 
     error = _first_error(raw_connection)
     assert error["code"] == "status_failed"
+
+
+async def test_ws_list_reservations_reads_coordinator_data(
+    hass: HomeAssistant,
+) -> None:
+    """Websocket should list unended reservations without a provider fetch."""
+    entry = _create_entry()
+    entry.add_to_hass(hass)
+    entry.mock_state(hass, config_entries.ConfigEntryState.LOADED)
+
+    now = datetime(2025, 1, 6, 10, 0, tzinfo=UTC)
+    running = Reservation(
+        reservation_id="running",
+        start_time=now - timedelta(minutes=30),
+        end_time=now + timedelta(minutes=30),
+        license_plate="AB-12-CD",
+    )
+    upcoming = Reservation(
+        reservation_id="upcoming",
+        start_time=now + timedelta(hours=2),
+        end_time=now + timedelta(hours=3),
+    )
+    ended = Reservation(
+        reservation_id="ended",
+        start_time=now - timedelta(hours=2),
+        end_time=now - timedelta(hours=1),
+    )
+    data = CoordinatorData(
+        permit_id="permit",
+        permit_remaining_balance=0,
+        permit_balance_unit=None,
+        paid_hours=(),
+        reservations=(running, upcoming, ended),
+        favorites=(Favorite(favorite_id="fav1", license_plate="AB12CD", name="Mom"),),
+        paid_parking_status=PaidParkingStatus(
+            is_paid_now=False, next_change_time=None, windows_today=()
+        ),
+        active_reservations=(running,),
+    )
+    provider = AsyncMock()
+    provider.reservation_update_fields = ["end_time"]
+    entry.runtime_data = _runtime(provider, data)
+    entry.runtime_data.coordinator.last_update_success = False
+
+    raw_connection = _FakeConnection()
+    connection = cast("ActiveConnection", raw_connection)
+    with freeze_time(now):
+        _ws_list_reservations(
+            hass,
+            connection,
+            {"id": 1, "config_entry_id": entry.entry_id},
+        )
+
+    result = _first_result(raw_connection)
+    reservations = cast("list[dict[str, object]]", result["reservations"])
+    assert [item["reservation_id"] for item in reservations] == [
+        "running",
+        "upcoming",
+    ]
+    assert reservations[0]["favorite_name"] == "Mom"
+    assert (result["count"], result["active_count"], result["future_count"]) == (
+        2,
+        1,
+        1,
+    )
+    assert result["reservation_update_fields"] == ["end_time"]
+    assert result["stale"] is True
+    # The cached read must not reach the provider or refresh the coordinator.
+    assert provider.mock_calls == []
+    entry.runtime_data.coordinator.async_refresh.assert_not_called()
+
+
+async def test_ws_list_reservations_without_data(hass: HomeAssistant) -> None:
+    """Websocket should report an error before the first coordinator update."""
+    entry = _create_entry()
+    entry.add_to_hass(hass)
+    entry.mock_state(hass, config_entries.ConfigEntryState.LOADED)
+    entry.runtime_data = _runtime(AsyncMock(), None)
+
+    raw_connection = _FakeConnection()
+    connection = cast("ActiveConnection", raw_connection)
+    _ws_list_reservations(
+        hass,
+        connection,
+        {"id": 1, "config_entry_id": entry.entry_id},
+    )
+
+    assert _first_error(raw_connection)["code"] == "reservations_failed"
 
 
 def test_ws_as_utc_iso_none() -> None:

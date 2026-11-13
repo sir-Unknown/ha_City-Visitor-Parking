@@ -7,6 +7,7 @@ import type {
   ProgressButtonElement,
   StatusState,
   StatusType,
+  ParkingAreaStatus,
 } from "./types";
 import { getGlobalHass, localize } from "./translations";
 import { DOMAIN, formatBalanceLabel, normalizeMatchValue } from "./helpers";
@@ -221,6 +222,54 @@ export const renderPermitSelect = (params: {
         .label=${params.label}
         .value=${params.value}
         .required=${false}
+        ?disabled=${params.disabled}
+        @value-changed=${params.onSelected}
+      ></ha-selector>
+    </div>
+  `;
+};
+
+/** Renders the parking area selector for permits with multiple parking areas, or a preview. */
+export const renderParkingAreaSelect = (params: {
+  hass: HomeAssistant | null | undefined;
+  label: string;
+  parkingAreas: readonly ParkingAreaStatus[];
+  value: string;
+  disabled: boolean;
+  preview?: boolean;
+  onSelected: (event: Event) => void;
+}): TemplateResult => {
+  if (params.preview) {
+    return html`
+      <div class="row">
+        <ha-input
+          appearance="material"
+          .label=${params.label}
+          .value=${params.parkingAreas.find(
+            (parkingArea) => parkingArea.parking_area_id === params.value,
+          )?.name ?? ""}
+          ?disabled=${true}
+        ></ha-input>
+      </div>
+    `;
+  }
+  return html`
+    <div class="row">
+      <ha-selector
+        id="parkingAreaSelect"
+        .hass=${params.hass}
+        .selector=${{
+          select: {
+            options: params.parkingAreas.map((parkingArea) => ({
+              value: parkingArea.parking_area_id,
+              label: parkingArea.name || parkingArea.parking_area_id,
+            })),
+            mode: "dropdown",
+          },
+        }}
+        .label=${params.label}
+        .value=${params.value}
+        .required=${true}
         ?disabled=${params.disabled}
         @value-changed=${params.onSelected}
       ></ha-selector>

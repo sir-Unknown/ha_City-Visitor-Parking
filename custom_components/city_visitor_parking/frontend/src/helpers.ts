@@ -6,18 +6,25 @@ import type {
   LocalizeTarget,
   PermitEntry,
   PermitOption,
-  ZoneStatus,
+  ReservationsResponse,
+  PaidParkingStatus,
+  PaidParkingStatusResponse,
+  ParkingAreaStatus,
 } from "./types";
 import { localize } from "./translations";
 
 /** Integration domain used for selectors, websocket calls, and device matching. */
 export const DOMAIN = "city_visitor_parking";
+/** Websocket command returning the status and parking areas of one permit. */
+export const WS_GET_STATUS = "city_visitor_parking/status";
+/** Websocket command returning the reservations held by the coordinator. */
+export const WS_LIST_RESERVATIONS = "city_visitor_parking/reservations";
 export const RESERVATION_STARTED_EVENT =
   "city-visitor-parking-reservation-started";
 export const RESERVATION_ENDED_EVENT = "city-visitor-parking-reservation-ended";
 
-/** Empty zone state used before a status payload has been loaded. */
-export const EMPTY_ZONE_STATUS: ZoneStatus = {
+/** Empty parking area state used before a status payload has been loaded. */
+export const EMPTY_PAID_PARKING_STATUS: PaidParkingStatus = {
   state: null,
   kind: null,
   start: null,
@@ -99,20 +106,20 @@ export const setPendingPermitDefaults = (
   });
 };
 
-/** Copies a normalized zone status payload into card instance state fields. */
-export const applyZoneStatus = (
+/** Copies a normalized parking area status payload into card instance state fields. */
+export const applyPaidParkingStatus = (
   context: {
-    _zoneState: ZoneStatus["state"];
-    _windowKind: ZoneStatus["kind"];
+    _paidState: PaidParkingStatus["state"];
+    _windowKind: PaidParkingStatus["kind"];
     _windowStartIso: string | null;
     _windowEndIso: string | null;
     _remainingMinutes: number | null;
     _balanceUnit: string | null;
   },
-  status: ZoneStatus | null,
+  status: PaidParkingStatus | null,
 ): void => {
   Object.assign(context, {
-    _zoneState: status?.state ?? null,
+    _paidState: status?.state ?? null,
     _windowKind: status?.kind ?? null,
     _windowStartIso: status?.start ?? null,
     _windowEndIso: status?.end ?? null,
@@ -121,6 +128,218 @@ export const applyZoneStatus = (
   });
 };
 
+type ParkingAreaPaidWindowPayload = {
+  state?: unknown;
+  window_kind?: unknown;
+  window_start?: unknown;
+  window_end?: unknown;
+};
+
+const nonEmptyString = (value: unknown): string | null =>
+  typeof value === "string" && value ? value : null;
+
+/** Normalizes the state and window fields shared by status payloads and parking areas. */
+const normalizeParkingAreaPaidWindow = (
+  payload: ParkingAreaPaidWindowPayload | null | undefined,
+): Pick<PaidParkingStatus, "state" | "kind" | "start" | "end"> => {
+  const state =
+    payload?.state === "paid" || payload?.state === "free"
+      ? payload.state
+      : null;
+  const kind =
+    payload?.window_kind === "current" || payload?.window_kind === "next"
+      ? payload.window_kind
+      : null;
+  return {
+    state,
+    kind,
+    start: kind ? nonEmptyString(payload?.window_start) : null,
+    end: kind ? nonEmptyString(payload?.window_end) : null,
+  };
+};
+
+/** Normalizes the top-level (default parking area) part of a status payload. */
+export const normalizePaidParkingStatus = (
+  payload: PaidParkingStatusResponse | null | undefined,
+): PaidParkingStatus => {
+  const balance = payload?.remaining_balance;
+  return {
+    ...normalizeParkingAreaPaidWindow(payload),
+    remainingMinutes:
+      typeof balance === "number" && Number.isFinite(balance) ? balance : null,
+    balanceUnit: nonEmptyString(payload?.balance_unit),
+  };
+};
+
+/** Returns the usable parking area entries of a status payload, default parking area first. */
+export const normalizeParkingAreas = (
+  payload: PaidParkingStatusResponse | null | undefined,
+): ParkingAreaStatus[] =>
+  Array.isArray(payload?.parking_areas)
+    ? payload.parking_areas.filter((parkingArea) =>
+        Boolean(nonEmptyString(parkingArea?.parking_area_id)),
+      )
+    : [];
+
+/**
+ * Replaces the state and window of a status with those of the selected parking area.
+ * Balance fields stay permit-wide. A status without state (not loaded or
+ * failed) is returned unchanged so cached parking area windows never outlive it.
+ */
+export const applyParkingAreaToStatus = (
+  status: PaidParkingStatus,
+  parkingArea: ParkingAreaStatus | null,
+): PaidParkingStatus =>
+  parkingArea && status.state !== null
+    ? { ...status, ...normalizeParkingAreaPaidWindow(parkingArea) }
+    : status;
+
+/**
+ * Drops a configured `parking_area_id` once the permit changed or was cleared.
+ * Parking area ids are per permit, so the parking area survives only when the new permit's
+ * known parking areas list it.
+ */
+export const dropForeignParkingAreaId = <
+  T extends { config_entry_id?: string; parking_area_id?: string },
+>(
+  config: T,
+  previousEntryId: string | undefined,
+  parkingAreasByEntryId: ReadonlyMap<string, readonly ParkingAreaStatus[]>,
+): T => {
+  if (!config.parking_area_id || config.config_entry_id === previousEntryId) {
+    return config;
+  }
+  const parkingAreas = config.config_entry_id
+    ? parkingAreasByEntryId.get(config.config_entry_id)
+    : undefined;
+  if (
+    parkingAreas?.some(
+      (parkingArea) => parkingArea.parking_area_id === config.parking_area_id,
+    )
+  )
+    return config;
+  const next = { ...config };
+  delete next.parking_area_id;
+  return next;
+};
+
+/** Minimum number of parking areas before a permit offers a parking area choice. */
+export const MIN_SELECTABLE_PARKING_AREAS = 2;
+
+/** Card options that decide which parking area the new-reservation card uses. */
+export type CardParkingAreaOptions = {
+  /** Whether the card shows its parking area field (`show_parking_area`). */
+  showParkingArea: boolean;
+  /** Preset parking area from the card config (`parking_area_id`) for the configured permit. */
+  configParkingAreaId?: string | null;
+  /** Parking area the user picked in the card's parking area field. */
+  pickedParkingAreaId?: string | null;
+};
+
+/**
+ * Resolves the parking area the new-reservation card uses for a permit.
+ *
+ * With the parking area field shown, the user's pick wins over the configured preset;
+ * with it hidden there is nothing to pick, so only the preset counts. Ids that
+ * are not one of the permit's parking areas fall through to the first (default) parking area.
+ */
+export const resolveCardParkingArea = (
+  parkingAreas: readonly ParkingAreaStatus[],
+  options: CardParkingAreaOptions,
+): ParkingAreaStatus | null => {
+  const find = (parkingAreaId: string | null | undefined) =>
+    parkingAreaId
+      ? parkingAreas.find(
+          (parkingArea) => parkingArea.parking_area_id === parkingAreaId,
+        )
+      : undefined;
+  return (
+    (options.showParkingArea ? find(options.pickedParkingAreaId) : undefined) ??
+    find(options.configParkingAreaId) ??
+    parkingAreas[0] ??
+    null
+  );
+};
+
+/**
+ * Decides which parking area settings the new-reservation card editor shows.
+ *
+ * The parking area picker needs a configured permit with a parking area choice. The
+ * `show_parking_area` toggle follows the configured permit, or, without one (the card
+ * then shows a permit picker), any permit with a parking area choice.
+ */
+export const getParkingAreaEditorVisibility = (params: {
+  permitConfigured: boolean;
+  permitParkingAreaCount: number;
+  anyPermitHasParkingAreas: boolean;
+}): { showParkingAreaSelect: boolean; showParkingAreaToggle: boolean } => {
+  const permitHasParkingAreas =
+    params.permitConfigured &&
+    params.permitParkingAreaCount >= MIN_SELECTABLE_PARKING_AREAS;
+  return {
+    showParkingAreaSelect: permitHasParkingAreas,
+    showParkingAreaToggle: params.permitConfigured
+      ? permitHasParkingAreas
+      : params.anyPermitHasParkingAreas,
+  };
+};
+
+/**
+ * Loads the reservations of one integration device.
+ *
+ * With `fresh`, the `list_reservations` service fetches from the provider, so
+ * changes made outside Home Assistant (the municipality app or website) show
+ * up. Without it, the websocket command returns the coordinator data without
+ * a provider fetch. Use that right after a write from a card: the write
+ * services refresh the coordinator before they return, so the data is current.
+ */
+export const fetchReservations = async (
+  hass: HomeAssistant,
+  device: DeviceEntry,
+  fresh: boolean,
+): Promise<ReservationsResponse> => {
+  if (!fresh && device.config_entry_id) {
+    return hass.callWS<ReservationsResponse>({
+      type: WS_LIST_RESERVATIONS,
+      config_entry_id: device.config_entry_id,
+    });
+  }
+  const result = await hass.callWS<
+    ReservationsResponse | { response: ReservationsResponse }
+  >({
+    type: "call_service",
+    domain: DOMAIN,
+    service: "list_reservations",
+    return_response: true,
+    service_data: { device_id: device.id },
+  });
+  return "response" in result ? result.response : result;
+};
+
+/** Fetches the parking areas of one permit from the status websocket; empty on failure. */
+export const fetchPermitParkingAreas = async (
+  hass: HomeAssistant,
+  entryId: string,
+): Promise<ParkingAreaStatus[]> => {
+  try {
+    return normalizeParkingAreas(
+      await hass.callWS<PaidParkingStatusResponse>({
+        type: WS_GET_STATUS,
+        config_entry_id: entryId,
+      }),
+    );
+  } catch {
+    return [];
+  }
+};
+
+/** Returns the parking area label of a listed reservation: its name, else its id. */
+export const formatReservationParkingArea = (reservation: {
+  parking_area_id?: string | null;
+  parking_area_name?: string | null;
+}): string | null =>
+  nonEmptyString(reservation.parking_area_name) ??
+  nonEmptyString(reservation.parking_area_id);
 /** Returns whether a config entry should be hidden from permit selection. */
 export const isPermitEntryDisabled = (entry: PermitEntry): boolean =>
   Boolean(entry.disabled_by) ||
