@@ -379,7 +379,7 @@
         "name": "Remaining balance"
       },
       "permit_zone_availability": {
-        "name": "Permit parking area availability",
+        "name": "Parking area availability",
         "state": {
           "chargeable": "Chargeable",
           "free": "Free"

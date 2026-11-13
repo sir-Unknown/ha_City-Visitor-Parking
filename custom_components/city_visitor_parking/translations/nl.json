@@ -379,7 +379,7 @@
         "name": "Resterend saldo"
       },
       "permit_zone_availability": {
-        "name": "Beschikbaarheid parkeergebied vergunning",
+        "name": "Beschikbaarheid parkeergebied",
         "state": {
           "chargeable": "Betaald",
           "free": "Gratis"
