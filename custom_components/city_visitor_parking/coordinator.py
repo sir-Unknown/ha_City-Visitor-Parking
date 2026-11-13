@@ -511,7 +511,7 @@ def _parse_time_range(item: object) -> TimeRange | None:
 
 def _normalize_paid_hours(permit_or_parking_area: object) -> list[TimeRange]:
     """Normalize paid hours blocks of a permit or parking area to UTC."""
-    # "zone_validity" is the library field name in pycityvisitorparking 0.6.0b5.
+    # "zone_validity" is the library's field name for the paid hours.
     raw_blocks = get_attr(permit_or_parking_area, "zone_validity")
     if not isinstance(raw_blocks, list):
         return []

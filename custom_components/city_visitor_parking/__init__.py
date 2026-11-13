@@ -329,7 +329,7 @@ async def async_setup_entry(
 
 def _install_paid_hours_logging(provider: object) -> None:
     """Add extra debug logging when paid hours fall back to the fallback block."""
-    # Library private mapper, named after its zone_validity field in 0.6.0b5.
+    # Library private mapper, named after the library field it maps (zone_validity).
     map_paid_hours = getattr(provider, "_map_zone_validity", None)
     provider_id = getattr(provider, "provider_id", "unknown")
     if not callable(map_paid_hours):
