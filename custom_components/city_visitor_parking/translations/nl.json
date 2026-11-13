@@ -71,23 +71,23 @@
         },
         "sections": {
           "operating_times": {
-            "name": "Aangepaste betaalvensters",
+            "name": "Aangepaste betaaltijden",
             "description": "Overschrijf de standaard betaaltijden per dag. Laat een dag leeg om de standaardinstelling te behouden.",
             "data": {
               "monday_free_parking": "Maandag vrij parkeren",
-              "monday_chargeable_windows": "Maandag betaalvensters",
+              "monday_chargeable_windows": "Maandag betaaltijden",
               "tuesday_free_parking": "Dinsdag vrij parkeren",
-              "tuesday_chargeable_windows": "Dinsdag betaalvensters",
+              "tuesday_chargeable_windows": "Dinsdag betaaltijden",
               "wednesday_free_parking": "Woensdag vrij parkeren",
-              "wednesday_chargeable_windows": "Woensdag betaalvensters",
+              "wednesday_chargeable_windows": "Woensdag betaaltijden",
               "thursday_free_parking": "Donderdag vrij parkeren",
-              "thursday_chargeable_windows": "Donderdag betaalvensters",
+              "thursday_chargeable_windows": "Donderdag betaaltijden",
               "friday_free_parking": "Vrijdag vrij parkeren",
-              "friday_chargeable_windows": "Vrijdag betaalvensters",
+              "friday_chargeable_windows": "Vrijdag betaaltijden",
               "saturday_free_parking": "Zaterdag vrij parkeren",
-              "saturday_chargeable_windows": "Zaterdag betaalvensters",
+              "saturday_chargeable_windows": "Zaterdag betaaltijden",
               "sunday_free_parking": "Zondag vrij parkeren",
-              "sunday_chargeable_windows": "Zondag betaalvensters"
+              "sunday_chargeable_windows": "Zondag betaaltijden"
             },
             "data_description": {
               "monday_free_parking": "Vergunning is niet actief op maandag; parkeren is gratis.",
@@ -379,10 +379,10 @@
         "name": "Resterend saldo"
       },
       "permit_zone_availability": {
-        "name": "Beschikbaarheid parkeergebied",
+        "name": "Betaald parkeren",
         "state": {
-          "chargeable": "Betaald",
-          "free": "Gratis"
+          "chargeable": "Ja",
+          "free": "Nee"
         }
       },
       "provider_chargeable_start": {
@@ -398,10 +398,10 @@
         "name": "Einde betaald parkeren"
       },
       "zone_availability": {
-        "name": "Beschikbaarheid parkeergebied {zone}",
+        "name": "Parkeergebied {zone}: betaald parkeren",
         "state": {
-          "chargeable": "Betaald",
-          "free": "Gratis"
+          "chargeable": "Ja",
+          "free": "Nee"
         }
       },
       "zone_provider_chargeable_start": {
