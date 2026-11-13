@@ -6,8 +6,8 @@ import type {
   FavoriteItem,
   HomeAssistant,
   PermitOption,
-  ZoneStatus,
-  ZoneStatusResponse,
+  PaidParkingStatus,
+  PaidParkingStatusResponse,
   ParkingAreaStatus,
 } from "./types";
 import {
@@ -19,10 +19,10 @@ import {
   DOMAIN,
   MIN_SELECTABLE_PARKING_AREAS,
   RESERVATION_ENDED_EVENT,
-  EMPTY_ZONE_STATUS,
+  EMPTY_PAID_PARKING_STATUS,
   RESERVATION_STARTED_EVENT,
   WS_GET_STATUS,
-  applyZoneStatus,
+  applyPaidParkingStatus,
   applyParkingAreaToStatus,
   buildPermitOptions,
   clearFavoriteTransientState,
@@ -37,7 +37,7 @@ import {
   isHassRunning,
   normalizeMatchValue,
   normalizePlateValue,
-  normalizeZoneStatus,
+  normalizePaidParkingStatus,
   normalizeParkingAreas,
   parseDateTimeValue,
   resolveCardParkingArea,
@@ -159,9 +159,9 @@ class CityVisitorParkingNewReservationCard extends BaseLocalizedCard<CardConfig>
   _windowEndIso: string | null = null;
   _remainingMinutes: number | null = null;
   _balanceUnit: string | null = null;
-  _zoneStatusTsByEntryId = new Map<string, number>();
-  _zoneStatusInFlightByEntryId = new Map<string, Promise<void>>();
-  _zoneStatusByEntryId = new Map<string, ZoneStatus>();
+  _paidParkingStatusTsByEntryId = new Map<string, number>();
+  _paidParkingStatusInFlightByEntryId = new Map<string, Promise<void>>();
+  _paidParkingStatusByEntryId = new Map<string, PaidParkingStatus>();
   // Parking areas of the last successful status response; kept on fetch failure so a
   // chosen parking area is not silently replaced by the provider default.
   _parkingAreasByEntryId = new Map<string, ParkingAreaStatus[]>();
@@ -286,7 +286,7 @@ class CityVisitorParkingNewReservationCard extends BaseLocalizedCard<CardConfig>
     }
     if (prev !== "RUNNING" && hass.config?.state === "RUNNING") {
       invalidateFavoritesCache(this, { resetRetryAfter: true });
-      this._zoneStatusTsByEntryId.clear();
+      this._paidParkingStatusTsByEntryId.clear();
     }
     this._syncEntryState(false);
   }
@@ -457,41 +457,44 @@ class CityVisitorParkingNewReservationCard extends BaseLocalizedCard<CardConfig>
     }
   }
 
-  async _loadZoneStatusForEntry(entryId: string): Promise<void> {
+  async _loadPaidParkingStatusForEntry(entryId: string): Promise<void> {
     if (!this._hass || !entryId) return;
     const hass = this._hass;
     const force = this._pendingPermitDefaultsEntryId === entryId;
     const now = Date.now();
-    const lastTs = this._zoneStatusTsByEntryId.get(entryId);
+    const lastTs = this._paidParkingStatusTsByEntryId.get(entryId);
     if (!force && lastTs !== undefined && now - lastTs < STATUS_THROTTLE_MS)
       return;
-    const inFlight = this._zoneStatusInFlightByEntryId.get(entryId);
+    const inFlight = this._paidParkingStatusInFlightByEntryId.get(entryId);
     if (inFlight) return inFlight;
     const loadPromise = (async () => {
-      let status: ZoneStatus;
+      let status: PaidParkingStatus;
       try {
-        const payload = await hass.callWS<ZoneStatusResponse>({
+        const payload = await hass.callWS<PaidParkingStatusResponse>({
           type: WS_GET_STATUS,
           config_entry_id: entryId,
         });
-        status = normalizeZoneStatus(payload);
+        status = normalizePaidParkingStatus(payload);
         this._parkingAreasByEntryId.set(
           entryId,
           normalizeParkingAreas(payload),
         );
       } catch {
-        status = EMPTY_ZONE_STATUS;
+        status = EMPTY_PAID_PARKING_STATUS;
       }
-      this._zoneStatusByEntryId.set(entryId, status);
+      this._paidParkingStatusByEntryId.set(entryId, status);
       if (entryId === this._getActiveEntryId()) {
-        applyZoneStatus(this, this._getEffectiveZoneStatus(entryId));
+        applyPaidParkingStatus(
+          this,
+          this._getEffectivePaidParkingStatus(entryId),
+        );
         this._applyPendingPermitDefaults(entryId);
       }
-      this._zoneStatusTsByEntryId.set(entryId, Date.now());
-      this._zoneStatusInFlightByEntryId.delete(entryId);
+      this._paidParkingStatusTsByEntryId.set(entryId, Date.now());
+      this._paidParkingStatusInFlightByEntryId.delete(entryId);
       this._requestRender();
     })();
-    this._zoneStatusInFlightByEntryId.set(entryId, loadPromise);
+    this._paidParkingStatusInFlightByEntryId.set(entryId, loadPromise);
     return loadPromise;
   }
 
@@ -763,10 +766,13 @@ class CityVisitorParkingNewReservationCard extends BaseLocalizedCard<CardConfig>
   _loadPreviewPermitParkingAreas(): void {
     if (this._getActiveEntryId() || !this._permitOptionsLoaded) return;
     for (const option of this._permitOptions) {
-      if (option.disabled || this._zoneStatusTsByEntryId.has(option.id)) {
+      if (
+        option.disabled ||
+        this._paidParkingStatusTsByEntryId.has(option.id)
+      ) {
         continue;
       }
-      void this._loadZoneStatusForEntry(option.id);
+      void this._loadPaidParkingStatusForEntry(option.id);
     }
   }
 
@@ -865,7 +871,7 @@ class CityVisitorParkingNewReservationCard extends BaseLocalizedCard<CardConfig>
     if (this._resolveParkingArea(entryId)?.parking_area_id === parkingAreaId)
       return;
     this._selectedParkingAreaIdByEntryId.set(entryId, parkingAreaId);
-    applyZoneStatus(this, this._getEffectiveZoneStatus(entryId));
+    applyPaidParkingStatus(this, this._getEffectivePaidParkingStatus(entryId));
     this._applyStatusDefaultsToForm(true);
     this._requestRender();
   }
@@ -887,8 +893,8 @@ class CityVisitorParkingNewReservationCard extends BaseLocalizedCard<CardConfig>
   }
 
   /** Parking area status of an entry with the selected parking area's state and window applied. */
-  _getEffectiveZoneStatus(entryId: string): ZoneStatus | null {
-    const status = this._zoneStatusByEntryId.get(entryId);
+  _getEffectivePaidParkingStatus(entryId: string): PaidParkingStatus | null {
+    const status = this._paidParkingStatusByEntryId.get(entryId);
     if (!status) return null;
     return applyParkingAreaToStatus(status, this._resolveParkingArea(entryId));
   }
@@ -964,12 +970,12 @@ class CityVisitorParkingNewReservationCard extends BaseLocalizedCard<CardConfig>
     this._resetDeviceState();
     this._suppressFavoriteClear = false;
     this._setInputValue("favorite", "");
-    applyZoneStatus(this, this._getEffectiveZoneStatus(value));
+    applyPaidParkingStatus(this, this._getEffectivePaidParkingStatus(value));
     this._applyStatusDefaultsToForm(true);
     this._clearStatus();
     this._ensureDeviceId();
     this._maybeLoadFavorites();
-    void this._loadZoneStatusForEntry(value);
+    void this._loadPaidParkingStatusForEntry(value);
     void this._loadActivePlates(value);
     this._setupStatusRefresh(value);
   }
@@ -986,7 +992,7 @@ class CityVisitorParkingNewReservationCard extends BaseLocalizedCard<CardConfig>
   _resetDeviceState(): void {
     this._deviceId = null;
     this._deviceEntryId = null;
-    applyZoneStatus(this, null);
+    applyPaidParkingStatus(this, null);
     this._resetFavoritesState();
     this._activeReservationsByPlate = new Map();
     this._activeReservationsLoadedFor = null;
@@ -1005,9 +1011,9 @@ class CityVisitorParkingNewReservationCard extends BaseLocalizedCard<CardConfig>
 
   _syncEntryState(forceSetupRefresh: boolean): void {
     const entryId = this._getActiveEntryId();
-    applyZoneStatus(
+    applyPaidParkingStatus(
       this,
-      entryId ? this._getEffectiveZoneStatus(entryId) : null,
+      entryId ? this._getEffectivePaidParkingStatus(entryId) : null,
     );
     this._applyStatusDefaultsToForm(false);
     if (getConfigEntryId(this._config) && entryId) {
@@ -1017,7 +1023,7 @@ class CityVisitorParkingNewReservationCard extends BaseLocalizedCard<CardConfig>
     this._ensureDeviceId();
     this._ensurePermitOptions();
     this._maybeSelectSinglePermit();
-    if (entryId) void this._loadZoneStatusForEntry(entryId);
+    if (entryId) void this._loadPaidParkingStatusForEntry(entryId);
     if (forceSetupRefresh || this._statusRefreshHandle === null) {
       this._setupStatusRefresh(entryId);
     }
@@ -1033,7 +1039,7 @@ class CityVisitorParkingNewReservationCard extends BaseLocalizedCard<CardConfig>
       const activeEntryId = this._getActiveEntryId();
       if (!activeEntryId || activeEntryId !== entryId) return;
       setPendingPermitDefaults(this, entryId);
-      void this._loadZoneStatusForEntry(entryId);
+      void this._loadPaidParkingStatusForEntry(entryId);
       // Invalidate active-plate cache so the next render re-fetches and
       // picks up reservations ended or changed outside this card.
       this._activeReservationsLoadedFor = null;

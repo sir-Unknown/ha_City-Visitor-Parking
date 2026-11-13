@@ -1,15 +1,15 @@
 import { describe, expect, it } from "vitest";
 import {
-  EMPTY_ZONE_STATUS,
+  EMPTY_PAID_PARKING_STATUS,
   applyParkingAreaToStatus,
   dropForeignParkingAreaId,
   formatReservationParkingArea,
   getParkingAreaEditorVisibility,
-  normalizeZoneStatus,
+  normalizePaidParkingStatus,
   normalizeParkingAreas,
   resolveCardParkingArea,
 } from "./helpers";
-import type { ZoneStatusResponse, ParkingAreaStatus } from "./types";
+import type { PaidParkingStatusResponse, ParkingAreaStatus } from "./types";
 
 const PARKING_AREA_10: ParkingAreaStatus = {
   parking_area_id: "10",
@@ -31,7 +31,7 @@ const PARKING_AREA_630: ParkingAreaStatus = {
   next_change_time: "2026-11-13T09:00:00+00:00",
 };
 
-const PAYLOAD: ZoneStatusResponse = {
+const PAYLOAD: PaidParkingStatusResponse = {
   state: PARKING_AREA_10.state,
   window_kind: PARKING_AREA_10.window_kind,
   window_start: PARKING_AREA_10.window_start,
@@ -115,13 +115,13 @@ describe("parking area selection", () => {
       normalizeParkingAreas({
         ...PAYLOAD,
         parking_areas: undefined,
-      } as unknown as ZoneStatusResponse),
+      } as unknown as PaidParkingStatusResponse),
     ).toEqual([]);
   });
 
   it("uses the selected parking area window and keeps the permit balance", () => {
     const status = applyParkingAreaToStatus(
-      normalizeZoneStatus(PAYLOAD),
+      normalizePaidParkingStatus(PAYLOAD),
       PARKING_AREA_630,
     );
     expect(status).toEqual({
@@ -135,9 +135,9 @@ describe("parking area selection", () => {
   });
 
   it("does not overlay cached parking areas on a failed status", () => {
-    expect(applyParkingAreaToStatus(EMPTY_ZONE_STATUS, PARKING_AREA_630)).toBe(
-      EMPTY_ZONE_STATUS,
-    );
+    expect(
+      applyParkingAreaToStatus(EMPTY_PAID_PARKING_STATUS, PARKING_AREA_630),
+    ).toBe(EMPTY_PAID_PARKING_STATUS);
   });
 });
 

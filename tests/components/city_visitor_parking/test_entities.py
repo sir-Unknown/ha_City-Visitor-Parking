@@ -20,16 +20,16 @@ from custom_components.city_visitor_parking.const import (
     STATE_PAID,
 )
 from custom_components.city_visitor_parking.coordinator import (
-    _compute_zone_availability,
+    _compute_paid_parking_status,
 )
 from custom_components.city_visitor_parking.entity import CityVisitorParkingEntity
 from custom_components.city_visitor_parking.models import (
     CoordinatorData,
     Favorite,
+    PaidParkingStatus,
     ParkingArea,
     Reservation,
     TimeRange,
-    ZoneAvailability,
 )
 from custom_components.city_visitor_parking.sensor import (
     ActiveReservationsSensor,
@@ -128,10 +128,10 @@ async def test_entity_device_info_includes_configuration_url() -> None:
     assert device_info["configuration_url"] == "https://parkeren.rijswijk.nl/DVSPortal/"
 
 
-async def test_zone_availability_uses_overrides() -> None:
+async def test_paid_parking_status_uses_overrides() -> None:
     """Paid parking should reflect overrides for the current day."""
     now = datetime(2025, 1, 6, 9, 30, tzinfo=UTC)
-    zone_validity = [
+    paid_hours = [
         TimeRange(
             start=datetime(2025, 1, 6, 8, 0, tzinfo=UTC),
             end=datetime(2025, 1, 6, 16, 0, tzinfo=UTC),
@@ -142,7 +142,7 @@ async def test_zone_availability_uses_overrides() -> None:
     }
 
     with freeze_time(now):
-        availability = _compute_zone_availability(zone_validity, options, now)
+        availability = _compute_paid_parking_status(paid_hours, options, now)
 
         assert availability.is_paid_now is False
         local_now = dt_util.as_local(now)
@@ -157,10 +157,10 @@ async def test_zone_availability_uses_overrides() -> None:
             permit_id="permit",
             permit_remaining_balance=0,
             permit_balance_unit=None,
-            zone_validity=tuple(zone_validity),
+            paid_hours=tuple(paid_hours),
             reservations=(),
             favorites=(),
-            zone_availability=availability,
+            paid_parking_status=availability,
             active_reservations=(),
         )
         coordinator = _make_coordinator(data)
@@ -182,7 +182,7 @@ async def test_zone_availability_uses_overrides() -> None:
             start=expected_override_start,
             end=expected_override_end,
         )
-        expected_provider = _timerange_to_dict(zone_validity[0])
+        expected_provider = _timerange_to_dict(paid_hours[0])
         expected_user = _timerange_to_dict(expected_window)
         assert attributes["Today provider"] == [expected_provider]
         assert attributes["Today user entered"] == [expected_user]
@@ -190,14 +190,14 @@ async def test_zone_availability_uses_overrides() -> None:
         assert attributes["Next user entered"] == expected_user
         provider_start_sensor = ProviderPaidParkingStartSensor(coordinator, entry)
         provider_end_sensor = ProviderPaidParkingEndSensor(coordinator, entry)
-        assert provider_start_sensor.native_value == zone_validity[0].start
-        assert provider_end_sensor.native_value == zone_validity[0].end
+        assert provider_start_sensor.native_value == paid_hours[0].start
+        assert provider_end_sensor.native_value == paid_hours[0].end
 
 
 async def test_next_paid_window_uses_overrides() -> None:
     """Next paid window should use overrides when configured."""
     now = datetime(2025, 1, 6, 9, 30, tzinfo=UTC)
-    zone_validity = [
+    paid_hours = [
         TimeRange(
             start=datetime(2025, 1, 6, 8, 0, tzinfo=UTC),
             end=datetime(2025, 1, 6, 16, 0, tzinfo=UTC),
@@ -208,15 +208,15 @@ async def test_next_paid_window_uses_overrides() -> None:
     }
 
     with freeze_time(now):
-        availability = _compute_zone_availability(zone_validity, options, now)
+        availability = _compute_paid_parking_status(paid_hours, options, now)
         data = CoordinatorData(
             permit_id="permit",
             permit_remaining_balance=0,
             permit_balance_unit=None,
-            zone_validity=tuple(zone_validity),
+            paid_hours=tuple(paid_hours),
             reservations=(),
             favorites=(),
-            zone_availability=availability,
+            paid_parking_status=availability,
             active_reservations=(),
         )
         coordinator = _make_coordinator(data)
@@ -278,7 +278,7 @@ async def test_sensors_handle_coordinator_update(
         permit_id="permit",
         permit_remaining_balance=120,
         permit_balance_unit=None,
-        zone_validity=(parking_area_window,),
+        paid_hours=(parking_area_window,),
         reservations=(
             Reservation(
                 reservation_id="future",
@@ -287,7 +287,7 @@ async def test_sensors_handle_coordinator_update(
             ),
         ),
         favorites=(Favorite(favorite_id="fav1"),),
-        zone_availability=ZoneAvailability(
+        paid_parking_status=PaidParkingStatus(
             is_paid_now=True,
             next_change_time=parking_area_window.end,
             windows_today=(parking_area_window,),
@@ -348,10 +348,10 @@ async def test_remaining_balance_sensor_uses_count_presentation() -> None:
             permit_id="permit",
             permit_remaining_balance=EXPECTED_COUNT_BALANCE,
             permit_balance_unit="TIMES",
-            zone_validity=(),
+            paid_hours=(),
             reservations=(),
             favorites=(),
-            zone_availability=ZoneAvailability(
+            paid_parking_status=PaidParkingStatus(
                 is_paid_now=True,
                 next_change_time=None,
                 windows_today=(),
@@ -377,10 +377,10 @@ async def test_remaining_balance_sensor_uses_duration_presentation() -> None:
             permit_id="permit",
             permit_remaining_balance=EXPECTED_DURATION_BALANCE,
             permit_balance_unit="MINUTE",
-            zone_validity=(),
+            paid_hours=(),
             reservations=(),
             favorites=(),
-            zone_availability=ZoneAvailability(
+            paid_parking_status=PaidParkingStatus(
                 is_paid_now=True,
                 next_change_time=None,
                 windows_today=(),
@@ -408,10 +408,10 @@ async def test_remaining_balance_sensor_uses_monetary_presentation() -> None:
             permit_id="permit",
             permit_remaining_balance=EXPECTED_MONETARY_BALANCE,
             permit_balance_unit="EUR",
-            zone_validity=(),
+            paid_hours=(),
             reservations=(),
             favorites=(),
-            zone_availability=ZoneAvailability(
+            paid_parking_status=PaidParkingStatus(
                 is_paid_now=True,
                 next_change_time=None,
                 windows_today=(),
@@ -439,10 +439,10 @@ async def test_remaining_balance_sensor_normalizes_euro_currency_code() -> None:
             permit_id="permit",
             permit_remaining_balance=EXPECTED_EURO_BALANCE,
             permit_balance_unit="EURO",
-            zone_validity=(),
+            paid_hours=(),
             reservations=(),
             favorites=(),
-            zone_availability=ZoneAvailability(
+            paid_parking_status=PaidParkingStatus(
                 is_paid_now=True,
                 next_change_time=None,
                 windows_today=(),
@@ -459,9 +459,11 @@ async def test_remaining_balance_sensor_normalizes_euro_currency_code() -> None:
     assert sensor.device_class == SensorDeviceClass.MONETARY
 
 
-def _sample_data(zone_availability: ZoneAvailability | None = None) -> CoordinatorData:
+def _sample_data(
+    paid_parking_status: PaidParkingStatus | None = None,
+) -> CoordinatorData:
     """Create coordinator data for tests."""
-    availability = zone_availability or ZoneAvailability(
+    availability = paid_parking_status or PaidParkingStatus(
         is_paid_now=True,
         next_change_time=None,
         windows_today=(),
@@ -470,7 +472,7 @@ def _sample_data(zone_availability: ZoneAvailability | None = None) -> Coordinat
         permit_id="permit",
         permit_remaining_balance=90,
         permit_balance_unit=None,
-        zone_validity=(),
+        paid_hours=(),
         reservations=(
             Reservation(
                 reservation_id="res1",
@@ -479,7 +481,7 @@ def _sample_data(zone_availability: ZoneAvailability | None = None) -> Coordinat
             ),
         ),
         favorites=(Favorite(favorite_id="fav1"),),
-        zone_availability=availability,
+        paid_parking_status=availability,
         active_reservations=(),
     )
 
@@ -512,20 +514,20 @@ def test_sensor_helpers() -> None:
         permit_id=data.permit_id,
         permit_remaining_balance=data.permit_remaining_balance,
         permit_balance_unit=None,
-        zone_validity=data.zone_validity,
+        paid_hours=data.paid_hours,
         reservations=data.reservations,
         favorites=data.favorites,
-        zone_availability=data.zone_availability,
+        paid_parking_status=data.paid_parking_status,
         active_reservations=(),
     )
     data_with_active = CoordinatorData(
         permit_id=data.permit_id,
         permit_remaining_balance=data.permit_remaining_balance,
         permit_balance_unit=None,
-        zone_validity=data.zone_validity,
+        paid_hours=data.paid_hours,
         reservations=data.reservations,
         favorites=data.favorites,
-        zone_availability=data.zone_availability,
+        paid_parking_status=data.paid_parking_status,
         active_reservations=(
             Reservation(
                 reservation_id="res2",
@@ -581,8 +583,8 @@ def _parking_area(parking_area_id: str, window: TimeRange | None) -> ParkingArea
     return ParkingArea(
         parking_area_id=parking_area_id,
         name=f"Z{parking_area_id}",
-        zone_validity=validity,
-        zone_availability=ZoneAvailability(
+        paid_hours=validity,
+        paid_parking_status=PaidParkingStatus(
             is_paid_now=paid,
             next_change_time=window.end if paid and window else None,
             windows_today=validity,
@@ -598,12 +600,12 @@ def _parking_area_data(parking_areas: Iterable[ParkingArea]) -> CoordinatorData:
         permit_id=base.permit_id,
         permit_remaining_balance=base.permit_remaining_balance,
         permit_balance_unit=None,
-        zone_validity=parking_areas[0].zone_validity if parking_areas else (),
+        paid_hours=parking_areas[0].paid_hours if parking_areas else (),
         reservations=(),
         favorites=(),
-        zone_availability=parking_areas[0].zone_availability
+        paid_parking_status=parking_areas[0].paid_parking_status
         if parking_areas
-        else base.zone_availability,
+        else base.paid_parking_status,
         active_reservations=(),
         parking_areas=parking_areas,
     )

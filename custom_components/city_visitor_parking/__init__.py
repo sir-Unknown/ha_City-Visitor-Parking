@@ -80,7 +80,7 @@ _PAID_PARKING_MIGRATION_MINOR_VERSION: Final = 4
 # field: the weekday overrides are stored under ``operating_time_overrides``
 # keyed by weekday, so only the entity registry needs rewriting.
 _LEGACY_SENSOR_KEYS: Final[Mapping[str, str]] = {
-    "permit_zone_availability": "paid_parking",
+    "permit_paid_parking_status": "paid_parking",
     "provider_chargeable_start": "provider_paid_parking_start",
     "provider_chargeable_end": "provider_paid_parking_end",
     "next_chargeable_start": "paid_parking_start",
@@ -280,7 +280,7 @@ async def async_setup_entry(
         ha_cvp_version=ha_cvp_version,
         pycvp_version=pycvp_version,
     )
-    _install_zone_validity_logging(provider)
+    _install_paid_hours_logging(provider)
     try:
         await async_provider_login(entry, provider)
     except AuthError as err:
@@ -327,11 +327,12 @@ async def async_setup_entry(
     return True
 
 
-def _install_zone_validity_logging(provider: object) -> None:
-    """Add extra debug logging when zone validity falls back to the zone block."""
-    map_zone_validity = getattr(provider, "_map_zone_validity", None)
+def _install_paid_hours_logging(provider: object) -> None:
+    """Add extra debug logging when paid hours fall back to the fallback block."""
+    # Library private mapper, named after its zone_validity field in 0.6.0b5.
+    map_paid_hours = getattr(provider, "_map_zone_validity", None)
     provider_id = getattr(provider, "provider_id", "unknown")
-    if not callable(map_zone_validity):
+    if not callable(map_paid_hours):
         return
 
     def _summarize_raw(raw: object) -> str:
@@ -342,9 +343,7 @@ def _install_zone_validity_logging(provider: object) -> None:
             return f"raw=list(count={len(raw_list)})"
         return f"raw={type(raw).__name__}"
 
-    accepts_fallback = (
-        "fallback_zone" in inspect.signature(map_zone_validity).parameters
-    )
+    accepts_fallback = "fallback_zone" in inspect.signature(map_paid_hours).parameters
 
     def _wrap(raw: object, *, fallback_zone: object | None = None) -> object:
         if isinstance(fallback_zone, Mapping):
@@ -359,7 +358,7 @@ def _install_zone_validity_logging(provider: object) -> None:
             )
             if not has_candidates and start_raw and end_raw:
                 _LOGGER.debug(
-                    "Provider %s zone validity fallback details %s "
+                    "Provider %s paid hours fallback details %s "
                     "fallback_start=%s fallback_end=%s",
                     provider_id,
                     _summarize_raw(cast("object", raw)),
@@ -367,10 +366,10 @@ def _install_zone_validity_logging(provider: object) -> None:
                     end_raw,
                 )
         if accepts_fallback:
-            return map_zone_validity(raw, fallback_zone=fallback_zone)
-        return map_zone_validity(raw)
+            return map_paid_hours(raw, fallback_zone=fallback_zone)
+        return map_paid_hours(raw)
 
-    cast("object", provider)._map_zone_validity = _wrap  # type: ignore[attr-defined]  # pylint: disable=protected-access
+    cast("object", provider)._map_paid_hours = _wrap  # type: ignore[attr-defined]  # pylint: disable=protected-access
 
 
 def _normalize_operating_time_overrides(

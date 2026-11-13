@@ -109,7 +109,7 @@ export type FavoriteItem = FavoriteOption & {
 };
 
 /** Normalized parking area status state consumed by the reservation card UI. */
-export type ZoneStatus = {
+export type PaidParkingStatus = {
   state: "paid" | "free" | null;
   kind: "current" | "next" | null;
   start: string | null;
@@ -119,10 +119,10 @@ export type ZoneStatus = {
 };
 
 /**
- * One entry of `ZoneStatusResponse.parking_areas`.
+ * One entry of `PaidParkingStatusResponse.parking_areas`.
  *
  * State and window fields are computed exactly like the top-level
- * `ZoneStatusResponse` fields (weekday overrides applied), so an entry can
+ * `PaidParkingStatusResponse` fields (weekday overrides applied), so an entry can
  * replace them when displaying the status of that parking area.
  */
 export type ParkingAreaStatus = {
@@ -149,7 +149,7 @@ export type ParkingAreaStatus = {
  * Fields use `null` when a value is intentionally unavailable, instead of
  * omitting the key entirely.
  */
-export type ZoneStatusResponse = {
+export type PaidParkingStatusResponse = {
   /**
    * Current effective parking area state after applying weekday overrides.
    * Guaranteed to be `"paid"` or `"free"`.

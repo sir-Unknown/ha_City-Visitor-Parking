@@ -7,8 +7,8 @@ import type {
   PermitEntry,
   PermitOption,
   ReservationsResponse,
-  ZoneStatus,
-  ZoneStatusResponse,
+  PaidParkingStatus,
+  PaidParkingStatusResponse,
   ParkingAreaStatus,
 } from "./types";
 import { localize } from "./translations";
@@ -24,7 +24,7 @@ export const RESERVATION_STARTED_EVENT =
 export const RESERVATION_ENDED_EVENT = "city-visitor-parking-reservation-ended";
 
 /** Empty parking area state used before a status payload has been loaded. */
-export const EMPTY_ZONE_STATUS: ZoneStatus = {
+export const EMPTY_PAID_PARKING_STATUS: PaidParkingStatus = {
   state: null,
   kind: null,
   start: null,
@@ -107,16 +107,16 @@ export const setPendingPermitDefaults = (
 };
 
 /** Copies a normalized parking area status payload into card instance state fields. */
-export const applyZoneStatus = (
+export const applyPaidParkingStatus = (
   context: {
-    _paidState: ZoneStatus["state"];
-    _windowKind: ZoneStatus["kind"];
+    _paidState: PaidParkingStatus["state"];
+    _windowKind: PaidParkingStatus["kind"];
     _windowStartIso: string | null;
     _windowEndIso: string | null;
     _remainingMinutes: number | null;
     _balanceUnit: string | null;
   },
-  status: ZoneStatus | null,
+  status: PaidParkingStatus | null,
 ): void => {
   Object.assign(context, {
     _paidState: status?.state ?? null,
@@ -141,7 +141,7 @@ const nonEmptyString = (value: unknown): string | null =>
 /** Normalizes the state and window fields shared by status payloads and parking areas. */
 const normalizeParkingAreaPaidWindow = (
   payload: ParkingAreaPaidWindowPayload | null | undefined,
-): Pick<ZoneStatus, "state" | "kind" | "start" | "end"> => {
+): Pick<PaidParkingStatus, "state" | "kind" | "start" | "end"> => {
   const state =
     payload?.state === "paid" || payload?.state === "free"
       ? payload.state
@@ -159,9 +159,9 @@ const normalizeParkingAreaPaidWindow = (
 };
 
 /** Normalizes the top-level (default parking area) part of a status payload. */
-export const normalizeZoneStatus = (
-  payload: ZoneStatusResponse | null | undefined,
-): ZoneStatus => {
+export const normalizePaidParkingStatus = (
+  payload: PaidParkingStatusResponse | null | undefined,
+): PaidParkingStatus => {
   const balance = payload?.remaining_balance;
   return {
     ...normalizeParkingAreaPaidWindow(payload),
@@ -173,7 +173,7 @@ export const normalizeZoneStatus = (
 
 /** Returns the usable parking area entries of a status payload, default parking area first. */
 export const normalizeParkingAreas = (
-  payload: ZoneStatusResponse | null | undefined,
+  payload: PaidParkingStatusResponse | null | undefined,
 ): ParkingAreaStatus[] =>
   Array.isArray(payload?.parking_areas)
     ? payload.parking_areas.filter((parkingArea) =>
@@ -187,9 +187,9 @@ export const normalizeParkingAreas = (
  * failed) is returned unchanged so cached parking area windows never outlive it.
  */
 export const applyParkingAreaToStatus = (
-  status: ZoneStatus,
+  status: PaidParkingStatus,
   parkingArea: ParkingAreaStatus | null,
-): ZoneStatus =>
+): PaidParkingStatus =>
   parkingArea && status.state !== null
     ? { ...status, ...normalizeParkingAreaPaidWindow(parkingArea) }
     : status;
@@ -323,7 +323,7 @@ export const fetchPermitParkingAreas = async (
 ): Promise<ParkingAreaStatus[]> => {
   try {
     return normalizeParkingAreas(
-      await hass.callWS<ZoneStatusResponse>({
+      await hass.callWS<PaidParkingStatusResponse>({
         type: WS_GET_STATUS,
         config_entry_id: entryId,
       }),

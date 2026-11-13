@@ -43,11 +43,11 @@ from custom_components.city_visitor_parking.models import (
     AutoEndState,
     CoordinatorData,
     Favorite,
+    PaidParkingStatus,
     ParkingArea,
     ProviderConfig,
     Reservation,
     TimeRange,
-    ZoneAvailability,
 )
 from custom_components.city_visitor_parking.payloads import reservation_update_fields
 from custom_components.city_visitor_parking.runtime_data import (
@@ -961,10 +961,10 @@ async def test_service_list_reservations_response(
         permit_id="permit1",
         permit_remaining_balance=0,
         permit_balance_unit=None,
-        zone_validity=(),
+        paid_hours=(),
         reservations=(active_reservation, future_reservation, past_reservation),
         favorites=(Favorite(favorite_id="fav1", license_plate="AB1234", name="Ada"),),
-        zone_availability=ZoneAvailability(
+        paid_parking_status=PaidParkingStatus(
             is_paid_now=True,
             next_change_time=None,
             windows_today=(),
@@ -975,8 +975,8 @@ async def test_service_list_reservations_response(
             ParkingArea(
                 parking_area_id="630",
                 name="Centrum",
-                zone_validity=(),
-                zone_availability=_FREE,
+                paid_hours=(),
+                paid_parking_status=_FREE,
             ),
         ),
     )
@@ -1029,7 +1029,7 @@ async def test_service_list_reservations_stale(hass: HomeAssistant) -> None:
         permit_id="permit1",
         permit_remaining_balance=0,
         permit_balance_unit=None,
-        zone_validity=(),
+        paid_hours=(),
         reservations=(
             Reservation(
                 reservation_id="res1",
@@ -1038,7 +1038,7 @@ async def test_service_list_reservations_stale(hass: HomeAssistant) -> None:
             ),
         ),
         favorites=(),
-        zone_availability=ZoneAvailability(
+        paid_parking_status=PaidParkingStatus(
             is_paid_now=True,
             next_change_time=None,
             windows_today=(),
@@ -1087,10 +1087,10 @@ async def test_service_get_status_response(hass: HomeAssistant) -> None:
         permit_id="permit1",
         permit_remaining_balance=90,
         permit_balance_unit=None,
-        zone_validity=(provider_range,),
+        paid_hours=(provider_range,),
         reservations=(),
         favorites=(),
-        zone_availability=ZoneAvailability(
+        paid_parking_status=PaidParkingStatus(
             is_paid_now=False,
             next_change_time=effective_range.start,
             windows_today=(effective_range,),
@@ -1144,10 +1144,10 @@ async def test_service_get_status_stale(hass: HomeAssistant) -> None:
         permit_id="permit1",
         permit_remaining_balance=30,
         permit_balance_unit=None,
-        zone_validity=(window,),
+        paid_hours=(window,),
         reservations=(),
         favorites=(),
-        zone_availability=ZoneAvailability(
+        paid_parking_status=PaidParkingStatus(
             is_paid_now=True,
             next_change_time=window.end,
             windows_today=(window,),
@@ -1200,10 +1200,10 @@ async def test_service_get_status_stale_recomputes_consistent_windows(
         permit_id="permit1",
         permit_remaining_balance=45,
         permit_balance_unit=None,
-        zone_validity=(provider_range,),
+        paid_hours=(provider_range,),
         reservations=(),
         favorites=(),
-        zone_availability=ZoneAvailability(
+        paid_parking_status=PaidParkingStatus(
             is_paid_now=True,
             next_change_time=stale_effective_range.end,
             windows_today=(stale_effective_range,),
@@ -1369,16 +1369,16 @@ def _coordinator_data(
         permit_id=permit_id,
         permit_remaining_balance=0,
         permit_balance_unit=None,
-        zone_validity=parking_areas[0].zone_validity if parking_areas else (),
+        paid_hours=parking_areas[0].paid_hours if parking_areas else (),
         reservations=(),
         favorites=(),
-        zone_availability=_FREE,
+        paid_parking_status=_FREE,
         active_reservations=(),
         parking_areas=parking_areas,
     )
 
 
-_FREE = ZoneAvailability(is_paid_now=False, next_change_time=None, windows_today=())
+_FREE = PaidParkingStatus(is_paid_now=False, next_change_time=None, windows_today=())
 
 
 def _parking_area(parking_area_id: str) -> ParkingArea:
@@ -1386,8 +1386,8 @@ def _parking_area(parking_area_id: str) -> ParkingArea:
     return ParkingArea(
         parking_area_id=parking_area_id,
         name=parking_area_id,
-        zone_validity=(),
-        zone_availability=_FREE,
+        paid_hours=(),
+        paid_parking_status=_FREE,
     )
 
 

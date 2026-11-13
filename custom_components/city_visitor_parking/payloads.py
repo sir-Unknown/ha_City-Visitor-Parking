@@ -23,10 +23,10 @@ if TYPE_CHECKING:
     from .models import (
         CoordinatorData,
         Favorite,
+        PaidParkingStatus,
         ParkingArea,
         Reservation,
         TimeRange,
-        ZoneAvailability,
     )
 
 
@@ -81,7 +81,7 @@ def reservation_parking_area_payload(
     # A reservation's own parking area decides when it is paid, not the permit default.
     reference = max(now, reservation.start_time)
     window = current_or_next_window_with_overrides(
-        parking_area.zone_validity, options, reference
+        parking_area.paid_hours, options, reference
     )
     if window is not None and window.start < reservation.end_time:
         payload["parking_area_paid_start"] = utc_iso(window.start) or ""
@@ -189,17 +189,17 @@ def normalize_favorites(
 
 
 def _availability_payload(
-    zone_validity: Sequence[TimeRange],
-    availability: ZoneAvailability,
+    paid_hours: Sequence[TimeRange],
+    availability: PaidParkingStatus,
     options: Mapping[str, object],
     now: datetime,
     *,
     stale: bool,
 ) -> dict[str, object]:
     """Return state and current/next effective window for one set of windows."""
-    effective_windows_today = windows_for_today(zone_validity, options, now)
+    effective_windows_today = windows_for_today(paid_hours, options, now)
     effective_window = current_or_next_window_with_overrides(
-        zone_validity,
+        paid_hours,
         options,
         now,
     )
@@ -255,10 +255,10 @@ def build_status_payload(
     parking areas without another request; it is empty when the permit has no parking
     areas.
     """
-    provider_windows_today = windows_for_today(data.zone_validity, {}, now)
-    provider_window = current_or_next_window(data.zone_validity, now)
+    provider_windows_today = windows_for_today(data.paid_hours, {}, now)
+    provider_window = current_or_next_window(data.paid_hours, now)
     default_status = _availability_payload(
-        data.zone_validity, data.zone_availability, options, now, stale=stale
+        data.paid_hours, data.paid_parking_status, options, now, stale=stale
     )
     effective_windows_today = cast(
         "list[TimeRange]", default_status.pop("effective_windows_today")
@@ -266,8 +266,8 @@ def build_status_payload(
     parking_areas: list[dict[str, object]] = []
     for parking_area in data.parking_areas:
         parking_area_status = _availability_payload(
-            parking_area.zone_validity,
-            parking_area.zone_availability,
+            parking_area.paid_hours,
+            parking_area.paid_parking_status,
             options,
             now,
             stale=stale,
@@ -290,7 +290,7 @@ def build_status_payload(
         "provider_windows_today": [
             timerange_payload(window) for window in provider_windows_today
         ],
-        "zone_validity": [timerange_payload(window) for window in data.zone_validity],
+        "paid_hours": [timerange_payload(window) for window in data.paid_hours],
         "provider_window_start": (
             utc_iso(provider_window.start) if provider_window else None
         ),

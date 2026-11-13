@@ -25,7 +25,7 @@ if TYPE_CHECKING:
     from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
     from .coordinator import CityVisitorParkingCoordinator
-    from .models import CoordinatorData, ParkingArea, TimeRange, ZoneAvailability
+    from .models import CoordinatorData, PaidParkingStatus, ParkingArea, TimeRange
     from .runtime_data import CityVisitorParkingConfigEntry
 
 PARALLEL_UPDATES = 0
@@ -195,10 +195,10 @@ class _PaidParkingWindowSensor(CityVisitorParkingEntity):
 
     def _parking_area_source(
         self,
-    ) -> tuple[tuple[TimeRange, ...], ZoneAvailability] | None:
+    ) -> tuple[tuple[TimeRange, ...], PaidParkingStatus] | None:
         """Return the parking area validity and availability, or None when unknown."""
         data = self.coordinator.data
-        return data.zone_validity, data.zone_availability
+        return data.paid_hours, data.paid_parking_status
 
 
 class PaidParkingSensor(_PaidParkingWindowSensor):
@@ -212,15 +212,15 @@ class PaidParkingSensor(_PaidParkingWindowSensor):
         source = self._parking_area_source()
         if source is None:
             return
-        zone_validity, availability = source
+        paid_hours, availability = source
         now = dt_util.utcnow()
-        provider_windows = windows_for_today(zone_validity, {}, now)
+        provider_windows = windows_for_today(paid_hours, {}, now)
         next_window = current_or_next_window_with_overrides(
-            zone_validity,
+            paid_hours,
             self._entry.options,
             now,
         )
-        provider_next_window = current_or_next_window(zone_validity, now)
+        provider_next_window = current_or_next_window(paid_hours, now)
         attributes: dict[str, object] = dict(self._attr_extra_state_attributes or {})  # type: ignore[has-type]
         attributes.update(
             {
@@ -355,12 +355,12 @@ class _ParkingAreaSensor(_PaidParkingWindowSensor):
 
     def _parking_area_source(
         self,
-    ) -> tuple[tuple[TimeRange, ...], ZoneAvailability] | None:
+    ) -> tuple[tuple[TimeRange, ...], PaidParkingStatus] | None:
         """Return the parking area's validity and availability, or None when gone."""
         parking_area = self._parking_area()
         if parking_area is None:
             return None
-        return parking_area.zone_validity, parking_area.zone_availability
+        return parking_area.paid_hours, parking_area.paid_parking_status
 
 
 class ParkingAreaPaidParkingSensor(_ParkingAreaSensor, PaidParkingSensor):

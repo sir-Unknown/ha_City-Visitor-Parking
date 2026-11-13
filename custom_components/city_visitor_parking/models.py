@@ -49,7 +49,7 @@ class Favorite:
 
 
 @dataclass(frozen=True)
-class ZoneAvailability:
+class PaidParkingStatus:
     """Computed paid parking availability state."""
 
     is_paid_now: bool
@@ -63,8 +63,8 @@ class ParkingArea:
 
     parking_area_id: str
     name: str
-    zone_validity: tuple[TimeRange, ...]
-    zone_availability: ZoneAvailability
+    paid_hours: tuple[TimeRange, ...]
+    paid_parking_status: PaidParkingStatus
 
 
 @dataclass(frozen=True)
@@ -74,13 +74,13 @@ class CoordinatorData:
     permit_id: str
     permit_remaining_balance: float
     permit_balance_unit: str | None
-    zone_validity: tuple[TimeRange, ...]
+    paid_hours: tuple[TimeRange, ...]
     reservations: tuple[Reservation, ...]
     favorites: tuple[Favorite, ...]
-    zone_availability: ZoneAvailability
+    paid_parking_status: PaidParkingStatus
     active_reservations: tuple[Reservation, ...]
     # Parking areas a reservation can be started in; the first one is the provider
-    # default and matches ``zone_validity``. Empty when the provider has no parking area
+    # default and matches ``paid_hours``. Empty when the provider has no parking area
     # selection.
     parking_areas: tuple[ParkingArea, ...] = ()
 

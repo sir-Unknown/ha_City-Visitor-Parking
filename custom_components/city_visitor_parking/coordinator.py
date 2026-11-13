@@ -35,10 +35,10 @@ from .helpers import get_attr
 from .models import (
     AutoEndState,
     CoordinatorData,
+    PaidParkingStatus,
     ParkingArea,
     Reservation,
     TimeRange,
-    ZoneAvailability,
 )
 from .models import Favorite as CoordinatorFavorite
 from .time_windows import windows_for_today
@@ -213,25 +213,25 @@ class CityVisitorParkingCoordinator(DataUpdateCoordinator[CoordinatorData]):
         )
         # The permit-level windows (sensors, status, auto-end fallback) follow the
         # default parking area: the user's choice from the options, else the provider's.
-        zone_validity = (
-            list(parking_areas[0].zone_validity)
+        paid_hours = (
+            list(parking_areas[0].paid_hours)
             if parking_areas
-            else _normalize_zone_validity(permit)
+            else _normalize_paid_hours(permit)
         )
-        zone_availability = (
-            parking_areas[0].zone_availability
+        paid_parking_status = (
+            parking_areas[0].paid_parking_status
             if parking_areas
-            else _compute_zone_availability(zone_validity, options, now)
+            else _compute_paid_parking_status(paid_hours, options, now)
         )
 
         data = CoordinatorData(
             permit_id=self._permit_id,
             permit_remaining_balance=remaining_balance,
             permit_balance_unit=balance_unit if isinstance(balance_unit, str) else None,
-            zone_validity=tuple(zone_validity),
+            paid_hours=tuple(paid_hours),
             reservations=tuple(normalized_reservations),
             favorites=tuple(normalized_favorites),
-            zone_availability=zone_availability,
+            paid_parking_status=paid_parking_status,
             active_reservations=tuple(active_reservations),
             parking_areas=tuple(parking_areas),
         )
@@ -387,9 +387,9 @@ class CityVisitorParkingCoordinator(DataUpdateCoordinator[CoordinatorData]):
             # is unknown.
             parking_area = data.parking_area(reservation.parking_area_id)
             availability = (
-                parking_area.zone_availability
+                parking_area.paid_parking_status
                 if parking_area is not None
-                else data.zone_availability
+                else data.paid_parking_status
             )
             if availability.is_paid_now:
                 continue
@@ -475,10 +475,10 @@ class CityVisitorParkingCoordinator(DataUpdateCoordinator[CoordinatorData]):
             return DEFAULT_UPDATE_INTERVAL
 
         # 2. Paid parking is active right now — stay responsive.
-        if data.zone_availability.is_paid_now:
+        if data.paid_parking_status.is_paid_now:
             return DEFAULT_UPDATE_INTERVAL
 
-        next_change = data.zone_availability.next_change_time
+        next_change = data.paid_parking_status.next_change_time
         if next_change is not None:
             time_until_change = next_change - now
 
@@ -509,8 +509,9 @@ def _parse_time_range(item: object) -> TimeRange | None:
     return TimeRange(start=start_dt, end=end_dt)
 
 
-def _normalize_zone_validity(permit_or_parking_area: object) -> list[TimeRange]:
-    """Normalize zone validity blocks of a permit or parking area to UTC."""
+def _normalize_paid_hours(permit_or_parking_area: object) -> list[TimeRange]:
+    """Normalize paid hours blocks of a permit or parking area to UTC."""
+    # "zone_validity" is the library field name in pycityvisitorparking 0.6.0b5.
     raw_blocks = get_attr(permit_or_parking_area, "zone_validity")
     if not isinstance(raw_blocks, list):
         return []
@@ -537,14 +538,14 @@ def _normalize_parking_areas(
         if parking_area_id is None:
             continue
         name = get_attr(raw_parking_area, "name")
-        zone_validity = _normalize_zone_validity(raw_parking_area)
+        paid_hours = _normalize_paid_hours(raw_parking_area)
         parking_areas.append(
             ParkingArea(
                 parking_area_id=str(parking_area_id),
                 name=str(name) if name else str(parking_area_id),
-                zone_validity=tuple(zone_validity),
-                zone_availability=_compute_zone_availability(
-                    zone_validity, options, now
+                paid_hours=tuple(paid_hours),
+                paid_parking_status=_compute_paid_parking_status(
+                    paid_hours, options, now
                 ),
             )
         )
@@ -641,13 +642,13 @@ def _active_reservations(
     ]
 
 
-def _compute_zone_availability(
-    zone_validity: list[TimeRange],
+def _compute_paid_parking_status(
+    paid_hours: list[TimeRange],
     options: Mapping[str, object],
     now: datetime,
-) -> ZoneAvailability:
+) -> PaidParkingStatus:
     """Compute paid parking availability using validity blocks and overrides."""
-    windows_today = windows_for_today(zone_validity, options, now)
+    windows_today = windows_for_today(paid_hours, options, now)
     is_paid_now = any(window.start <= now < window.end for window in windows_today)
 
     next_change_time = None
@@ -667,7 +668,7 @@ def _compute_zone_availability(
                 default=None,
             )
 
-    return ZoneAvailability(
+    return PaidParkingStatus(
         is_paid_now=is_paid_now,
         next_change_time=next_change_time,
         windows_today=tuple(windows_today),

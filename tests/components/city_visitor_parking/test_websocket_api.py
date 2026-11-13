@@ -27,10 +27,10 @@ from custom_components.city_visitor_parking.models import (
     AutoEndState,
     CoordinatorData,
     Favorite,
+    PaidParkingStatus,
     ProviderConfig,
     Reservation,
     TimeRange,
-    ZoneAvailability,
 )
 from custom_components.city_visitor_parking.runtime_data import (
     CityVisitorParkingRuntimeData,
@@ -170,10 +170,10 @@ async def test_ws_get_status_current_window(hass: HomeAssistant) -> None:
         permit_id="permit",
         permit_remaining_balance=0,
         permit_balance_unit=None,
-        zone_validity=(window,),
+        paid_hours=(window,),
         reservations=(),
         favorites=(),
-        zone_availability=ZoneAvailability(
+        paid_parking_status=PaidParkingStatus(
             is_paid_now=True,
             next_change_time=window.end,
             windows_today=(window,),
@@ -214,10 +214,10 @@ async def test_ws_get_status_next_window_override(hass: HomeAssistant) -> None:
         permit_id="permit",
         permit_remaining_balance=0,
         permit_balance_unit=None,
-        zone_validity=(),
+        paid_hours=(),
         reservations=(),
         favorites=(),
-        zone_availability=ZoneAvailability(
+        paid_parking_status=PaidParkingStatus(
             is_paid_now=False,
             next_change_time=None,
             windows_today=(),
@@ -301,10 +301,10 @@ async def test_ws_list_reservations_reads_coordinator_data(
         permit_id="permit",
         permit_remaining_balance=0,
         permit_balance_unit=None,
-        zone_validity=(),
+        paid_hours=(),
         reservations=(running, upcoming, ended),
         favorites=(Favorite(favorite_id="fav1", license_plate="AB12CD", name="Mom"),),
-        zone_availability=ZoneAvailability(
+        paid_parking_status=PaidParkingStatus(
             is_paid_now=False, next_change_time=None, windows_today=()
         ),
         active_reservations=(running,),

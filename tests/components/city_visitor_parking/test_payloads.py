@@ -7,17 +7,17 @@ from datetime import UTC, datetime, timedelta
 from custom_components.city_visitor_parking.const import STATE_FREE, STATE_PAID
 from custom_components.city_visitor_parking.models import (
     CoordinatorData,
+    PaidParkingStatus,
     ParkingArea,
     Reservation,
     TimeRange,
-    ZoneAvailability,
 )
 from custom_components.city_visitor_parking.payloads import (
     build_status_payload,
     reservation_payload,
 )
 
-ZONE_STATUS_RESPONSE_KEYS = {
+PAID_PARKING_STATUS_RESPONSE_KEYS = {
     "state",
     "window_kind",
     "window_start",
@@ -39,10 +39,10 @@ def test_build_status_payload_includes_parking_area_status_response_contract() -
         permit_id="permit-1",
         permit_remaining_balance=-12,
         permit_balance_unit="minutes",
-        zone_validity=(current_window,),
+        paid_hours=(current_window,),
         reservations=(),
         favorites=(),
-        zone_availability=ZoneAvailability(
+        paid_parking_status=PaidParkingStatus(
             is_paid_now=True,
             next_change_time=current_window.end,
             windows_today=(current_window,),
@@ -52,8 +52,8 @@ def test_build_status_payload_includes_parking_area_status_response_contract() -
 
     payload = build_status_payload(data, {}, now)
 
-    # Keep this assertion aligned with frontend/src/types.ts:ZoneStatusResponse.
-    assert payload.keys() >= ZONE_STATUS_RESPONSE_KEYS
+    # Keep this assertion aligned with frontend/src/types.ts:PaidParkingStatusResponse.
+    assert payload.keys() >= PAID_PARKING_STATUS_RESPONSE_KEYS
     assert payload["state"] == STATE_PAID
     assert payload["window_kind"] == "current"
     assert payload["window_start"] == current_window.start.isoformat()
@@ -70,10 +70,10 @@ def test_build_status_payload_uses_null_window_fields_when_no_window_applies() -
         permit_id="permit-1",
         permit_remaining_balance=15,
         permit_balance_unit=None,
-        zone_validity=(),
+        paid_hours=(),
         reservations=(),
         favorites=(),
-        zone_availability=ZoneAvailability(
+        paid_parking_status=PaidParkingStatus(
             is_paid_now=False,
             next_change_time=next_change,
             windows_today=(),
@@ -96,33 +96,33 @@ def test_build_status_payload_reports_each_parking_area_with_its_own_window() ->
     now = datetime(2025, 1, 6, 10, 0, tzinfo=UTC)
     current = TimeRange(start=now - timedelta(hours=1), end=now + timedelta(hours=1))
     later = TimeRange(start=now + timedelta(hours=1), end=now + timedelta(hours=3))
-    paid = ZoneAvailability(
+    paid = PaidParkingStatus(
         is_paid_now=True, next_change_time=current.end, windows_today=(current,)
     )
-    free = ZoneAvailability(
+    free = PaidParkingStatus(
         is_paid_now=False, next_change_time=later.start, windows_today=(later,)
     )
     data = CoordinatorData(
         permit_id="permit-1",
         permit_remaining_balance=15,
         permit_balance_unit=None,
-        zone_validity=(current,),
+        paid_hours=(current,),
         reservations=(),
         favorites=(),
-        zone_availability=paid,
+        paid_parking_status=paid,
         active_reservations=(),
         parking_areas=(
             ParkingArea(
                 parking_area_id="10",
                 name="10",
-                zone_validity=(current,),
-                zone_availability=paid,
+                paid_hours=(current,),
+                paid_parking_status=paid,
             ),
             ParkingArea(
                 parking_area_id="630",
                 name="630",
-                zone_validity=(later,),
-                zone_availability=free,
+                paid_hours=(later,),
+                paid_parking_status=free,
             ),
         ),
     )
@@ -160,8 +160,8 @@ def test_reservation_payload_includes_parking_area_only_when_present() -> None:
         ParkingArea(
             parking_area_id="630",
             name="Centrum",
-            zone_validity=(),
-            zone_availability=ZoneAvailability(
+            paid_hours=(),
+            paid_parking_status=PaidParkingStatus(
                 is_paid_now=False, next_change_time=None, windows_today=()
             ),
         ),
@@ -198,8 +198,8 @@ def test_reservation_payload_uses_the_paid_window_of_its_own_parking_area() -> N
         ParkingArea(
             parking_area_id="630",
             name="630",
-            zone_validity=(today, tomorrow),
-            zone_availability=ZoneAvailability(
+            paid_hours=(today, tomorrow),
+            paid_parking_status=PaidParkingStatus(
                 is_paid_now=True, next_change_time=today.end, windows_today=()
             ),
         ),

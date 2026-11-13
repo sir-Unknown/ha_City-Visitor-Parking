@@ -37,11 +37,11 @@ from custom_components.city_visitor_parking.coordinator import (
     ProviderProtocol,
     ProviderReservation,
     _as_utc_datetime,
-    _compute_zone_availability,
+    _compute_paid_parking_status,
     _normalize_favorites,
+    _normalize_paid_hours,
     _normalize_remaining_balance,
     _normalize_reservations,
-    _normalize_zone_validity,
     _should_attempt_auto_end,
 )
 from custom_components.city_visitor_parking.helpers import (
@@ -52,9 +52,9 @@ from custom_components.city_visitor_parking.models import (
     AutoEndState,
     CoordinatorData,
     Favorite,
+    PaidParkingStatus,
     Reservation,
     TimeRange,
-    ZoneAvailability,
 )
 from custom_components.city_visitor_parking.time_windows import (
     _as_time,
@@ -155,8 +155,8 @@ async def test_permit_windows_follow_the_default_parking_area(
     assert [
         parking_area.parking_area_id for parking_area in data.parking_areas
     ] == expected_order
-    assert data.zone_validity == data.parking_areas[0].zone_validity
-    assert data.zone_availability.is_paid_now is (expected_order[0] == "10")
+    assert data.paid_hours == data.parking_areas[0].paid_hours
+    assert data.paid_parking_status.is_paid_now is (expected_order[0] == "10")
 
 
 async def test_auto_end_judges_each_reservation_by_its_own_parking_area(
@@ -368,7 +368,7 @@ def test_normalize_helpers() -> None:
     assert _normalize_remaining_balance(cast("Permit", {"remaining_balance": []})) == 0
 
     now = datetime(2025, 1, 1, 8, 0, tzinfo=UTC)
-    validity = _normalize_zone_validity(
+    validity = _normalize_paid_hours(
         cast(
             "Permit",
             {
@@ -387,7 +387,7 @@ def test_normalize_helpers() -> None:
         )
     )
     assert len(validity) == 1
-    assert _normalize_zone_validity(cast("Permit", {"zone_validity": {}})) == []
+    assert _normalize_paid_hours(cast("Permit", {"zone_validity": {}})) == []
 
     parsed = _as_utc_datetime("2025-01-01T10:00:00+00:00")
     assert parsed.tzinfo is not None
@@ -461,10 +461,10 @@ async def test_auto_end_skips_when_paid(hass: HomeAssistant) -> None:
         permit_id="permit",
         permit_remaining_balance=0,
         permit_balance_unit=None,
-        zone_validity=(),
+        paid_hours=(),
         reservations=(),
         favorites=(),
-        zone_availability=ZoneAvailability(
+        paid_parking_status=PaidParkingStatus(
             is_paid_now=True,
             next_change_time=None,
             windows_today=(),
@@ -500,10 +500,10 @@ async def test_auto_end_skips_without_reservations(hass: HomeAssistant) -> None:
         permit_id="permit",
         permit_remaining_balance=0,
         permit_balance_unit=None,
-        zone_validity=(),
+        paid_hours=(),
         reservations=(),
         favorites=(),
-        zone_availability=ZoneAvailability(
+        paid_parking_status=PaidParkingStatus(
             is_paid_now=False,
             next_change_time=None,
             windows_today=(),
@@ -587,21 +587,21 @@ def test_override_helpers() -> None:
     assert get_attr(SimpleNamespace(name="test"), "name") == "test"
 
 
-def test_compute_zone_availability_next_change() -> None:
+def test_compute_paid_parking_status_next_change() -> None:
     """Paid parking availability should return the end of the current window."""
     now = datetime(2025, 1, 6, 9, 30, tzinfo=UTC)
     window = TimeRange(
         start=datetime(2025, 1, 6, 9, 0, tzinfo=UTC),
         end=datetime(2025, 1, 6, 11, 0, tzinfo=UTC),
     )
-    availability = _compute_zone_availability([window], {}, now)
+    availability = _compute_paid_parking_status([window], {}, now)
 
     assert availability.is_paid_now is True
     assert availability.next_change_time == window.end
 
 
 def test_windows_for_today_invalid_overrides() -> None:
-    """Invalid overrides should fall back to zone validity."""
+    """Invalid overrides should fall back to the provider paid hours."""
     now = datetime(2025, 1, 6, 9, 0, tzinfo=UTC)
     local_now = dt_util.as_local(now)
     local_start = datetime.combine(local_now.date(), time.min, tzinfo=local_now.tzinfo)
@@ -660,7 +660,7 @@ def test_compute_next_interval_parking_area_paid(hass: HomeAssistant) -> None:
 
     now = datetime(2025, 1, 6, 9, 0, tzinfo=UTC)
     data = _idle_data(
-        zone_availability=ZoneAvailability(
+        paid_parking_status=PaidParkingStatus(
             is_paid_now=True,
             next_change_time=now + timedelta(hours=2),
             windows_today=(),
@@ -685,7 +685,7 @@ def test_compute_next_interval_transition_imminent(hass: HomeAssistant) -> None:
     now = datetime(2025, 1, 6, 9, 0, tzinfo=UTC)
     # Transition is exactly at the edge of the lookahead window.
     data = _idle_data(
-        zone_availability=ZoneAvailability(
+        paid_parking_status=PaidParkingStatus(
             is_paid_now=False,
             next_change_time=now + TRANSITION_LOOKAHEAD,
             windows_today=(),
@@ -714,7 +714,7 @@ def test_compute_next_interval_precise_scheduling(hass: HomeAssistant) -> None:
     # so the result is capped at IDLE_UPDATE_INTERVAL.
     transition_in_45 = now + timedelta(minutes=45)
     data_45 = _idle_data(
-        zone_availability=ZoneAvailability(
+        paid_parking_status=PaidParkingStatus(
             is_paid_now=False,
             next_change_time=transition_in_45,
             windows_today=(),
@@ -726,7 +726,7 @@ def test_compute_next_interval_precise_scheduling(hass: HomeAssistant) -> None:
     # Expected: 32 min - 2 min buffer = 30 min, equal to IDLE_UPDATE_INTERVAL.
     transition_in_32 = now + timedelta(minutes=32)
     data_32 = _idle_data(
-        zone_availability=ZoneAvailability(
+        paid_parking_status=PaidParkingStatus(
             is_paid_now=False,
             next_change_time=transition_in_32,
             windows_today=(),
@@ -764,7 +764,7 @@ def test_compute_next_interval_clamp_prevents_negative(
     # unguarded calculation would yield -5 min; the clamp must return 0.
     monkeypatch.setattr(coord_module, "TRANSITION_BUFFER", timedelta(minutes=40))
     data = _idle_data(
-        zone_availability=ZoneAvailability(
+        paid_parking_status=PaidParkingStatus(
             is_paid_now=False,
             next_change_time=now + timedelta(minutes=35),
             windows_today=(),
@@ -850,18 +850,18 @@ async def test_adaptive_interval_fast_when_reservation_active(
 def _idle_data(
     *,
     active_reservations: tuple[Reservation, ...] = (),
-    zone_availability: ZoneAvailability | None = None,
+    paid_parking_status: PaidParkingStatus | None = None,
 ) -> CoordinatorData:
     """Return a CoordinatorData instance representing a quiet, idle state."""
     return CoordinatorData(
         permit_id="permit",
         permit_remaining_balance=0,
         permit_balance_unit=None,
-        zone_validity=(),
+        paid_hours=(),
         reservations=(),
         favorites=(),
-        zone_availability=zone_availability
-        or ZoneAvailability(
+        paid_parking_status=paid_parking_status
+        or PaidParkingStatus(
             is_paid_now=False,
             next_change_time=None,
             windows_today=(),

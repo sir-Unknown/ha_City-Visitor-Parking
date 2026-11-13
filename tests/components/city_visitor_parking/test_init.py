@@ -536,7 +536,7 @@ async def test_migrate_entry_rejects_newer_major_version(hass: HomeAssistant) ->
 
 _PAID_PARKING_UNIQUE_ID = "dvsportal:permit:venlo"
 _LEGACY_SENSOR_KEYS = {
-    "permit_zone_availability": "paid_parking",
+    "permit_paid_parking_status": "paid_parking",
     "provider_chargeable_start": "provider_paid_parking_start",
     "provider_chargeable_end": "provider_paid_parking_end",
     "next_chargeable_start": "paid_parking_start",
@@ -591,7 +591,7 @@ async def test_migrate_entry_renames_sensor_unique_ids(hass: HomeAssistant) -> N
     foreign = registry.async_get_or_create(
         "sensor",
         DOMAIN,
-        "other:permit_zone_availability",
+        "other:permit_paid_parking_status",
         config_entry=other,
         suggested_object_id="foreign",
     )
@@ -624,7 +624,7 @@ async def test_migrate_entry_leaves_migrated_entry_untouched(
     )
     entry.add_to_hass(hass)
     entity_ids = _register_sensors(hass, entry, list(_LEGACY_SENSOR_KEYS.values()))
-    legacy_ids = _register_sensors(hass, entry, ["permit_zone_availability"])
+    legacy_ids = _register_sensors(hass, entry, ["permit_paid_parking_status"])
     registry = er.async_get(hass)
 
     assert await init_module.async_migrate_entry(hass, entry)
@@ -633,9 +633,9 @@ async def test_migrate_entry_leaves_migrated_entry_untouched(
         stored = registry.async_get(entity_id)
         assert stored is not None
         assert stored.unique_id == f"{_PAID_PARKING_UNIQUE_ID}:{key}"
-    legacy = registry.async_get(legacy_ids["permit_zone_availability"])
+    legacy = registry.async_get(legacy_ids["permit_paid_parking_status"])
     assert legacy is not None
-    assert legacy.unique_id == f"{_PAID_PARKING_UNIQUE_ID}:permit_zone_availability"
+    assert legacy.unique_id == f"{_PAID_PARKING_UNIQUE_ID}:permit_paid_parking_status"
 
 
 async def test_migrate_entry_skips_taken_unique_id(hass: HomeAssistant) -> None:
@@ -643,15 +643,15 @@ async def test_migrate_entry_skips_taken_unique_id(hass: HomeAssistant) -> None:
     entry = _paid_parking_entry(minor_version=3)
     entry.add_to_hass(hass)
     entity_ids = _register_sensors(
-        hass, entry, ["permit_zone_availability", "paid_parking"]
+        hass, entry, ["permit_paid_parking_status", "paid_parking"]
     )
     registry = er.async_get(hass)
 
     assert await init_module.async_migrate_entry(hass, entry)
 
-    legacy = registry.async_get(entity_ids["permit_zone_availability"])
+    legacy = registry.async_get(entity_ids["permit_paid_parking_status"])
     assert legacy is not None
-    assert legacy.unique_id == f"{_PAID_PARKING_UNIQUE_ID}:permit_zone_availability"
+    assert legacy.unique_id == f"{_PAID_PARKING_UNIQUE_ID}:permit_paid_parking_status"
     assert entry.minor_version == CityVisitorParkingConfigFlow.MINOR_VERSION
 
 

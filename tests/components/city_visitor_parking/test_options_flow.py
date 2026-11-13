@@ -22,7 +22,7 @@ from custom_components.city_visitor_parking.const import (
     CONF_PROVIDER_ID,
     DOMAIN,
 )
-from custom_components.city_visitor_parking.models import ParkingArea, ZoneAvailability
+from custom_components.city_visitor_parking.models import PaidParkingStatus, ParkingArea
 
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
@@ -143,13 +143,13 @@ async def test_options_flow_stores_the_default_parking_area(
     entry = _create_entry()
     entry.add_to_hass(hass)
     entry.mock_state(hass, config_entries.ConfigEntryState.LOADED)
-    free = ZoneAvailability(is_paid_now=False, next_change_time=None, windows_today=())
+    free = PaidParkingStatus(is_paid_now=False, next_change_time=None, windows_today=())
     parking_areas = tuple(
         ParkingArea(
             parking_area_id=parking_area_id,
             name=parking_area_id,
-            zone_validity=(),
-            zone_availability=free,
+            paid_hours=(),
+            paid_parking_status=free,
         )
         for parking_area_id in ("10", "630")
     )
