@@ -150,7 +150,7 @@ class CityVisitorParkingCoordinator(DataUpdateCoordinator[CoordinatorData]):
                         "error": str(err),
                     },
                     provider=self._provider.provider_id,
-                    city=getattr(self._provider, "_request_context_name", None)
+                    city=getattr(self._provider, "request_context_name", None)
                     or "unknown",
                     ha_cvp_version=ha_cvp_version,
                     pycvp_version=pycvp_version,
@@ -170,7 +170,7 @@ class CityVisitorParkingCoordinator(DataUpdateCoordinator[CoordinatorData]):
                         "error": str(err),
                     },
                     provider=self._provider.provider_id,
-                    city=getattr(self._provider, "_request_context_name", None)
+                    city=getattr(self._provider, "request_context_name", None)
                     or "unknown",
                     ha_cvp_version=ha_cvp_version,
                     pycvp_version=pycvp_version,
@@ -190,7 +190,7 @@ class CityVisitorParkingCoordinator(DataUpdateCoordinator[CoordinatorData]):
                         "error": str(err),
                     },
                     provider=self._provider.provider_id,
-                    city=getattr(self._provider, "_request_context_name", None)
+                    city=getattr(self._provider, "request_context_name", None)
                     or "unknown",
                     ha_cvp_version=ha_cvp_version,
                     pycvp_version=pycvp_version,
@@ -509,8 +509,7 @@ def _parse_time_range(item: object) -> TimeRange | None:
 
 def _normalize_paid_hours(permit_or_parking_area: object) -> list[TimeRange]:
     """Normalize paid hours blocks of a permit or parking area to UTC."""
-    # "zone_validity" is the library's field name for the paid hours.
-    raw_blocks = get_attr(permit_or_parking_area, "zone_validity")
+    raw_blocks = get_attr(permit_or_parking_area, "paid_hours")
     if not isinstance(raw_blocks, list):
         return []
     return [

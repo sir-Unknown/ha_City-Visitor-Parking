@@ -115,7 +115,7 @@ class Provider:
 
     async def get_permit(self) -> dict[str, object]:
         """Return a default permit."""
-        return {"id": "permit", "zone_validity": []}
+        return {"id": "permit", "paid_hours": []}
 
     async def list_reservations(self) -> list[dict[str, object]]:
         """Return no reservations by default."""

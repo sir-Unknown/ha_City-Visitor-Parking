@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import inspect
 import logging
 import time
 from collections.abc import Callable, Iterable, Mapping
@@ -280,7 +279,6 @@ async def async_setup_entry(
         ha_cvp_version=ha_cvp_version,
         pycvp_version=pycvp_version,
     )
-    _install_paid_hours_logging(provider)
     try:
         await async_provider_login(entry, provider)
     except AuthError as err:
@@ -325,51 +323,6 @@ async def async_setup_entry(
     entry.async_on_unload(entry.add_update_listener(_async_update_listener))
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     return True
-
-
-def _install_paid_hours_logging(provider: object) -> None:
-    """Add extra debug logging when paid hours fall back to the fallback block."""
-    # Library private mapper, named after the library field it maps (zone_validity).
-    map_paid_hours = getattr(provider, "_map_zone_validity", None)
-    provider_id = getattr(provider, "provider_id", "unknown")
-    if not callable(map_paid_hours):
-        return
-
-    def _summarize_raw(raw: object) -> str:
-        if raw is None:
-            return "raw=None"
-        if isinstance(raw, list):
-            raw_list = cast("list[object]", raw)
-            return f"raw=list(count={len(raw_list)})"
-        return f"raw={type(raw).__name__}"
-
-    accepts_fallback = "fallback_zone" in inspect.signature(map_paid_hours).parameters
-
-    def _wrap(raw: object, *, fallback_zone: object | None = None) -> object:
-        if isinstance(fallback_zone, Mapping):
-            fallback = cast("Mapping[str, object]", fallback_zone)
-            start_raw = fallback.get("start_time")
-            end_raw = fallback.get("end_time")
-            has_candidates = isinstance(raw, list) and any(
-                isinstance(item, Mapping)
-                and cast("Mapping[str, object]", item).get("start_time")
-                and cast("Mapping[str, object]", item).get("end_time")
-                for item in cast("list[object]", raw)
-            )
-            if not has_candidates and start_raw and end_raw:
-                _LOGGER.debug(
-                    "Provider %s paid hours fallback details %s "
-                    "fallback_start=%s fallback_end=%s",
-                    provider_id,
-                    _summarize_raw(cast("object", raw)),
-                    start_raw,
-                    end_raw,
-                )
-        if accepts_fallback:
-            return map_paid_hours(raw, fallback_zone=fallback_zone)
-        return map_paid_hours(raw)
-
-    cast("object", provider)._map_paid_hours = _wrap  # type: ignore[attr-defined]  # pylint: disable=protected-access
 
 
 def _normalize_operating_time_overrides(

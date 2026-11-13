@@ -691,7 +691,7 @@ async def _setup_entry(
 
     provider = AsyncMock()
     provider.fetch_all.return_value = (
-        {"id": "permit", "zone_validity": []},
+        {"id": "permit", "paid_hours": []},
         [],
         [],
         [],
@@ -726,7 +726,7 @@ async def test_each_entry_gets_its_own_session_closed_on_unload(
         sessions.append(session)
         provider = AsyncMock()
         provider.fetch_all.return_value = (
-            {"id": "permit", "zone_validity": []},
+            {"id": "permit", "paid_hours": []},
             [],
             [],
             [],
