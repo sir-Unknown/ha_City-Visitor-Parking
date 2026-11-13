@@ -449,8 +449,8 @@ async def _async_handle_start_reservation(call: ServiceCall) -> None:
             license_plate=license_plate,
             start_time=start,
             end_time=end,
-            # Only providers with zones accept the argument.
-            **({"zone_id": zone_id} if zone_id is not None else {}),
+            # Only providers with reservation targets accept the argument.
+            **({"reservation_target_id": zone_id} if zone_id is not None else {}),
         )
     except PyCityVisitorParkingError as err:
         ha_cvp_version, pycvp_version = await async_get_versions(call.hass)

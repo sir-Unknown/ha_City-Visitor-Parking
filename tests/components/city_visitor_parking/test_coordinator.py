@@ -103,8 +103,8 @@ async def test_auto_end_reservation_once(hass: HomeAssistant) -> None:
     provider.end_reservation.assert_awaited_once()
 
 
-def _zone_permit(now: datetime) -> dict[str, object]:
-    """Return a permit with zone 10 chargeable now and zone 630 free until later."""
+def _zone_targets(now: datetime) -> tuple[dict[str, object], list[dict[str, object]]]:
+    """Return a permit and targets: zone 10 is chargeable now, 630 only later."""
 
     def window(start_hours: int, end_hours: int) -> dict[str, str]:
         base = now.replace(hour=0, minute=0)
@@ -113,13 +113,10 @@ def _zone_permit(now: datetime) -> dict[str, object]:
             "end_time": (base + timedelta(hours=end_hours)).isoformat(),
         }
 
-    return {
-        "zone_validity": [window(9, 22)],
-        "zones": [
-            {"id": "10", "name": "10", "zone_validity": [window(9, 22)]},
-            {"id": "630", "name": "630", "zone_validity": [window(11, 21)]},
-        ],
-    }
+    return {"zone_validity": [window(9, 22)]}, [
+        {"id": "10", "name": "10", "zone_validity": [window(9, 22)]},
+        {"id": "630", "name": "630", "zone_validity": [window(11, 21)]},
+    ]
 
 
 @pytest.mark.parametrize(
@@ -138,7 +135,9 @@ async def test_permit_windows_follow_the_default_zone(
     entry.add_to_hass(hass)
     now = datetime(2025, 1, 6, 10, 0, tzinfo=UTC)
     provider = AsyncMock()
-    provider.fetch_all.return_value = (_zone_permit(now), [], [])
+    permit, targets = _zone_targets(now)
+    provider.fetch_all.return_value = (permit, [], [])
+    provider.list_reservation_targets.return_value = targets
     coordinator = CityVisitorParkingCoordinator(
         hass,
         provider=provider,
@@ -169,15 +168,17 @@ async def test_auto_end_judges_each_reservation_by_its_own_zone(
             "id": reservation_id,
             "start_time": (now - timedelta(hours=1)).isoformat(),
             "end_time": (now + timedelta(hours=1)).isoformat(),
-            "zone_id": zone_id,
+            "reservation_target_id": zone_id,
         }
 
     provider = AsyncMock()
+    permit, targets = _zone_targets(now)
     provider.fetch_all.return_value = (
-        _zone_permit(now),
+        permit,
         [reservation("in-10", "10"), reservation("in-630", "630")],
         [],
     )
+    provider.list_reservation_targets.return_value = targets
     coordinator = CityVisitorParkingCoordinator(
         hass,
         provider=provider,

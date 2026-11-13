@@ -62,6 +62,10 @@ else:
             """Return permit, reservations, and favorites in one batch."""
             raise NotImplementedError
 
+        async def list_reservation_targets(self) -> list[object]:
+            """Return the targets a reservation can be started for."""
+            raise NotImplementedError
+
         async def end_reservation(
             self,
             reservation_id: str,
@@ -119,6 +123,11 @@ class CityVisitorParkingCoordinator(DataUpdateCoordinator[CoordinatorData]):
             started = time.perf_counter()
             permit, reservations, favorites = await self.async_call_with_relogin(
                 self._provider.fetch_all
+            )
+            # Zones are the library's reservation targets; an empty list means the
+            # permit has nothing to choose.
+            targets = await self.async_call_with_relogin(
+                self._provider.list_reservation_targets
             )
             _LOGGER.debug(
                 "Provider %s fetch_all duration: %.3fs — reservations=%s favorites=%s",
@@ -199,7 +208,7 @@ class CityVisitorParkingCoordinator(DataUpdateCoordinator[CoordinatorData]):
         options = self._options()
         active_reservations = _active_reservations(normalized_reservations, now)
         zones = _order_default_zone_first(
-            _normalize_zones(permit, options, now), options.get(CONF_DEFAULT_ZONE)
+            _normalize_zones(targets, options, now), options.get(CONF_DEFAULT_ZONE)
         )
         # The permit-level windows (sensors, status, auto-end fallback) follow the
         # default zone: the user's choice from the options, else the provider's.
@@ -507,18 +516,17 @@ def _normalize_zone_validity(permit_or_zone: object) -> list[TimeRange]:
 
 
 def _normalize_zones(
-    permit: Permit, options: Mapping[str, object], now: datetime
+    targets: object, options: Mapping[str, object], now: datetime
 ) -> list[Zone]:
-    """Normalize the permit's selectable zones, keeping the provider order.
+    """Normalize the library's reservation targets to zones, keeping the provider order.
 
-    ``Permit.zones`` only exists in library versions with zone selection, so a
-    missing attribute means the permit has no selectable zones.
+    The first target is the provider default. A list that is not a list of targets
+    means the permit has nothing to choose.
     """
-    raw_zones = get_attr(permit, "zones")
-    if not isinstance(raw_zones, list):
+    if not isinstance(targets, list):
         return []
     zones: list[Zone] = []
-    for raw_zone in cast("list[object]", raw_zones):
+    for raw_zone in cast("list[object]", targets):
         zone_id = get_attr(raw_zone, "id")
         if zone_id is None:
             continue
@@ -578,7 +586,7 @@ def _normalize_reservations(
         if time_range is None:
             continue
         license_plate = get_attr(reservation, "license_plate")
-        zone_id = get_attr(reservation, "zone_id")
+        zone_id = get_attr(reservation, "reservation_target_id")
         normalized.append(
             Reservation(
                 reservation_id=str(reservation_id),

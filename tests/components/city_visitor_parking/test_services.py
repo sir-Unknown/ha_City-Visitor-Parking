@@ -1416,7 +1416,10 @@ async def test_service_start_reservation_books_in_the_default_or_requested_zone(
             blocking=True,
         )
 
-    zones = [c.kwargs["zone_id"] for c in provider.start_reservation.await_args_list]
+    zones = [
+        c.kwargs["reservation_target_id"]
+        for c in provider.start_reservation.await_args_list
+    ]
     assert zones == ["630", "10"]
 
 
