@@ -19,7 +19,7 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 import custom_components.city_visitor_parking.coordinator as coord_module
 from custom_components.city_visitor_parking.const import (
     CONF_AUTO_END,
-    CONF_DEFAULT_ZONE,
+    CONF_DEFAULT_PARKING_AREA,
     CONF_MUNICIPALITY,
     CONF_OPERATING_TIME_OVERRIDES,
     CONF_PROVIDER_ID,
@@ -103,8 +103,10 @@ async def test_auto_end_reservation_once(hass: HomeAssistant) -> None:
     provider.end_reservation.assert_awaited_once()
 
 
-def _zone_targets(now: datetime) -> tuple[dict[str, object], list[dict[str, object]]]:
-    """Return a permit and targets: zone 10 is chargeable now, 630 only later."""
+def _parking_area_targets(
+    now: datetime,
+) -> tuple[dict[str, object], list[dict[str, object]]]:
+    """Return a permit and targets: parking area 10 is paid now, 630 only later."""
 
     def window(start_hours: int, end_hours: int) -> dict[str, str]:
         base = now.replace(hour=0, minute=0)
@@ -121,12 +123,12 @@ def _zone_targets(now: datetime) -> tuple[dict[str, object], list[dict[str, obje
 
 @pytest.mark.parametrize(
     ("options", "expected_order"),
-    [({}, ["10", "630"]), ({CONF_DEFAULT_ZONE: "630"}, ["630", "10"])],
+    [({}, ["10", "630"]), ({CONF_DEFAULT_PARKING_AREA: "630"}, ["630", "10"])],
 )
-async def test_permit_windows_follow_the_default_zone(
+async def test_permit_windows_follow_the_default_parking_area(
     hass: HomeAssistant, options: dict[str, object], expected_order: list[str]
 ) -> None:
-    """The chosen default zone comes first and drives the permit-level state."""
+    """The chosen default parking area comes first and drives the permit-level state."""
     entry = MockConfigEntry(
         domain=DOMAIN,
         data={"permit_id": "permit", CONF_PROVIDER_ID: "p", CONF_MUNICIPALITY: "M"},
@@ -135,7 +137,7 @@ async def test_permit_windows_follow_the_default_zone(
     entry.add_to_hass(hass)
     now = datetime(2025, 1, 6, 10, 0, tzinfo=UTC)
     provider = AsyncMock()
-    permit, targets = _zone_targets(now)
+    permit, targets = _parking_area_targets(now)
     provider.fetch_all.return_value = (permit, [], [])
     provider.list_reservation_targets.return_value = targets
     coordinator = CityVisitorParkingCoordinator(
@@ -150,29 +152,31 @@ async def test_permit_windows_follow_the_default_zone(
         await coordinator.async_refresh()
 
     data = coordinator.data
-    assert [zone.zone_id for zone in data.zones] == expected_order
-    assert data.zone_validity == data.zones[0].zone_validity
-    assert data.zone_availability.is_chargeable_now is (expected_order[0] == "10")
+    assert [
+        parking_area.parking_area_id for parking_area in data.parking_areas
+    ] == expected_order
+    assert data.zone_validity == data.parking_areas[0].zone_validity
+    assert data.zone_availability.is_paid_now is (expected_order[0] == "10")
 
 
-async def test_auto_end_judges_each_reservation_by_its_own_zone(
+async def test_auto_end_judges_each_reservation_by_its_own_parking_area(
     hass: HomeAssistant,
 ) -> None:
-    """Only the reservation in the zone that is free now is ended."""
+    """Only the reservation in the parking area that is free now is ended."""
     entry = _create_entry(auto_end=True)
     entry.add_to_hass(hass)
     now = datetime(2025, 1, 6, 10, 0, tzinfo=UTC)
 
-    def reservation(reservation_id: str, zone_id: str) -> dict[str, str]:
+    def reservation(reservation_id: str, parking_area_id: str) -> dict[str, str]:
         return {
             "id": reservation_id,
             "start_time": (now - timedelta(hours=1)).isoformat(),
             "end_time": (now + timedelta(hours=1)).isoformat(),
-            "reservation_target_id": zone_id,
+            "reservation_target_id": parking_area_id,
         }
 
     provider = AsyncMock()
-    permit, targets = _zone_targets(now)
+    permit, targets = _parking_area_targets(now)
     provider.fetch_all.return_value = (
         permit,
         [reservation("in-10", "10"), reservation("in-630", "630")],
@@ -439,8 +443,8 @@ def test_auto_end_cooldown() -> None:
     assert _should_attempt_auto_end(state, "res1", now) is False
 
 
-async def test_auto_end_skips_when_chargeable(hass: HomeAssistant) -> None:
-    """Auto-end should skip when the zone is chargeable."""
+async def test_auto_end_skips_when_paid(hass: HomeAssistant) -> None:
+    """Auto-end should skip when the parking area is paid."""
     entry = _create_entry(auto_end=True)
     entry.add_to_hass(hass)
 
@@ -461,7 +465,7 @@ async def test_auto_end_skips_when_chargeable(hass: HomeAssistant) -> None:
         reservations=(),
         favorites=(),
         zone_availability=ZoneAvailability(
-            is_chargeable_now=True,
+            is_paid_now=True,
             next_change_time=None,
             windows_today=(),
         ),
@@ -500,7 +504,7 @@ async def test_auto_end_skips_without_reservations(hass: HomeAssistant) -> None:
         reservations=(),
         favorites=(),
         zone_availability=ZoneAvailability(
-            is_chargeable_now=False,
+            is_paid_now=False,
             next_change_time=None,
             windows_today=(),
         ),
@@ -584,7 +588,7 @@ def test_override_helpers() -> None:
 
 
 def test_compute_zone_availability_next_change() -> None:
-    """Zone availability should return the end of the current window."""
+    """Paid parking availability should return the end of the current window."""
     now = datetime(2025, 1, 6, 9, 30, tzinfo=UTC)
     window = TimeRange(
         start=datetime(2025, 1, 6, 9, 0, tzinfo=UTC),
@@ -592,7 +596,7 @@ def test_compute_zone_availability_next_change() -> None:
     )
     availability = _compute_zone_availability([window], {}, now)
 
-    assert availability.is_chargeable_now is True
+    assert availability.is_paid_now is True
     assert availability.next_change_time == window.end
 
 
@@ -642,8 +646,8 @@ def test_compute_next_interval_active_reservation(hass: HomeAssistant) -> None:
     assert coordinator._compute_next_interval(data, now) == DEFAULT_UPDATE_INTERVAL
 
 
-def test_compute_next_interval_zone_chargeable(hass: HomeAssistant) -> None:
-    """Zone chargeable but no active reservation → still poll at default interval."""
+def test_compute_next_interval_parking_area_paid(hass: HomeAssistant) -> None:
+    """Paid parking but no active reservation → still poll at default interval."""
     entry = _create_entry(auto_end=False)
     entry.add_to_hass(hass)
     coordinator = CityVisitorParkingCoordinator(
@@ -657,7 +661,7 @@ def test_compute_next_interval_zone_chargeable(hass: HomeAssistant) -> None:
     now = datetime(2025, 1, 6, 9, 0, tzinfo=UTC)
     data = _idle_data(
         zone_availability=ZoneAvailability(
-            is_chargeable_now=True,
+            is_paid_now=True,
             next_change_time=now + timedelta(hours=2),
             windows_today=(),
         ),
@@ -667,7 +671,7 @@ def test_compute_next_interval_zone_chargeable(hass: HomeAssistant) -> None:
 
 
 def test_compute_next_interval_transition_imminent(hass: HomeAssistant) -> None:
-    """Zone transition within TRANSITION_LOOKAHEAD → default interval."""
+    """Paid parking transition within TRANSITION_LOOKAHEAD → default interval."""
     entry = _create_entry(auto_end=False)
     entry.add_to_hass(hass)
     coordinator = CityVisitorParkingCoordinator(
@@ -682,7 +686,7 @@ def test_compute_next_interval_transition_imminent(hass: HomeAssistant) -> None:
     # Transition is exactly at the edge of the lookahead window.
     data = _idle_data(
         zone_availability=ZoneAvailability(
-            is_chargeable_now=False,
+            is_paid_now=False,
             next_change_time=now + TRANSITION_LOOKAHEAD,
             windows_today=(),
         ),
@@ -711,7 +715,7 @@ def test_compute_next_interval_precise_scheduling(hass: HomeAssistant) -> None:
     transition_in_45 = now + timedelta(minutes=45)
     data_45 = _idle_data(
         zone_availability=ZoneAvailability(
-            is_chargeable_now=False,
+            is_paid_now=False,
             next_change_time=transition_in_45,
             windows_today=(),
         ),
@@ -723,7 +727,7 @@ def test_compute_next_interval_precise_scheduling(hass: HomeAssistant) -> None:
     transition_in_32 = now + timedelta(minutes=32)
     data_32 = _idle_data(
         zone_availability=ZoneAvailability(
-            is_chargeable_now=False,
+            is_paid_now=False,
             next_change_time=transition_in_32,
             windows_today=(),
         ),
@@ -761,7 +765,7 @@ def test_compute_next_interval_clamp_prevents_negative(
     monkeypatch.setattr(coord_module, "TRANSITION_BUFFER", timedelta(minutes=40))
     data = _idle_data(
         zone_availability=ZoneAvailability(
-            is_chargeable_now=False,
+            is_paid_now=False,
             next_change_time=now + timedelta(minutes=35),
             windows_today=(),
         ),
@@ -772,7 +776,7 @@ def test_compute_next_interval_clamp_prevents_negative(
 
 
 def test_compute_next_interval_idle(hass: HomeAssistant) -> None:
-    """No active reservation, free zone, no next transition → idle interval."""
+    """No active reservation, free parking, no next transition → idle interval."""
     entry = _create_entry(auto_end=False)
     entry.add_to_hass(hass)
     coordinator = CityVisitorParkingCoordinator(
@@ -796,7 +800,7 @@ async def test_adaptive_interval_applied_after_update(hass: HomeAssistant) -> No
 
     now = datetime(2025, 1, 6, 9, 0, tzinfo=UTC)
     provider = AsyncMock()
-    # No active reservation, free zone, no next change → idle interval expected.
+    # No active reservation, free parking, no next change → idle interval expected.
     provider.fetch_all.return_value = ({"zone_validity": []}, [], [])
 
     coordinator = CityVisitorParkingCoordinator(
@@ -858,7 +862,7 @@ def _idle_data(
         favorites=(),
         zone_availability=zone_availability
         or ZoneAvailability(
-            is_chargeable_now=False,
+            is_paid_now=False,
             next_change_time=None,
             windows_today=(),
         ),

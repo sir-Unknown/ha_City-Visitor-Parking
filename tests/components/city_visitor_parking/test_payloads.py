@@ -4,12 +4,12 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 
-from custom_components.city_visitor_parking.const import STATE_CHARGEABLE, STATE_FREE
+from custom_components.city_visitor_parking.const import STATE_FREE, STATE_PAID
 from custom_components.city_visitor_parking.models import (
     CoordinatorData,
+    ParkingArea,
     Reservation,
     TimeRange,
-    Zone,
     ZoneAvailability,
 )
 from custom_components.city_visitor_parking.payloads import (
@@ -28,7 +28,7 @@ ZONE_STATUS_RESPONSE_KEYS = {
 EXPECTED_REMAINING_MINUTES = 15
 
 
-def test_build_status_payload_includes_zone_status_response_contract() -> None:
+def test_build_status_payload_includes_parking_area_status_response_contract() -> None:
     """Status payload should always include the frontend contract key set."""
     now = datetime(2025, 1, 6, 10, 0, tzinfo=UTC)
     current_window = TimeRange(
@@ -43,7 +43,7 @@ def test_build_status_payload_includes_zone_status_response_contract() -> None:
         reservations=(),
         favorites=(),
         zone_availability=ZoneAvailability(
-            is_chargeable_now=True,
+            is_paid_now=True,
             next_change_time=current_window.end,
             windows_today=(current_window,),
         ),
@@ -54,7 +54,7 @@ def test_build_status_payload_includes_zone_status_response_contract() -> None:
 
     # Keep this assertion aligned with frontend/src/types.ts:ZoneStatusResponse.
     assert payload.keys() >= ZONE_STATUS_RESPONSE_KEYS
-    assert payload["state"] == STATE_CHARGEABLE
+    assert payload["state"] == STATE_PAID
     assert payload["window_kind"] == "current"
     assert payload["window_start"] == current_window.start.isoformat()
     assert payload["window_end"] == current_window.end.isoformat()
@@ -74,7 +74,7 @@ def test_build_status_payload_uses_null_window_fields_when_no_window_applies() -
         reservations=(),
         favorites=(),
         zone_availability=ZoneAvailability(
-            is_chargeable_now=False,
+            is_paid_now=False,
             next_change_time=next_change,
             windows_today=(),
         ),
@@ -91,16 +91,16 @@ def test_build_status_payload_uses_null_window_fields_when_no_window_applies() -
     assert payload["balance_unit"] is None
 
 
-def test_build_status_payload_reports_each_zone_with_its_own_window() -> None:
-    """Each zone carries its own state and window; top-level stays the default zone."""
+def test_build_status_payload_reports_each_parking_area_with_its_own_window() -> None:
+    """Each parking area has its own state and window; top level is the default."""
     now = datetime(2025, 1, 6, 10, 0, tzinfo=UTC)
     current = TimeRange(start=now - timedelta(hours=1), end=now + timedelta(hours=1))
     later = TimeRange(start=now + timedelta(hours=1), end=now + timedelta(hours=3))
-    chargeable = ZoneAvailability(
-        is_chargeable_now=True, next_change_time=current.end, windows_today=(current,)
+    paid = ZoneAvailability(
+        is_paid_now=True, next_change_time=current.end, windows_today=(current,)
     )
     free = ZoneAvailability(
-        is_chargeable_now=False, next_change_time=later.start, windows_today=(later,)
+        is_paid_now=False, next_change_time=later.start, windows_today=(later,)
     )
     data = CoordinatorData(
         permit_id="permit-1",
@@ -109,17 +109,17 @@ def test_build_status_payload_reports_each_zone_with_its_own_window() -> None:
         zone_validity=(current,),
         reservations=(),
         favorites=(),
-        zone_availability=chargeable,
+        zone_availability=paid,
         active_reservations=(),
-        zones=(
-            Zone(
-                zone_id="10",
+        parking_areas=(
+            ParkingArea(
+                parking_area_id="10",
                 name="10",
                 zone_validity=(current,),
-                zone_availability=chargeable,
+                zone_availability=paid,
             ),
-            Zone(
-                zone_id="630",
+            ParkingArea(
+                parking_area_id="630",
                 name="630",
                 zone_validity=(later,),
                 zone_availability=free,
@@ -129,20 +129,20 @@ def test_build_status_payload_reports_each_zone_with_its_own_window() -> None:
 
     payload = build_status_payload(data, {}, now)
 
-    # Keep aligned with frontend/src/types.ts:ZoneStatusZone.
-    assert payload["state"] == STATE_CHARGEABLE
-    assert payload["zones"] == [
+    # Keep aligned with frontend/src/types.ts:ParkingAreaStatus.
+    assert payload["state"] == STATE_PAID
+    assert payload["parking_areas"] == [
         {
-            "zone_id": "10",
+            "parking_area_id": "10",
             "name": "10",
-            "state": STATE_CHARGEABLE,
+            "state": STATE_PAID,
             "next_change_time": current.end.isoformat(),
             "window_kind": "current",
             "window_start": current.start.isoformat(),
             "window_end": current.end.isoformat(),
         },
         {
-            "zone_id": "630",
+            "parking_area_id": "630",
             "name": "630",
             "state": STATE_FREE,
             "next_change_time": later.start.isoformat(),
@@ -153,54 +153,54 @@ def test_build_status_payload_reports_each_zone_with_its_own_window() -> None:
     ]
 
 
-def test_reservation_payload_includes_zone_only_when_present() -> None:
-    """Reservations carry zone_id/zone_name, falling back to the ID for unknowns."""
+def test_reservation_payload_includes_parking_area_only_when_present() -> None:
+    """Reservations carry the parking area ID and name; unknown names use the ID."""
     start = datetime(2025, 1, 6, 10, 0, tzinfo=UTC)
-    zones = (
-        Zone(
-            zone_id="630",
+    parking_areas = (
+        ParkingArea(
+            parking_area_id="630",
             name="Centrum",
             zone_validity=(),
             zone_availability=ZoneAvailability(
-                is_chargeable_now=False, next_change_time=None, windows_today=()
+                is_paid_now=False, next_change_time=None, windows_today=()
             ),
         ),
     )
 
-    def _payload(zone_id: str | None) -> dict[str, str]:
+    def _payload(parking_area_id: str | None) -> dict[str, str]:
         reservation = Reservation(
             reservation_id="res",
             start_time=start,
             end_time=start + timedelta(hours=1),
-            zone_id=zone_id,
+            parking_area_id=parking_area_id,
         )
-        return reservation_payload(reservation, {}, zones, {}, start)
+        return reservation_payload(reservation, {}, parking_areas, {}, start)
 
     known = _payload("630")
-    assert known["zone_id"] == "630"
-    assert known["zone_name"] == "Centrum"
+    assert known["parking_area_id"] == "630"
+    assert known["parking_area_name"] == "Centrum"
 
     unknown = _payload("999")
-    assert unknown["zone_id"] == "999"
-    assert unknown["zone_name"] == "999"
+    assert unknown["parking_area_id"] == "999"
+    assert unknown["parking_area_name"] == "999"
 
-    without_zone = _payload(None)
-    assert "zone_id" not in without_zone
-    assert "zone_name" not in without_zone
+    without_parking_area = _payload(None)
+    assert "parking_area_id" not in without_parking_area
+    assert "parking_area_name" not in without_parking_area
 
 
-def test_reservation_payload_uses_the_paid_window_of_its_own_zone() -> None:
-    """The paid window comes from the reservation's zone and its own time span."""
+def test_reservation_payload_uses_the_paid_window_of_its_own_parking_area() -> None:
+    """The paid window comes from the reservation's parking area and time span."""
     now = datetime(2025, 1, 6, 10, 0, tzinfo=UTC)
     today = TimeRange(start=now - timedelta(hours=1), end=now + timedelta(hours=11))
     tomorrow = TimeRange(start=now + timedelta(hours=23), end=now + timedelta(hours=35))
-    zones = (
-        Zone(
-            zone_id="630",
+    parking_areas = (
+        ParkingArea(
+            parking_area_id="630",
             name="630",
             zone_validity=(today, tomorrow),
             zone_availability=ZoneAvailability(
-                is_chargeable_now=True, next_change_time=today.end, windows_today=()
+                is_paid_now=True, next_change_time=today.end, windows_today=()
             ),
         ),
     )
@@ -210,10 +210,12 @@ def test_reservation_payload_uses_the_paid_window_of_its_own_zone() -> None:
             reservation_id="res",
             start_time=start,
             end_time=start + timedelta(hours=hours),
-            zone_id="630",
+            parking_area_id="630",
         )
-        payload = reservation_payload(reservation, {}, zones, {}, now)
-        return payload.get("zone_window_start"), payload.get("zone_window_end")
+        payload = reservation_payload(reservation, {}, parking_areas, {}, now)
+        return payload.get("parking_area_paid_start"), payload.get(
+            "parking_area_paid_end"
+        )
 
     # Running now: the window that is paid right now.
     assert _window(now - timedelta(minutes=30), 2) == (

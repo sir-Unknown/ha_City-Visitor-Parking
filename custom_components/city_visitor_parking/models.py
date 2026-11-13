@@ -36,7 +36,7 @@ class Reservation:
     start_time: datetime
     end_time: datetime
     license_plate: str | None = None
-    zone_id: str | None = None
+    parking_area_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -50,18 +50,18 @@ class Favorite:
 
 @dataclass(frozen=True)
 class ZoneAvailability:
-    """Computed zone availability state."""
+    """Computed paid parking availability state."""
 
-    is_chargeable_now: bool
+    is_paid_now: bool
     next_change_time: datetime | None
     windows_today: tuple[TimeRange, ...]
 
 
 @dataclass(frozen=True)
-class Zone:
-    """Normalized zone of the permit with its own chargeable windows."""
+class ParkingArea:
+    """Normalized parking area of the permit with its own paid windows."""
 
-    zone_id: str
+    parking_area_id: str
     name: str
     zone_validity: tuple[TimeRange, ...]
     zone_availability: ZoneAvailability
@@ -79,15 +79,23 @@ class CoordinatorData:
     favorites: tuple[Favorite, ...]
     zone_availability: ZoneAvailability
     active_reservations: tuple[Reservation, ...]
-    # Zones a reservation can be started in; the first one is the provider default
-    # and matches ``zone_validity``. Empty when the provider has no zone selection.
-    zones: tuple[Zone, ...] = ()
+    # Parking areas a reservation can be started in; the first one is the provider
+    # default and matches ``zone_validity``. Empty when the provider has no parking area
+    # selection.
+    parking_areas: tuple[ParkingArea, ...] = ()
 
-    def zone(self, zone_id: str | None) -> Zone | None:
-        """Return the zone with ``zone_id``, or None when it is unknown."""
-        if zone_id is None:
+    def parking_area(self, parking_area_id: str | None) -> ParkingArea | None:
+        """Return the parking area with ``parking_area_id``, or None when unknown."""
+        if parking_area_id is None:
             return None
-        return next((zone for zone in self.zones if zone.zone_id == zone_id), None)
+        return next(
+            (
+                parking_area
+                for parking_area in self.parking_areas
+                if parking_area.parking_area_id == parking_area_id
+            ),
+            None,
+        )
 
 
 def _default_attempts() -> dict[str, datetime]:

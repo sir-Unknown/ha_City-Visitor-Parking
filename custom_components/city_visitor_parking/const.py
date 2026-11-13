@@ -24,7 +24,7 @@ CONF_OPERATING_TIME_OVERRIDES: Final = "operating_time_overrides"
 CONF_AUTO_END: Final = "auto_end_reservation_when_free"
 CONF_FREE_DATES: Final = "free_dates"
 CONF_FREE_WEEKDAYS: Final = "free_weekdays"
-CONF_DEFAULT_ZONE: Final = "default_zone"
+CONF_DEFAULT_PARKING_AREA: Final = "default_parking_area"
 
 ATTR_LICENSE_PLATE: Final = "license_plate"
 ATTR_NAME: Final = "name"
@@ -32,9 +32,9 @@ ATTR_RESERVATION_ID: Final = "reservation_id"
 ATTR_FAVORITE_ID: Final = "favorite_id"
 ATTR_START_TIME: Final = "start_time"
 ATTR_END_TIME: Final = "end_time"
-ATTR_ZONE_ID: Final = "zone_id"
+ATTR_PARKING_AREA_ID: Final = "parking_area_id"
 
-STATE_CHARGEABLE: Final = "chargeable"
+STATE_PAID: Final = "paid"
 STATE_FREE: Final = "free"
 
 ERROR_CODE_PROVIDER_REJECTED: Final = "provider_rejected"
@@ -44,35 +44,35 @@ The session worked, so this never warrants a re-login.
 """
 
 DEFAULT_UPDATE_INTERVAL: Final = timedelta(minutes=5)
-"""Polling interval used when a reservation is active or a zone transition is imminent.
+"""Polling interval while a reservation is active or paid parking is changing soon.
 
 This keeps HA responsive for the most time-sensitive situations: tracking an active
-reservation, reacting to auto-end logic, and reflecting a zone state change promptly
-after it occurs.
+reservation, reacting to auto-end logic, and reflecting a paid parking change
+promptly after it occurs.
 """
 
 IDLE_UPDATE_INTERVAL: Final = timedelta(minutes=30)
 """Polling interval used when there is nothing urgent to track.
 
-Applied when no reservation is active, the zone is currently free, and no transition
-is expected within TRANSITION_LOOKAHEAD. Reduces API calls by up to ~83 % compared
-to polling at DEFAULT_UPDATE_INTERVAL continuously.
+Applied when no reservation is active, parking is currently free, and no
+transition is expected within TRANSITION_LOOKAHEAD. Reduces API calls by up to ~83 %
+compared to polling at DEFAULT_UPDATE_INTERVAL continuously.
 """
 
 TRANSITION_LOOKAHEAD: Final = timedelta(minutes=30)
-"""How far ahead of a known zone transition to switch back to DEFAULT_UPDATE_INTERVAL.
+"""How far ahead of a known paid parking change to poll at the default rate again.
 
 When a transition is this close, the coordinator starts polling at the default (fast)
-rate so that the zone state change is reflected in HA shortly after it occurs.
+rate so that the paid parking change is reflected in HA shortly after it occurs.
 """
 
 TRANSITION_BUFFER: Final = timedelta(minutes=2)
-"""Lead time subtracted when scheduling a precise update before a zone transition.
+"""Lead time subtracted when scheduling an update before a paid parking change.
 
-When the next zone change is known and further away than TRANSITION_LOOKAHEAD, the
-coordinator schedules the next update to arrive this much *before* the transition
-rather than landing exactly on it.  A small buffer compensates for scheduling jitter
-and ensures the poll happens before — not after — the transition moment.
+When the next paid parking change is known and further away than TRANSITION_LOOKAHEAD,
+the coordinator schedules the next update to arrive this much *before* the transition
+rather than landing exactly on it.  A small buffer compensates for scheduling jitter and
+ensures the poll happens before — not after — the transition moment.
 """
 
 RELOGIN_COOLDOWN: Final = timedelta(minutes=15)

@@ -5,7 +5,7 @@ from __future__ import annotations
 import inspect
 import logging
 import time
-from collections.abc import Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING, Final, Protocol, cast
 
@@ -21,6 +21,7 @@ from homeassistant.exceptions import (
 )
 from homeassistant.helpers import aiohttp_client
 from homeassistant.helpers import config_validation as cv
+from homeassistant.helpers import entity_registry as er
 from homeassistant.setup import async_when_setup
 from pycityvisitorparking import AuthError, NetworkError
 from pycityvisitorparking.exceptions import (
@@ -34,7 +35,7 @@ from .config_flow import async_load_providers
 from .const import (
     CONF_API_URL,
     CONF_BASE_URL,
-    CONF_DEFAULT_ZONE,
+    CONF_DEFAULT_PARKING_AREA,
     CONF_DEMO_MODE,
     CONF_FREE_DATES,
     CONF_FREE_WEEKDAYS,
@@ -72,6 +73,19 @@ _API_URL_MIGRATION_MINOR_VERSION: Final = 2
 _LEGACY_RESOLVED_LOGIN_PARAMS_KEY: Final = "resolved_login_params"
 # Minor config entry version that dropped the persisted login state.
 _RESOLVED_PARAMS_MIGRATION_MINOR_VERSION: Final = 3
+# Minor config entry version that renamed the paid parking sensor keys.
+_PAID_PARKING_MIGRATION_MINOR_VERSION: Final = 4
+# Sensor keys (the unique ID suffix after ``<entry.unique_id>:``) from before the
+# paid parking rename, mapped to their current keys. Options keep no renamed
+# field: the weekday overrides are stored under ``operating_time_overrides``
+# keyed by weekday, so only the entity registry needs rewriting.
+_LEGACY_SENSOR_KEYS: Final[Mapping[str, str]] = {
+    "permit_zone_availability": "paid_parking",
+    "provider_chargeable_start": "provider_paid_parking_start",
+    "provider_chargeable_end": "provider_paid_parking_end",
+    "next_chargeable_start": "paid_parking_start",
+    "next_chargeable_end": "paid_parking_end",
+}
 
 
 class _ResourceStorage(Protocol):
@@ -162,7 +176,42 @@ async def async_migrate_entry(
             },
             minor_version=_RESOLVED_PARAMS_MIGRATION_MINOR_VERSION,
         )
+
+    if entry.minor_version < _PAID_PARKING_MIGRATION_MINOR_VERSION:
+        # 1.3 -> 1.4: sensor keys moved from "chargeable"/"zone availability" to
+        # "paid parking". Rewrite the unique IDs so entity IDs and history stay.
+        await er.async_migrate_entries(
+            hass, entry.entry_id, _legacy_sensor_unique_id_update(hass, entry)
+        )
+        hass.config_entries.async_update_entry(
+            entry, minor_version=_PAID_PARKING_MIGRATION_MINOR_VERSION
+        )
     return True
+
+
+def _legacy_sensor_unique_id_update(
+    hass: HomeAssistant, entry: CityVisitorParkingConfigEntry
+) -> Callable[[er.RegistryEntry], dict[str, str] | None]:
+    """Return the registry callback that renames this entry's legacy sensor IDs."""
+    registry = er.async_get(hass)
+    prefix = f"{entry.unique_id}:"
+
+    def _update(registry_entry: er.RegistryEntry) -> dict[str, str] | None:
+        unique_id = registry_entry.unique_id
+        if not unique_id.startswith(prefix):
+            return None
+        new_key = _LEGACY_SENSOR_KEYS.get(unique_id.removeprefix(prefix))
+        if new_key is None:
+            return None
+        new_unique_id = f"{prefix}{new_key}"
+        # Never collide with an entity that already owns the new unique ID.
+        if registry.async_get_entity_id(
+            registry_entry.domain, registry_entry.platform, new_unique_id
+        ):
+            return None
+        return {"new_unique_id": new_unique_id}
+
+    return _update
 
 
 def _migrate_legacy_api_url(
@@ -369,10 +418,13 @@ async def _async_update_listener(
         await hass.config_entries.async_reload(entry.entry_id)
         return
     data = runtime.coordinator.data
-    default_zone = entry.options.get(CONF_DEFAULT_ZONE)
-    if data.zones and data.zones[0].zone_id != default_zone:
-        # The default zone only changes which windows the permit-level state uses;
-        # a refresh recomputes it without reloading the entry.
+    default_parking_area = entry.options.get(CONF_DEFAULT_PARKING_AREA)
+    if (
+        data.parking_areas
+        and data.parking_areas[0].parking_area_id != default_parking_area
+    ):
+        # The default parking area only changes which windows the permit-level state
+        # uses; a refresh recomputes it without reloading the entry.
         await runtime.coordinator.async_request_refresh()
 
 

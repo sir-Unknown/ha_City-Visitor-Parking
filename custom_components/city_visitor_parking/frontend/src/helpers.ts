@@ -9,13 +9,13 @@ import type {
   ReservationsResponse,
   ZoneStatus,
   ZoneStatusResponse,
-  ZoneStatusZone,
+  ParkingAreaStatus,
 } from "./types";
 import { localize } from "./translations";
 
 /** Integration domain used for selectors, websocket calls, and device matching. */
 export const DOMAIN = "city_visitor_parking";
-/** Websocket command returning the status and zones of one permit. */
+/** Websocket command returning the status and parking areas of one permit. */
 export const WS_GET_STATUS = "city_visitor_parking/status";
 /** Websocket command returning the reservations held by the coordinator. */
 export const WS_LIST_RESERVATIONS = "city_visitor_parking/reservations";
@@ -23,7 +23,7 @@ export const RESERVATION_STARTED_EVENT =
   "city-visitor-parking-reservation-started";
 export const RESERVATION_ENDED_EVENT = "city-visitor-parking-reservation-ended";
 
-/** Empty zone state used before a status payload has been loaded. */
+/** Empty parking area state used before a status payload has been loaded. */
 export const EMPTY_ZONE_STATUS: ZoneStatus = {
   state: null,
   kind: null,
@@ -106,10 +106,10 @@ export const setPendingPermitDefaults = (
   });
 };
 
-/** Copies a normalized zone status payload into card instance state fields. */
+/** Copies a normalized parking area status payload into card instance state fields. */
 export const applyZoneStatus = (
   context: {
-    _zoneState: ZoneStatus["state"];
+    _paidState: ZoneStatus["state"];
     _windowKind: ZoneStatus["kind"];
     _windowStartIso: string | null;
     _windowEndIso: string | null;
@@ -119,7 +119,7 @@ export const applyZoneStatus = (
   status: ZoneStatus | null,
 ): void => {
   Object.assign(context, {
-    _zoneState: status?.state ?? null,
+    _paidState: status?.state ?? null,
     _windowKind: status?.kind ?? null,
     _windowStartIso: status?.start ?? null,
     _windowEndIso: status?.end ?? null,
@@ -128,7 +128,7 @@ export const applyZoneStatus = (
   });
 };
 
-type ZoneWindowPayload = {
+type ParkingAreaPaidWindowPayload = {
   state?: unknown;
   window_kind?: unknown;
   window_start?: unknown;
@@ -138,12 +138,12 @@ type ZoneWindowPayload = {
 const nonEmptyString = (value: unknown): string | null =>
   typeof value === "string" && value ? value : null;
 
-/** Normalizes the state and window fields shared by status payloads and zones. */
-const normalizeZoneWindow = (
-  payload: ZoneWindowPayload | null | undefined,
+/** Normalizes the state and window fields shared by status payloads and parking areas. */
+const normalizeParkingAreaPaidWindow = (
+  payload: ParkingAreaPaidWindowPayload | null | undefined,
 ): Pick<ZoneStatus, "state" | "kind" | "start" | "end"> => {
   const state =
-    payload?.state === "chargeable" || payload?.state === "free"
+    payload?.state === "paid" || payload?.state === "free"
       ? payload.state
       : null;
   const kind =
@@ -158,117 +158,129 @@ const normalizeZoneWindow = (
   };
 };
 
-/** Normalizes the top-level (default zone) part of a status payload. */
+/** Normalizes the top-level (default parking area) part of a status payload. */
 export const normalizeZoneStatus = (
   payload: ZoneStatusResponse | null | undefined,
 ): ZoneStatus => {
   const balance = payload?.remaining_balance;
   return {
-    ...normalizeZoneWindow(payload),
+    ...normalizeParkingAreaPaidWindow(payload),
     remainingMinutes:
       typeof balance === "number" && Number.isFinite(balance) ? balance : null,
     balanceUnit: nonEmptyString(payload?.balance_unit),
   };
 };
 
-/** Returns the usable zone entries of a status payload, default zone first. */
-export const normalizeZones = (
+/** Returns the usable parking area entries of a status payload, default parking area first. */
+export const normalizeParkingAreas = (
   payload: ZoneStatusResponse | null | undefined,
-): ZoneStatusZone[] =>
-  Array.isArray(payload?.zones)
-    ? payload.zones.filter((zone) => Boolean(nonEmptyString(zone?.zone_id)))
+): ParkingAreaStatus[] =>
+  Array.isArray(payload?.parking_areas)
+    ? payload.parking_areas.filter((parkingArea) =>
+        Boolean(nonEmptyString(parkingArea?.parking_area_id)),
+      )
     : [];
 
 /**
- * Replaces the state and window of a status with those of the selected zone.
+ * Replaces the state and window of a status with those of the selected parking area.
  * Balance fields stay permit-wide. A status without state (not loaded or
- * failed) is returned unchanged so cached zone windows never outlive it.
+ * failed) is returned unchanged so cached parking area windows never outlive it.
  */
-export const applyZoneToStatus = (
+export const applyParkingAreaToStatus = (
   status: ZoneStatus,
-  zone: ZoneStatusZone | null,
+  parkingArea: ParkingAreaStatus | null,
 ): ZoneStatus =>
-  zone && status.state !== null
-    ? { ...status, ...normalizeZoneWindow(zone) }
+  parkingArea && status.state !== null
+    ? { ...status, ...normalizeParkingAreaPaidWindow(parkingArea) }
     : status;
 
 /**
- * Drops a configured `zone_id` once the permit changed or was cleared.
- * Zone ids are per permit, so the zone survives only when the new permit's
- * known zones list it.
+ * Drops a configured `parking_area_id` once the permit changed or was cleared.
+ * Parking area ids are per permit, so the parking area survives only when the new permit's
+ * known parking areas list it.
  */
-export const dropForeignZoneId = <
-  T extends { config_entry_id?: string; zone_id?: string },
+export const dropForeignParkingAreaId = <
+  T extends { config_entry_id?: string; parking_area_id?: string },
 >(
   config: T,
   previousEntryId: string | undefined,
-  zonesByEntryId: ReadonlyMap<string, readonly ZoneStatusZone[]>,
+  parkingAreasByEntryId: ReadonlyMap<string, readonly ParkingAreaStatus[]>,
 ): T => {
-  if (!config.zone_id || config.config_entry_id === previousEntryId) {
+  if (!config.parking_area_id || config.config_entry_id === previousEntryId) {
     return config;
   }
-  const zones = config.config_entry_id
-    ? zonesByEntryId.get(config.config_entry_id)
+  const parkingAreas = config.config_entry_id
+    ? parkingAreasByEntryId.get(config.config_entry_id)
     : undefined;
-  if (zones?.some((zone) => zone.zone_id === config.zone_id)) return config;
+  if (
+    parkingAreas?.some(
+      (parkingArea) => parkingArea.parking_area_id === config.parking_area_id,
+    )
+  )
+    return config;
   const next = { ...config };
-  delete next.zone_id;
+  delete next.parking_area_id;
   return next;
 };
 
-/** Minimum number of zones before a permit offers a zone choice. */
-export const MIN_SELECTABLE_ZONES = 2;
+/** Minimum number of parking areas before a permit offers a parking area choice. */
+export const MIN_SELECTABLE_PARKING_AREAS = 2;
 
-/** Card options that decide which zone the new-reservation card uses. */
-export type CardZoneOptions = {
-  /** Whether the card shows its zone field (`show_zone`). */
-  showZone: boolean;
-  /** Preset zone from the card config (`zone_id`) for the configured permit. */
-  configZoneId?: string | null;
-  /** Zone the user picked in the card's zone field. */
-  pickedZoneId?: string | null;
+/** Card options that decide which parking area the new-reservation card uses. */
+export type CardParkingAreaOptions = {
+  /** Whether the card shows its parking area field (`show_parking_area`). */
+  showParkingArea: boolean;
+  /** Preset parking area from the card config (`parking_area_id`) for the configured permit. */
+  configParkingAreaId?: string | null;
+  /** Parking area the user picked in the card's parking area field. */
+  pickedParkingAreaId?: string | null;
 };
 
 /**
- * Resolves the zone the new-reservation card uses for a permit.
+ * Resolves the parking area the new-reservation card uses for a permit.
  *
- * With the zone field shown, the user's pick wins over the configured preset;
+ * With the parking area field shown, the user's pick wins over the configured preset;
  * with it hidden there is nothing to pick, so only the preset counts. Ids that
- * are not one of the permit's zones fall through to the first (default) zone.
+ * are not one of the permit's parking areas fall through to the first (default) parking area.
  */
-export const resolveCardZone = (
-  zones: readonly ZoneStatusZone[],
-  options: CardZoneOptions,
-): ZoneStatusZone | null => {
-  const find = (zoneId: string | null | undefined) =>
-    zoneId ? zones.find((zone) => zone.zone_id === zoneId) : undefined;
+export const resolveCardParkingArea = (
+  parkingAreas: readonly ParkingAreaStatus[],
+  options: CardParkingAreaOptions,
+): ParkingAreaStatus | null => {
+  const find = (parkingAreaId: string | null | undefined) =>
+    parkingAreaId
+      ? parkingAreas.find(
+          (parkingArea) => parkingArea.parking_area_id === parkingAreaId,
+        )
+      : undefined;
   return (
-    (options.showZone ? find(options.pickedZoneId) : undefined) ??
-    find(options.configZoneId) ??
-    zones[0] ??
+    (options.showParkingArea ? find(options.pickedParkingAreaId) : undefined) ??
+    find(options.configParkingAreaId) ??
+    parkingAreas[0] ??
     null
   );
 };
 
 /**
- * Decides which zone settings the new-reservation card editor shows.
+ * Decides which parking area settings the new-reservation card editor shows.
  *
- * The zone picker needs a configured permit with a zone choice. The
- * `show_zone` toggle follows the configured permit, or, without one (the card
- * then shows a permit picker), any permit with a zone choice.
+ * The parking area picker needs a configured permit with a parking area choice. The
+ * `show_parking_area` toggle follows the configured permit, or, without one (the card
+ * then shows a permit picker), any permit with a parking area choice.
  */
-export const getZoneEditorVisibility = (params: {
+export const getParkingAreaEditorVisibility = (params: {
   permitConfigured: boolean;
-  permitZoneCount: number;
-  anyPermitHasZones: boolean;
-}): { showZoneSelect: boolean; showZoneToggle: boolean } => {
-  const permitHasZones =
-    params.permitConfigured && params.permitZoneCount >= MIN_SELECTABLE_ZONES;
+  permitParkingAreaCount: number;
+  anyPermitHasParkingAreas: boolean;
+}): { showParkingAreaSelect: boolean; showParkingAreaToggle: boolean } => {
+  const permitHasParkingAreas =
+    params.permitConfigured &&
+    params.permitParkingAreaCount >= MIN_SELECTABLE_PARKING_AREAS;
   return {
-    showZoneSelect: permitHasZones,
-    showZoneToggle: params.permitConfigured
-      ? permitHasZones
-      : params.anyPermitHasZones,
+    showParkingAreaSelect: permitHasParkingAreas,
+    showParkingAreaToggle: params.permitConfigured
+      ? permitHasParkingAreas
+      : params.anyPermitHasParkingAreas,
   };
 };
 
@@ -304,13 +316,13 @@ export const fetchReservations = async (
   return "response" in result ? result.response : result;
 };
 
-/** Fetches the zones of one permit from the status websocket; empty on failure. */
-export const fetchPermitZones = async (
+/** Fetches the parking areas of one permit from the status websocket; empty on failure. */
+export const fetchPermitParkingAreas = async (
   hass: HomeAssistant,
   entryId: string,
-): Promise<ZoneStatusZone[]> => {
+): Promise<ParkingAreaStatus[]> => {
   try {
-    return normalizeZones(
+    return normalizeParkingAreas(
       await hass.callWS<ZoneStatusResponse>({
         type: WS_GET_STATUS,
         config_entry_id: entryId,
@@ -321,12 +333,13 @@ export const fetchPermitZones = async (
   }
 };
 
-/** Returns the zone label of a listed reservation: its name, else its id. */
-export const formatReservationZone = (reservation: {
-  zone_id?: string | null;
-  zone_name?: string | null;
+/** Returns the parking area label of a listed reservation: its name, else its id. */
+export const formatReservationParkingArea = (reservation: {
+  parking_area_id?: string | null;
+  parking_area_name?: string | null;
 }): string | null =>
-  nonEmptyString(reservation.zone_name) ?? nonEmptyString(reservation.zone_id);
+  nonEmptyString(reservation.parking_area_name) ??
+  nonEmptyString(reservation.parking_area_id);
 /** Returns whether a config entry should be hidden from permit selection. */
 export const isPermitEntryDisabled = (entry: PermitEntry): boolean =>
   Boolean(entry.disabled_by) ||

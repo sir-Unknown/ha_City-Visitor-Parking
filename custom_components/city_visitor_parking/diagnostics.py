@@ -56,19 +56,19 @@ async def async_get_config_entry_diagnostics(
             "active_reservations": len(data.active_reservations),
             "favorites": len(data.favorites),
             "zone_validity_blocks": len(data.zone_validity),
-            "zone_is_chargeable_now": data.zone_availability.is_chargeable_now,
-            # Zone ids and names are public area names, not personal data.
-            "zones": [
+            "is_paid_now": data.zone_availability.is_paid_now,
+            # Parking area ids and names are public area names, not personal data.
+            "parking_areas": [
                 {
-                    "zone_id": zone.zone_id,
-                    "name": zone.name,
-                    "zone_validity_blocks": len(zone.zone_validity),
-                    "is_chargeable_now": zone.zone_availability.is_chargeable_now,
+                    "parking_area_id": parking_area.parking_area_id,
+                    "name": parking_area.name,
+                    "zone_validity_blocks": len(parking_area.zone_validity),
+                    "is_paid_now": parking_area.zone_availability.is_paid_now,
                 }
-                for zone in data.zones
+                for parking_area in data.parking_areas
             ],
-            "reservation_zone_ids": [
-                reservation.zone_id for reservation in data.active_reservations
+            "reservation_parking_area_ids": [
+                reservation.parking_area_id for reservation in data.active_reservations
             ],
         },
         "options_summary": {

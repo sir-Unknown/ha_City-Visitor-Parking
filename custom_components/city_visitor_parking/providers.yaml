@@ -450,7 +450,7 @@ groningen_demo:
   municipality_name: Groningen Demo
   provider_id: demo
 
-# Only in the pycityvisitorparking pre-release pinned on beta: a demo permit with zones.
+# Only in the pycityvisitorparking pre-release pinned on beta: a demo permit with parking areas.
 rotterdam_demo:
   municipality_name: Rotterdam Demo
   provider_id: demo

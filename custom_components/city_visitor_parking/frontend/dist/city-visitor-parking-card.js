@@ -720,7 +720,7 @@ var setPendingPermitDefaults = (context, entryId, force = false) => {
 };
 var applyZoneStatus = (context, status) => {
   Object.assign(context, {
-    _zoneState: status?.state ?? null,
+    _paidState: status?.state ?? null,
     _windowKind: status?.kind ?? null,
     _windowStartIso: status?.start ?? null,
     _windowEndIso: status?.end ?? null,
@@ -729,8 +729,8 @@ var applyZoneStatus = (context, status) => {
   });
 };
 var nonEmptyString = (value) => typeof value === "string" && value ? value : null;
-var normalizeZoneWindow = (payload) => {
-  const state = payload?.state === "chargeable" || payload?.state === "free" ? payload.state : null;
+var normalizeParkingAreaPaidWindow = (payload) => {
+  const state = payload?.state === "paid" || payload?.state === "free" ? payload.state : null;
   const kind = payload?.window_kind === "current" || payload?.window_kind === "next" ? payload.window_kind : null;
   return {
     state,
@@ -742,33 +742,40 @@ var normalizeZoneWindow = (payload) => {
 var normalizeZoneStatus = (payload) => {
   const balance = payload?.remaining_balance;
   return {
-    ...normalizeZoneWindow(payload),
+    ...normalizeParkingAreaPaidWindow(payload),
     remainingMinutes: typeof balance === "number" && Number.isFinite(balance) ? balance : null,
     balanceUnit: nonEmptyString(payload?.balance_unit)
   };
 };
-var normalizeZones = (payload) => Array.isArray(payload?.zones) ? payload.zones.filter((zone) => Boolean(nonEmptyString(zone?.zone_id))) : [];
-var applyZoneToStatus = (status, zone) => zone && status.state !== null ? { ...status, ...normalizeZoneWindow(zone) } : status;
-var dropForeignZoneId = (config, previousEntryId, zonesByEntryId) => {
-  if (!config.zone_id || config.config_entry_id === previousEntryId) {
+var normalizeParkingAreas = (payload) => Array.isArray(payload?.parking_areas) ? payload.parking_areas.filter(
+  (parkingArea) => Boolean(nonEmptyString(parkingArea?.parking_area_id))
+) : [];
+var applyParkingAreaToStatus = (status, parkingArea) => parkingArea && status.state !== null ? { ...status, ...normalizeParkingAreaPaidWindow(parkingArea) } : status;
+var dropForeignParkingAreaId = (config, previousEntryId, parkingAreasByEntryId) => {
+  if (!config.parking_area_id || config.config_entry_id === previousEntryId) {
     return config;
   }
-  const zones = config.config_entry_id ? zonesByEntryId.get(config.config_entry_id) : void 0;
-  if (zones?.some((zone) => zone.zone_id === config.zone_id)) return config;
+  const parkingAreas = config.config_entry_id ? parkingAreasByEntryId.get(config.config_entry_id) : void 0;
+  if (parkingAreas?.some(
+    (parkingArea) => parkingArea.parking_area_id === config.parking_area_id
+  ))
+    return config;
   const next = { ...config };
-  delete next.zone_id;
+  delete next.parking_area_id;
   return next;
 };
-var MIN_SELECTABLE_ZONES = 2;
-var resolveCardZone = (zones, options) => {
-  const find = (zoneId) => zoneId ? zones.find((zone) => zone.zone_id === zoneId) : void 0;
-  return (options.showZone ? find(options.pickedZoneId) : void 0) ?? find(options.configZoneId) ?? zones[0] ?? null;
+var MIN_SELECTABLE_PARKING_AREAS = 2;
+var resolveCardParkingArea = (parkingAreas, options) => {
+  const find = (parkingAreaId) => parkingAreaId ? parkingAreas.find(
+    (parkingArea) => parkingArea.parking_area_id === parkingAreaId
+  ) : void 0;
+  return (options.showParkingArea ? find(options.pickedParkingAreaId) : void 0) ?? find(options.configParkingAreaId) ?? parkingAreas[0] ?? null;
 };
-var getZoneEditorVisibility = (params) => {
-  const permitHasZones = params.permitConfigured && params.permitZoneCount >= MIN_SELECTABLE_ZONES;
+var getParkingAreaEditorVisibility = (params) => {
+  const permitHasParkingAreas = params.permitConfigured && params.permitParkingAreaCount >= MIN_SELECTABLE_PARKING_AREAS;
   return {
-    showZoneSelect: permitHasZones,
-    showZoneToggle: params.permitConfigured ? permitHasZones : params.anyPermitHasZones
+    showParkingAreaSelect: permitHasParkingAreas,
+    showParkingAreaToggle: params.permitConfigured ? permitHasParkingAreas : params.anyPermitHasParkingAreas
   };
 };
 var fetchReservations = async (hass, device, fresh) => {
@@ -787,9 +794,9 @@ var fetchReservations = async (hass, device, fresh) => {
   });
   return "response" in result ? result.response : result;
 };
-var fetchPermitZones = async (hass, entryId) => {
+var fetchPermitParkingAreas = async (hass, entryId) => {
   try {
-    return normalizeZones(
+    return normalizeParkingAreas(
       await hass.callWS({
         type: WS_GET_STATUS,
         config_entry_id: entryId
@@ -799,7 +806,7 @@ var fetchPermitZones = async (hass, entryId) => {
     return [];
   }
 };
-var formatReservationZone = (reservation) => nonEmptyString(reservation.zone_name) ?? nonEmptyString(reservation.zone_id);
+var formatReservationParkingArea = (reservation) => nonEmptyString(reservation.parking_area_name) ?? nonEmptyString(reservation.parking_area_id);
 var isPermitEntryDisabled = (entry) => Boolean(entry.disabled_by) || entry.state != null && entry.state !== "loaded" && entry.state !== "setup_in_progress";
 var buildPermitOptions = (entries) => entries.map((entry) => ({
   id: entry.entry_id,
@@ -1055,14 +1062,16 @@ var renderPermitSelect = (params) => {
     </div>
   `;
 };
-var renderZoneSelect = (params) => {
+var renderParkingAreaSelect = (params) => {
   if (params.preview) {
     return b2`
       <div class="row">
         <ha-input
           appearance="material"
           .label=${params.label}
-          .value=${params.zones.find((zone) => zone.zone_id === params.value)?.name ?? ""}
+          .value=${params.parkingAreas.find(
+      (parkingArea) => parkingArea.parking_area_id === params.value
+    )?.name ?? ""}
           ?disabled=${true}
         ></ha-input>
       </div>
@@ -1071,13 +1080,13 @@ var renderZoneSelect = (params) => {
   return b2`
     <div class="row">
       <ha-selector
-        id="zoneSelect"
+        id="parkingAreaSelect"
         .hass=${params.hass}
         .selector=${{
     select: {
-      options: params.zones.map((zone) => ({
-        value: zone.zone_id,
-        label: zone.name || zone.zone_id
+      options: params.parkingAreas.map((parkingArea) => ({
+        value: parkingArea.parking_area_id,
+        label: parkingArea.name || parkingArea.parking_area_id
       })),
       mode: "dropdown"
     }
@@ -1389,11 +1398,11 @@ var buildCardTypeOptions = (localizeTarget, prefix) => {
     ]
   ];
 };
-var NO_ZONE_FIELDS = {
-  zoneOptions: null,
-  showZoneToggle: false
+var NO_PARKING_AREA_FIELDS = {
+  parkingAreaOptions: null,
+  showParkingAreaToggle: false
 };
-var buildCardEditorSchema = (cardTypeOptions, displayOptionsExpanded, zoneFields = NO_ZONE_FIELDS) => [
+var buildCardEditorSchema = (cardTypeOptions, displayOptionsExpanded, parkingAreaFields = NO_PARKING_AREA_FIELDS) => [
   {
     type: "select",
     name: "type",
@@ -1413,16 +1422,25 @@ var buildCardEditorSchema = (cardTypeOptions, displayOptionsExpanded, zoneFields
         selector: { config_entry: { integration: DOMAIN } },
         required: false
       },
-      ...zoneFields.zoneOptions ? [
+      ...parkingAreaFields.parkingAreaOptions ? [
         {
-          name: "zone_id",
+          name: "parking_area_id",
           selector: {
-            select: { options: zoneFields.zoneOptions, mode: "dropdown" }
+            select: {
+              options: parkingAreaFields.parkingAreaOptions,
+              mode: "dropdown"
+            }
           },
           required: false
         }
       ] : [],
-      ...zoneFields.showZoneToggle ? [{ name: "show_zone", selector: { boolean: {} }, default: true }] : [],
+      ...parkingAreaFields.showParkingAreaToggle ? [
+        {
+          name: "show_parking_area",
+          selector: { boolean: {} },
+          default: true
+        }
+      ] : [],
       { name: "show_name", selector: { boolean: {} }, default: true },
       { name: "show_favorites", selector: { boolean: {} }, default: true },
       { name: "show_start_time", selector: { boolean: {} }, default: true },
@@ -1438,15 +1456,15 @@ var buildCardEditorSchema = (cardTypeOptions, displayOptionsExpanded, zoneFields
 var CityVisitorParkingCardEditor = class extends BaseCardEditor {
   constructor() {
     super(...arguments);
-    // Zones per permit from the status websocket; empty when a fetch failed.
-    this._zonesByEntryId = /* @__PURE__ */ new Map();
-    this._zonesLoading = /* @__PURE__ */ new Set();
+    // Parking areas per permit from the status websocket; empty when a fetch failed.
+    this._parkingAreasByEntryId = /* @__PURE__ */ new Map();
+    this._parkingAreasLoading = /* @__PURE__ */ new Set();
     // Enabled permits, loaded only while no permit is configured.
     this._permitIds = null;
     this._permitIdsLoading = false;
   }
   willUpdate() {
-    if (this.hass) this._ensureZones(this.hass);
+    if (this.hass) this._ensureParkingAreas(this.hass);
   }
   render() {
     if (!this.hass) return b2``;
@@ -1458,7 +1476,7 @@ var CityVisitorParkingCardEditor = class extends BaseCardEditor {
     );
     const cardTypeOptions = buildCardTypeOptions(localizeTarget, "editor");
     const displayOptionsExpanded = Boolean(
-      this._config?.config_entry_id || this._config?.zone_id || this._config?.show_zone === false || this._config?.show_name === false || this._config?.show_favorites === false || this._config?.show_start_time === false || this._config?.show_end_time === false || this._config?.default_license_plate
+      this._config?.config_entry_id || this._config?.parking_area_id || this._config?.show_parking_area === false || this._config?.show_name === false || this._config?.show_favorites === false || this._config?.show_start_time === false || this._config?.show_end_time === false || this._config?.default_license_plate
     );
     return b2`
       <ha-form
@@ -1467,7 +1485,7 @@ var CityVisitorParkingCardEditor = class extends BaseCardEditor {
         .schema=${buildCardEditorSchema(
       cardTypeOptions,
       displayOptionsExpanded,
-      this._getZoneFields()
+      this._getParkingAreaFields()
     )}
         .computeLabel=${computeLabel}
         .computeHelper=${computeHelper}
@@ -1476,43 +1494,43 @@ var CityVisitorParkingCardEditor = class extends BaseCardEditor {
     `;
   }
   _normalizeConfig(config) {
-    return dropForeignZoneId(
+    return dropForeignParkingAreaId(
       config,
       this._config?.config_entry_id,
-      this._zonesByEntryId
+      this._parkingAreasByEntryId
     );
   }
-  /** Zone settings for the current config; see `getZoneEditorVisibility`. */
-  _getZoneFields() {
+  /** Parking area settings for the current config; see `getParkingAreaEditorVisibility`. */
+  _getParkingAreaFields() {
     const entryId = this._config?.config_entry_id;
-    const permitZones = entryId ? this._zonesByEntryId.get(entryId) ?? [] : [];
-    const { showZoneSelect, showZoneToggle } = getZoneEditorVisibility({
+    const permitParkingAreas = entryId ? this._parkingAreasByEntryId.get(entryId) ?? [] : [];
+    const { showParkingAreaSelect, showParkingAreaToggle } = getParkingAreaEditorVisibility({
       permitConfigured: Boolean(entryId),
-      permitZoneCount: permitZones.length,
-      anyPermitHasZones: (this._permitIds ?? []).some(
-        (id) => (this._zonesByEntryId.get(id)?.length ?? 0) >= MIN_SELECTABLE_ZONES
+      permitParkingAreaCount: permitParkingAreas.length,
+      anyPermitHasParkingAreas: (this._permitIds ?? []).some(
+        (id) => (this._parkingAreasByEntryId.get(id)?.length ?? 0) >= MIN_SELECTABLE_PARKING_AREAS
       )
     });
     return {
-      zoneOptions: showZoneSelect ? permitZones.map((zone) => ({
-        value: zone.zone_id,
-        label: zone.name || zone.zone_id
+      parkingAreaOptions: showParkingAreaSelect ? permitParkingAreas.map((parkingArea) => ({
+        value: parkingArea.parking_area_id,
+        label: parkingArea.name || parkingArea.parking_area_id
       })) : null,
-      showZoneToggle
+      showParkingAreaToggle
     };
   }
   /**
-   * Loads the zones that decide which zone settings are shown: those of the
+   * Loads the parking areas that decide which parking area settings are shown: those of the
    * configured permit, or, without one, those of every enabled permit.
    */
-  _ensureZones(hass) {
+  _ensureParkingAreas(hass) {
     const entryId = this._config?.config_entry_id;
     if (entryId) {
-      this._loadZones(hass, entryId);
+      this._loadParkingAreas(hass, entryId);
       return;
     }
     if (this._permitIds) {
-      for (const id of this._permitIds) this._loadZones(hass, id);
+      for (const id of this._permitIds) this._loadParkingAreas(hass, id);
       return;
     }
     if (this._permitIdsLoading) return;
@@ -1526,14 +1544,14 @@ var CityVisitorParkingCardEditor = class extends BaseCardEditor {
       this.requestUpdate();
     });
   }
-  _loadZones(hass, entryId) {
-    if (this._zonesByEntryId.has(entryId) || this._zonesLoading.has(entryId)) {
+  _loadParkingAreas(hass, entryId) {
+    if (this._parkingAreasByEntryId.has(entryId) || this._parkingAreasLoading.has(entryId)) {
       return;
     }
-    this._zonesLoading.add(entryId);
-    void fetchPermitZones(hass, entryId).then((zones) => {
-      this._zonesByEntryId.set(entryId, zones);
-      this._zonesLoading.delete(entryId);
+    this._parkingAreasLoading.add(entryId);
+    void fetchPermitParkingAreas(hass, entryId).then((parkingAreas) => {
+      this._parkingAreasByEntryId.set(entryId, parkingAreas);
+      this._parkingAreasLoading.delete(entryId);
       this.requestUpdate();
     });
   }
@@ -1601,7 +1619,7 @@ var CityVisitorParkingNewReservationCard = class extends BaseLocalizedCard {
     this._favoriteRemoveInFlight = false;
     this._addFavoriteChecked = false;
     this._suppressFavoriteClear = false;
-    this._zoneState = null;
+    this._paidState = null;
     this._windowKind = null;
     this._windowStartIso = null;
     this._windowEndIso = null;
@@ -1610,10 +1628,10 @@ var CityVisitorParkingNewReservationCard = class extends BaseLocalizedCard {
     this._zoneStatusTsByEntryId = /* @__PURE__ */ new Map();
     this._zoneStatusInFlightByEntryId = /* @__PURE__ */ new Map();
     this._zoneStatusByEntryId = /* @__PURE__ */ new Map();
-    // Zones of the last successful status response; kept on fetch failure so a
-    // chosen zone is not silently replaced by the provider default.
-    this._zonesByEntryId = /* @__PURE__ */ new Map();
-    this._selectedZoneIdByEntryId = /* @__PURE__ */ new Map();
+    // Parking areas of the last successful status response; kept on fetch failure so a
+    // chosen parking area is not silently replaced by the provider default.
+    this._parkingAreasByEntryId = /* @__PURE__ */ new Map();
+    this._selectedParkingAreaIdByEntryId = /* @__PURE__ */ new Map();
     this._pendingPermitDefaultsEntryId = null;
     this._pendingPermitDefaultsForce = false;
     this._statusRefreshHandle = null;
@@ -1637,7 +1655,7 @@ var CityVisitorParkingNewReservationCard = class extends BaseLocalizedCard {
       this._requestRender();
     };
     this._onPermitSelectChange = (event) => this._handlePermitSelectChange(event);
-    this._onZoneSelectChange = (event) => this._handleZoneSelectChange(event);
+    this._onParkingAreaSelectChange = (event) => this._handleParkingAreaSelectChange(event);
     this._onFavoriteSelectChange = (event) => this._handleFavoriteSelectChange(event);
     this._onReservationEnded = (event) => void this._handleReservationEnded(event);
   }
@@ -1672,7 +1690,7 @@ var CityVisitorParkingNewReservationCard = class extends BaseLocalizedCard {
       show_favorites: config.show_favorites !== false,
       show_start_time: config.show_start_time !== false,
       show_end_time: config.show_end_time !== false,
-      show_zone: config.show_zone !== false,
+      show_parking_area: config.show_parking_area !== false,
       ...config
     };
     if (this._config.default_license_plate && !this._formValues["licensePlate"]) {
@@ -1884,7 +1902,10 @@ var CityVisitorParkingNewReservationCard = class extends BaseLocalizedCard {
           config_entry_id: entryId
         });
         status = normalizeZoneStatus(payload);
-        this._zonesByEntryId.set(entryId, normalizeZones(payload));
+        this._parkingAreasByEntryId.set(
+          entryId,
+          normalizeParkingAreas(payload)
+        );
       } catch {
         status = EMPTY_ZONE_STATUS;
       }
@@ -1958,10 +1979,10 @@ var CityVisitorParkingNewReservationCard = class extends BaseLocalizedCard {
     const selectedPermitDisabled = Boolean(
       activeEntryId && this._permitOptions.find((o5) => o5.id === activeEntryId)?.disabled
     );
-    const zones = activeEntryId ? this._zonesByEntryId.get(activeEntryId) ?? [] : [];
-    const selectedZone = activeEntryId ? this._resolveZone(activeEntryId) : null;
-    const showZoneField = this._config.show_zone !== false && (zones.length >= MIN_SELECTABLE_ZONES || controlsDisabled && !activeEntryId && this._permitOptions.some(
-      (option) => (this._zonesByEntryId.get(option.id)?.length ?? 0) >= MIN_SELECTABLE_ZONES
+    const parkingAreas = activeEntryId ? this._parkingAreasByEntryId.get(activeEntryId) ?? [] : [];
+    const selectedParkingArea = activeEntryId ? this._resolveParkingArea(activeEntryId) : null;
+    const showParkingAreaField = this._config.show_parking_area !== false && (parkingAreas.length >= MIN_SELECTABLE_PARKING_AREAS || controlsDisabled && !activeEntryId && this._permitOptions.some(
+      (option) => (this._parkingAreasByEntryId.get(option.id)?.length ?? 0) >= MIN_SELECTABLE_PARKING_AREAS
     ));
     const { showAddFavorite, showRemoveFavorite, removeFavorite } = this._getFavoriteActionState();
     const favoriteRemoveDisabled = controlsDisabled || this._favoriteRemoveInFlight;
@@ -1997,14 +2018,14 @@ var CityVisitorParkingNewReservationCard = class extends BaseLocalizedCard {
       preview: controlsDisabled,
       onSelected: this._onPermitSelectChange
     }) : A}
-          ${showZoneField ? renderZoneSelect({
+          ${showParkingAreaField ? renderParkingAreaSelect({
       hass: this._hass,
-      label: localizeFn("field.zone"),
-      zones,
-      value: selectedZone?.zone_id ?? "",
+      label: localizeFn("field.parking_area"),
+      parkingAreas,
+      value: selectedParkingArea?.parking_area_id ?? "",
       disabled: controlsDisabled || selectedPermitDisabled,
       preview: controlsDisabled,
-      onSelected: this._onZoneSelectChange
+      onSelected: this._onParkingAreaSelectChange
     }) : A}
           ${renderFavoriteSelect({
       showName,
@@ -2091,7 +2112,7 @@ var CityVisitorParkingNewReservationCard = class extends BaseLocalizedCard {
     if (!this._config) return;
     const controlsDisabled = this._isInEditor();
     this.toggleAttribute("data-preview", controlsDisabled);
-    if (controlsDisabled) this._loadPreviewPermitZones();
+    if (controlsDisabled) this._loadPreviewPermitParkingAreas();
     if (this._addFavoriteChecked) {
       const { showAddFavorite } = this._getFavoriteActionState();
       if (!showAddFavorite) {
@@ -2102,10 +2123,10 @@ var CityVisitorParkingNewReservationCard = class extends BaseLocalizedCard {
   }
   /**
    * The preview's permit picker is read-only, so without a configured permit
-   * no permit gets selected and no zones load. Load the zones of every permit
-   * so the preview can still show the zone field the dashboard card offers.
+   * no permit gets selected and no parking areas load. Load the parking areas of every permit
+   * so the preview can still show the parking area field the dashboard card offers.
    */
-  _loadPreviewPermitZones() {
+  _loadPreviewPermitParkingAreas() {
     if (this._getActiveEntryId() || !this._permitOptionsLoaded) return;
     for (const option of this._permitOptions) {
       if (option.disabled || this._zoneStatusTsByEntryId.has(option.id)) {
@@ -2180,34 +2201,41 @@ var CityVisitorParkingNewReservationCard = class extends BaseLocalizedCard {
     const target = event.currentTarget;
     this._handlePermitChange(extractEventValue(event, target));
   }
-  _handleZoneSelectChange(event) {
+  _handleParkingAreaSelectChange(event) {
     if (this._isInEditor()) return;
     const entryId = this._getActiveEntryId();
     const target = event.currentTarget;
-    const zoneId = extractEventValue(event, target);
-    if (!entryId || !zoneId) return;
-    const zones = this._zonesByEntryId.get(entryId) ?? [];
-    if (!zones.some((zone) => zone.zone_id === zoneId)) return;
-    if (this._resolveZone(entryId)?.zone_id === zoneId) return;
-    this._selectedZoneIdByEntryId.set(entryId, zoneId);
+    const parkingAreaId = extractEventValue(event, target);
+    if (!entryId || !parkingAreaId) return;
+    const parkingAreas = this._parkingAreasByEntryId.get(entryId) ?? [];
+    if (!parkingAreas.some(
+      (parkingArea) => parkingArea.parking_area_id === parkingAreaId
+    ))
+      return;
+    if (this._resolveParkingArea(entryId)?.parking_area_id === parkingAreaId)
+      return;
+    this._selectedParkingAreaIdByEntryId.set(entryId, parkingAreaId);
     applyZoneStatus(this, this._getEffectiveZoneStatus(entryId));
     this._applyStatusDefaultsToForm(true);
     this._requestRender();
   }
-  /** Zone the card uses for an entry: user pick, configured preset, or default. */
-  _resolveZone(entryId) {
-    return resolveCardZone(this._zonesByEntryId.get(entryId) ?? [], {
-      showZone: this._config?.show_zone !== false,
-      // The configured zone preset belongs to the configured permit only.
-      configZoneId: getConfigEntryId(this._config) === entryId ? this._config?.zone_id : null,
-      pickedZoneId: this._selectedZoneIdByEntryId.get(entryId)
-    });
+  /** Parking area the card uses for an entry: user pick, configured preset, or default. */
+  _resolveParkingArea(entryId) {
+    return resolveCardParkingArea(
+      this._parkingAreasByEntryId.get(entryId) ?? [],
+      {
+        showParkingArea: this._config?.show_parking_area !== false,
+        // The configured parking area preset belongs to the configured permit only.
+        configParkingAreaId: getConfigEntryId(this._config) === entryId ? this._config?.parking_area_id : null,
+        pickedParkingAreaId: this._selectedParkingAreaIdByEntryId.get(entryId)
+      }
+    );
   }
-  /** Zone status of an entry with the selected zone's state and window applied. */
+  /** Parking area status of an entry with the selected parking area's state and window applied. */
   _getEffectiveZoneStatus(entryId) {
     const status = this._zoneStatusByEntryId.get(entryId);
     if (!status) return null;
-    return applyZoneToStatus(status, this._resolveZone(entryId));
+    return applyParkingAreaToStatus(status, this._resolveParkingArea(entryId));
   }
   _handleFavoriteSelectChange(event) {
     if (!this._config?.show_favorites || !this._config?.show_name || this._isInEditor())
@@ -2452,14 +2480,14 @@ var CityVisitorParkingNewReservationCard = class extends BaseLocalizedCard {
     }
     try {
       const activeEntryId2 = this._getActiveEntryId();
-      const zone = activeEntryId2 ? this._resolveZone(activeEntryId2) : null;
+      const parkingArea = activeEntryId2 ? this._resolveParkingArea(activeEntryId2) : null;
       await this._hass.callService(DOMAIN, "start_reservation", {
         device_id: this._deviceId,
         start_time: start.toISOString(),
         end_time: end.toISOString(),
         license_plate: license,
-        // Permits without zones send no zone_id at all.
-        ...zone ? { zone_id: zone.zone_id } : {}
+        // Permits without parking areas send no parking_area_id at all.
+        ...parkingArea ? { parking_area_id: parkingArea.parking_area_id } : {}
       });
     } catch (err) {
       const message = this._errorMessage(
@@ -2565,7 +2593,7 @@ var CityVisitorParkingNewReservationCard = class extends BaseLocalizedCard {
     return { start, end };
   }
   _getRelevantWindowTimes() {
-    const validKind = this._zoneState === "chargeable" && this._windowKind === "current" || this._zoneState === "free" && this._windowKind === "next";
+    const validKind = this._paidState === "paid" && this._windowKind === "current" || this._paidState === "free" && this._windowKind === "next";
     if (!validKind) return null;
     const start = parseDateTimeValue(this._windowStartIso);
     const end = parseDateTimeValue(this._windowEndIso);
@@ -3065,7 +3093,7 @@ var CityVisitorParkingActiveCard = class extends BaseLocalizedCard {
     const pendingName = !name && reservation.device_id ? this._getPendingReservationName(reservation.device_id, license) : null;
     const identify = name || pendingName || license || reservation.reservation_id;
     const permitLabel = reservation.device_id ? this._permitLabelsByDeviceId.get(reservation.device_id) : null;
-    const zoneLabel = formatReservationZone(reservation);
+    const parkingAreaLabel = formatReservationParkingArea(reservation);
     const updateFlags = this._getReservationUpdateFlags(reservation.device_id);
     const allowStart = Boolean(updateFlags & UPDATE_START_FLAG);
     const allowEnd = Boolean(updateFlags & UPDATE_END_FLAG);
@@ -3087,8 +3115,8 @@ var CityVisitorParkingActiveCard = class extends BaseLocalizedCard {
           ${permitLabel ? b2`<div class="active-reservation-label">
                 ${this._localize("field.permit")}: ${permitLabel}
               </div>` : A}
-          ${zoneLabel ? b2`<div class="active-reservation-label">
-                ${this._localize("field.zone")}: ${zoneLabel}
+          ${parkingAreaLabel ? b2`<div class="active-reservation-label">
+                ${this._localize("field.parking_area")}: ${parkingAreaLabel}
               </div>` : A}
         </div>
         <div class="active-reservation-times">

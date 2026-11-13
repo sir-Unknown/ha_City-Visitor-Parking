@@ -27,7 +27,7 @@ start_reservation:
       required: true
       selector:
         text: {}
-    zone_id:
+    parking_area_id:
       name: Parking area
       description: The parking area to park in, for permits that cover several parking areas. Leave empty to use the default parking area.
       required: false

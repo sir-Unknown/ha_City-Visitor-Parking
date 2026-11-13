@@ -270,13 +270,13 @@ Recommended steps:
 
 - Options flow MUST support per-weekday overrides for operating times across all 7 days.
 - Store overrides in `entry.options`.
-- Default is no override, meaning provider or library-derived chargeable windows are used.
+- Default is no override, meaning provider or library-derived paid parking hours are used.
 - Validate each day entry; if both start and end exist, enforce `end > start`.
 
 ### Auto-end reservation when free
 
 - Add option `auto_end_reservation_when_free` as a boolean, default `false`.
-- When enabled, automatically end an active reservation early if the permit zone is currently not chargeable according to computed `permit.zone_availability`.
+- When enabled, automatically end an active reservation early if paid parking is currently not active according to computed `permit.zone_availability`.
 - Scope this behavior to the single config entry only.
 - Implement safeguards:
   - track reservation IDs already auto-ended or attempted
@@ -323,7 +323,7 @@ Entities are defined in `custom_components/city_visitor_parking/sensor.py`; the 
 - Count sensors (active reservations, future reservations, favorites) MUST be integers with `SensorStateClass.MEASUREMENT` so Home Assistant records statistics and draws graphs.
 - The remaining balance sensor follows the permit balance unit (duration in hours, `times`, or a currency). Its device class and unit are set dynamically in `_update_from_coordinator`. Do not give it `MEASUREMENT` together with the `MONETARY` device class; Home Assistant only allows `TOTAL` for monetary sensors.
 - Timestamp sensors use `SensorDeviceClass.TIMESTAMP` and have no `state_class`.
-- Availability is derived from chargeable-only validity plus the user's weekday overrides. The state is `chargeable` or `free`.
+- Availability is derived from paid-only validity plus the user's weekday overrides. The state is `paid` or `free`.
 - A new sensor MUST update `sensor.py`, both translation files, the entity tests, and the wiki entities/sensors page. Attribute names are part of the user-visible contract, so do not rename them silently.
 
 ### Stability requirements

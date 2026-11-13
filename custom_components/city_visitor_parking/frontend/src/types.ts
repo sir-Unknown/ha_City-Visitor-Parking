@@ -55,13 +55,13 @@ export type ReservationPayload = {
   /** Present when the plate matches a favorite. */
   favorite_id?: string;
   favorite_name?: string;
-  /** Zone id, present only when the reservation has a zone. */
-  zone_id?: string;
-  /** Zone display name (falls back to the id server-side), with `zone_id`. */
-  zone_name?: string;
-  /** Paid window of the reservation's zone that applies to it, when known. */
-  zone_window_start?: string;
-  zone_window_end?: string;
+  /** Parking area id, present only when the reservation has a parking area. */
+  parking_area_id?: string;
+  /** Parking area display name (falls back to the id server-side), with `parking_area_id`. */
+  parking_area_name?: string;
+  /** Paid window of the reservation's parking area that applies to it, when known. */
+  parking_area_paid_start?: string;
+  parking_area_paid_end?: string;
 };
 
 /**
@@ -108,9 +108,9 @@ export type FavoriteItem = FavoriteOption & {
   [key: string]: unknown;
 };
 
-/** Normalized zone status state consumed by the reservation card UI. */
+/** Normalized parking area status state consumed by the reservation card UI. */
 export type ZoneStatus = {
-  state: "chargeable" | "free" | null;
+  state: "paid" | "free" | null;
   kind: "current" | "next" | null;
   start: string | null;
   end: string | null;
@@ -119,19 +119,19 @@ export type ZoneStatus = {
 };
 
 /**
- * One entry of `ZoneStatusResponse.zones`.
+ * One entry of `ZoneStatusResponse.parking_areas`.
  *
  * State and window fields are computed exactly like the top-level
  * `ZoneStatusResponse` fields (weekday overrides applied), so an entry can
- * replace them when displaying the status of that zone.
+ * replace them when displaying the status of that parking area.
  */
-export type ZoneStatusZone = {
-  /** Opaque provider zone id; send back unchanged as `zone_id`. */
-  zone_id: string;
-  /** Display name of the zone. */
+export type ParkingAreaStatus = {
+  /** Opaque provider parking area id; send back unchanged as `parking_area_id`. */
+  parking_area_id: string;
+  /** Display name of the parking area. */
   name: string;
-  /** Current effective state of this zone. */
-  state: "chargeable" | "free";
+  /** Current effective state of this parking area. */
+  state: "paid" | "free";
   /** Kind of the window referenced by `window_start`/`window_end`. */
   window_kind: "current" | "next" | null;
   /** UTC ISO8601 start timestamp of the effective window, or `null`. */
@@ -151,16 +151,16 @@ export type ZoneStatusZone = {
  */
 export type ZoneStatusResponse = {
   /**
-   * Current effective zone state after applying weekday overrides.
-   * Guaranteed to be `"chargeable"` or `"free"`.
+   * Current effective parking area state after applying weekday overrides.
+   * Guaranteed to be `"paid"` or `"free"`.
    */
-  state: "chargeable" | "free";
+  state: "paid" | "free";
 
   /**
    * Describes the effective window referenced by `window_start`/`window_end`.
-   * `"current"` is only returned while the zone is chargeable right now.
-   * `"next"` is only returned while the zone is currently free and a next
-   * chargeable window exists today or later.
+   * `"current"` is only returned while the parking area is paid right now.
+   * `"next"` is only returned while the parking area is currently free and a next
+   * paid window exists today or later.
    * `null` means there is no relevant current/next effective window.
    */
   window_kind: "current" | "next" | null;
@@ -190,11 +190,11 @@ export type ZoneStatusResponse = {
   balance_unit: string | null;
 
   /**
-   * Zones the permit can park in. The first entry is the provider's default
-   * zone, which the top-level state and window fields describe. Empty when
-   * the provider or permit exposes no zones.
+   * Parking areas the permit can park in. The first entry is the provider's default
+   * parking area, which the top-level state and window fields describe. Empty when
+   * the provider or permit exposes no parking areas.
    */
-  zones: ZoneStatusZone[];
+  parking_areas: ParkingAreaStatus[];
 };
 
 /** HTMLElement variant used for simple input-like value access. */
@@ -239,8 +239,8 @@ export type ParkingCardEditorConfig = {
   show_end_time?: boolean;
   default_license_plate?: string;
   config_entry_id?: string;
-  zone_id?: string;
-  show_zone?: boolean;
+  parking_area_id?: string;
+  show_parking_area?: boolean;
 };
 
 /** Generic schema payload returned to Lovelace card config forms. */

@@ -33,9 +33,9 @@ from custom_components.city_visitor_parking.const import (
     ATTR_FAVORITE_ID,
     ATTR_LICENSE_PLATE,
     ATTR_NAME,
+    ATTR_PARKING_AREA_ID,
     ATTR_RESERVATION_ID,
     ATTR_START_TIME,
-    ATTR_ZONE_ID,
     CONF_AUTO_END,
     DOMAIN,
 )
@@ -43,10 +43,10 @@ from custom_components.city_visitor_parking.models import (
     AutoEndState,
     CoordinatorData,
     Favorite,
+    ParkingArea,
     ProviderConfig,
     Reservation,
     TimeRange,
-    Zone,
     ZoneAvailability,
 )
 from custom_components.city_visitor_parking.payloads import reservation_update_fields
@@ -943,7 +943,7 @@ async def test_service_list_reservations_response(
         start_time=now - timedelta(hours=1),
         end_time=now + timedelta(hours=1),
         license_plate="AB-1234",
-        zone_id="630",
+        parking_area_id="630",
     )
     future_reservation = Reservation(
         reservation_id="res2",
@@ -965,15 +965,15 @@ async def test_service_list_reservations_response(
         reservations=(active_reservation, future_reservation, past_reservation),
         favorites=(Favorite(favorite_id="fav1", license_plate="AB1234", name="Ada"),),
         zone_availability=ZoneAvailability(
-            is_chargeable_now=True,
+            is_paid_now=True,
             next_change_time=None,
             windows_today=(),
         ),
         active_reservations=(active_reservation,),
-        zones=(
-            _zone("10"),
-            Zone(
-                zone_id="630",
+        parking_areas=(
+            _parking_area("10"),
+            ParkingArea(
+                parking_area_id="630",
                 name="Centrum",
                 zone_validity=(),
                 zone_availability=_FREE,
@@ -1010,13 +1010,13 @@ async def test_service_list_reservations_response(
     assert active_payload[ATTR_LICENSE_PLATE] == "AB-1234"
     assert active_payload[ATTR_FAVORITE_ID] == "fav1"
     assert active_payload["favorite_name"] == "Ada"
-    assert active_payload["zone_id"] == "630"
-    assert active_payload["zone_name"] == "Centrum"
+    assert active_payload["parking_area_id"] == "630"
+    assert active_payload["parking_area_name"] == "Centrum"
     future_payload = next(
         item for item in reservations if item[ATTR_RESERVATION_ID] == "res2"
     )
-    assert "zone_id" not in future_payload
-    assert "zone_name" not in future_payload
+    assert "parking_area_id" not in future_payload
+    assert "parking_area_name" not in future_payload
 
 
 async def test_service_list_reservations_stale(hass: HomeAssistant) -> None:
@@ -1039,7 +1039,7 @@ async def test_service_list_reservations_stale(hass: HomeAssistant) -> None:
         ),
         favorites=(),
         zone_availability=ZoneAvailability(
-            is_chargeable_now=True,
+            is_paid_now=True,
             next_change_time=None,
             windows_today=(),
         ),
@@ -1091,7 +1091,7 @@ async def test_service_get_status_response(hass: HomeAssistant) -> None:
         reservations=(),
         favorites=(),
         zone_availability=ZoneAvailability(
-            is_chargeable_now=False,
+            is_paid_now=False,
             next_change_time=effective_range.start,
             windows_today=(effective_range,),
         ),
@@ -1110,7 +1110,7 @@ async def test_service_get_status_response(hass: HomeAssistant) -> None:
         )
 
     assert response["state"] == "free"
-    assert response["is_chargeable_now"] is False
+    assert response["is_paid_now"] is False
     assert response["window_kind"] == "next"
     assert response["permit_id"] == "permit1"
     assert response["remaining_balance"] == EXPECTED_REMAINING_MINUTES
@@ -1148,7 +1148,7 @@ async def test_service_get_status_stale(hass: HomeAssistant) -> None:
         reservations=(),
         favorites=(),
         zone_availability=ZoneAvailability(
-            is_chargeable_now=True,
+            is_paid_now=True,
             next_change_time=window.end,
             windows_today=(window,),
         ),
@@ -1204,7 +1204,7 @@ async def test_service_get_status_stale_recomputes_consistent_windows(
         reservations=(),
         favorites=(),
         zone_availability=ZoneAvailability(
-            is_chargeable_now=True,
+            is_paid_now=True,
             next_change_time=stale_effective_range.end,
             windows_today=(stale_effective_range,),
         ),
@@ -1225,7 +1225,7 @@ async def test_service_get_status_stale_recomputes_consistent_windows(
 
     assert response["stale"] is True
     assert response["state"] == "free"
-    assert response["is_chargeable_now"] is False
+    assert response["is_paid_now"] is False
     assert response["window_kind"] == "next"
     assert response["next_change_time"] == effective_range.start.isoformat()
     assert response["effective_windows_today"] == [
@@ -1361,41 +1361,44 @@ async def test_service_input_error_does_not_renew_session(
     entry.runtime_data.coordinator.async_renew_session.assert_not_awaited()
 
 
-def _coordinator_data(permit_id: str, zones: tuple[Zone, ...] = ()) -> CoordinatorData:
-    """Return empty coordinator data, optionally with selectable zones."""
+def _coordinator_data(
+    permit_id: str, parking_areas: tuple[ParkingArea, ...] = ()
+) -> CoordinatorData:
+    """Return empty coordinator data, optionally with selectable parking areas."""
     return CoordinatorData(
         permit_id=permit_id,
         permit_remaining_balance=0,
         permit_balance_unit=None,
-        zone_validity=zones[0].zone_validity if zones else (),
+        zone_validity=parking_areas[0].zone_validity if parking_areas else (),
         reservations=(),
         favorites=(),
         zone_availability=_FREE,
         active_reservations=(),
-        zones=zones,
+        parking_areas=parking_areas,
     )
 
 
-_FREE = ZoneAvailability(
-    is_chargeable_now=False, next_change_time=None, windows_today=()
-)
+_FREE = ZoneAvailability(is_paid_now=False, next_change_time=None, windows_today=())
 
 
-def _zone(zone_id: str) -> Zone:
-    """Return a selectable zone without windows."""
-    return Zone(
-        zone_id=zone_id, name=zone_id, zone_validity=(), zone_availability=_FREE
+def _parking_area(parking_area_id: str) -> ParkingArea:
+    """Return a selectable parking area without windows."""
+    return ParkingArea(
+        parking_area_id=parking_area_id,
+        name=parking_area_id,
+        zone_validity=(),
+        zone_availability=_FREE,
     )
 
 
-async def test_service_start_reservation_books_in_the_default_or_requested_zone(
+async def test_service_start_reservation_books_in_the_default_or_requested_parking_area(
     hass: HomeAssistant,
 ) -> None:
-    """Without zone_id the first (default) zone is used; a known zone_id is passed."""
+    """Without a parking area ID the default is booked; a known ID is passed on."""
     await async_setup_services(hass)
     entry, device, provider = _create_entry_with_device(hass, "permit1")
     entry.runtime_data.coordinator.data = _coordinator_data(
-        "permit1", (_zone("630"), _zone("10"))
+        "permit1", (_parking_area("630"), _parking_area("10"))
     )
     now = datetime(2025, 1, 1, 12, 0, tzinfo=UTC)
     call = {
@@ -1412,24 +1415,26 @@ async def test_service_start_reservation_books_in_the_default_or_requested_zone(
         await hass.services.async_call(
             DOMAIN,
             SERVICE_START_RESERVATION,
-            {**call, ATTR_ZONE_ID: "10"},
+            {**call, ATTR_PARKING_AREA_ID: "10"},
             blocking=True,
         )
 
-    zones = [
+    parking_areas = [
         c.kwargs["reservation_target_id"]
         for c in provider.start_reservation.await_args_list
     ]
-    assert zones == ["630", "10"]
+    assert parking_areas == ["630", "10"]
 
 
-async def test_service_start_reservation_rejects_unknown_zone(
+async def test_service_start_reservation_rejects_unknown_parking_area(
     hass: HomeAssistant,
 ) -> None:
-    """A zone outside the permit fails before the provider is called."""
+    """A parking area outside the permit fails before the provider is called."""
     await async_setup_services(hass)
     entry, device, provider = _create_entry_with_device(hass, "permit1")
-    entry.runtime_data.coordinator.data = _coordinator_data("permit1", (_zone("10"),))
+    entry.runtime_data.coordinator.data = _coordinator_data(
+        "permit1", (_parking_area("10"),)
+    )
     now = datetime(2025, 1, 1, 12, 0, tzinfo=UTC)
 
     with freeze_time(now), pytest.raises(ServiceValidationError) as excinfo:
@@ -1441,12 +1446,12 @@ async def test_service_start_reservation_rejects_unknown_zone(
                 ATTR_START_TIME: now + timedelta(hours=1),
                 ATTR_END_TIME: now + timedelta(hours=2),
                 ATTR_LICENSE_PLATE: "AB1234",
-                ATTR_ZONE_ID: "999",
+                ATTR_PARKING_AREA_ID: "999",
             },
             blocking=True,
         )
 
-    assert excinfo.value.translation_key == "invalid_zone"
+    assert excinfo.value.translation_key == "invalid_parking_area"
     provider.start_reservation.assert_not_awaited()
 
 

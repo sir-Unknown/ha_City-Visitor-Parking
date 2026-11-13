@@ -7,15 +7,15 @@ import type {
   ParkingCardEditorConfig,
   SelectOption,
   FormSchema,
-  ZoneStatusZone,
+  ParkingAreaStatus,
 } from "./types";
 import {
   DOMAIN,
-  MIN_SELECTABLE_ZONES,
-  dropForeignZoneId,
+  MIN_SELECTABLE_PARKING_AREAS,
+  dropForeignParkingAreaId,
   fetchPermitEntries,
-  fetchPermitZones,
-  getZoneEditorVisibility,
+  fetchPermitParkingAreas,
+  getParkingAreaEditorVisibility,
   isPermitEntryDisabled,
 } from "./helpers";
 import { ensureTranslations, localize, getGlobalHass } from "./translations";
@@ -61,22 +61,22 @@ export const buildCardTypeOptions = (
   ];
 };
 
-/** Zone settings shown next to the permit setting; omitted when not offered. */
-type ZoneEditorFields = {
-  /** Options for the `zone_id` picker, or `null` to hide it. */
-  zoneOptions: Array<{ value: string; label: string }> | null;
-  showZoneToggle: boolean;
+/** Parking area settings shown next to the permit setting; omitted when not offered. */
+type ParkingAreaEditorFields = {
+  /** Options for the `parking_area_id` picker, or `null` to hide it. */
+  parkingAreaOptions: Array<{ value: string; label: string }> | null;
+  showParkingAreaToggle: boolean;
 };
 
-const NO_ZONE_FIELDS: ZoneEditorFields = {
-  zoneOptions: null,
-  showZoneToggle: false,
+const NO_PARKING_AREA_FIELDS: ParkingAreaEditorFields = {
+  parkingAreaOptions: null,
+  showParkingAreaToggle: false,
 };
 
 const buildCardEditorSchema = (
   cardTypeOptions: ReadonlyArray<readonly [string, string]>,
   displayOptionsExpanded: boolean,
-  zoneFields: ZoneEditorFields = NO_ZONE_FIELDS,
+  parkingAreaFields: ParkingAreaEditorFields = NO_PARKING_AREA_FIELDS,
 ): CardEditorFormSchema => [
   {
     type: "select",
@@ -97,19 +97,28 @@ const buildCardEditorSchema = (
         selector: { config_entry: { integration: DOMAIN } },
         required: false,
       },
-      ...(zoneFields.zoneOptions
+      ...(parkingAreaFields.parkingAreaOptions
         ? [
             {
-              name: "zone_id",
+              name: "parking_area_id",
               selector: {
-                select: { options: zoneFields.zoneOptions, mode: "dropdown" },
+                select: {
+                  options: parkingAreaFields.parkingAreaOptions,
+                  mode: "dropdown",
+                },
               },
               required: false,
             },
           ]
         : []),
-      ...(zoneFields.showZoneToggle
-        ? [{ name: "show_zone", selector: { boolean: {} }, default: true }]
+      ...(parkingAreaFields.showParkingAreaToggle
+        ? [
+            {
+              name: "show_parking_area",
+              selector: { boolean: {} },
+              default: true,
+            },
+          ]
         : []),
       { name: "show_name", selector: { boolean: {} }, default: true },
       { name: "show_favorites", selector: { boolean: {} }, default: true },
@@ -126,15 +135,15 @@ const buildCardEditorSchema = (
 
 /** Lovelace editor element for configuring the new-reservation card. */
 export class CityVisitorParkingCardEditor extends BaseCardEditor<ParkingCardEditorConfig> {
-  // Zones per permit from the status websocket; empty when a fetch failed.
-  private _zonesByEntryId = new Map<string, ZoneStatusZone[]>();
-  private _zonesLoading = new Set<string>();
+  // Parking areas per permit from the status websocket; empty when a fetch failed.
+  private _parkingAreasByEntryId = new Map<string, ParkingAreaStatus[]>();
+  private _parkingAreasLoading = new Set<string>();
   // Enabled permits, loaded only while no permit is configured.
   private _permitIds: string[] | null = null;
   private _permitIdsLoading = false;
 
   protected willUpdate(): void {
-    if (this.hass) this._ensureZones(this.hass as HomeAssistant);
+    if (this.hass) this._ensureParkingAreas(this.hass as HomeAssistant);
   }
 
   protected render(): TemplateResult {
@@ -148,8 +157,8 @@ export class CityVisitorParkingCardEditor extends BaseCardEditor<ParkingCardEdit
     const cardTypeOptions = buildCardTypeOptions(localizeTarget, "editor");
     const displayOptionsExpanded = Boolean(
       this._config?.config_entry_id ||
-      this._config?.zone_id ||
-      this._config?.show_zone === false ||
+      this._config?.parking_area_id ||
+      this._config?.show_parking_area === false ||
       this._config?.show_name === false ||
       this._config?.show_favorites === false ||
       this._config?.show_start_time === false ||
@@ -163,7 +172,7 @@ export class CityVisitorParkingCardEditor extends BaseCardEditor<ParkingCardEdit
         .schema=${buildCardEditorSchema(
           cardTypeOptions,
           displayOptionsExpanded,
-          this._getZoneFields(),
+          this._getParkingAreaFields(),
         )}
         .computeLabel=${computeLabel}
         .computeHelper=${computeHelper}
@@ -175,50 +184,52 @@ export class CityVisitorParkingCardEditor extends BaseCardEditor<ParkingCardEdit
   protected _normalizeConfig(
     config: ParkingCardEditorConfig,
   ): ParkingCardEditorConfig {
-    return dropForeignZoneId(
+    return dropForeignParkingAreaId(
       config,
       this._config?.config_entry_id,
-      this._zonesByEntryId,
+      this._parkingAreasByEntryId,
     );
   }
 
-  /** Zone settings for the current config; see `getZoneEditorVisibility`. */
-  private _getZoneFields(): ZoneEditorFields {
+  /** Parking area settings for the current config; see `getParkingAreaEditorVisibility`. */
+  private _getParkingAreaFields(): ParkingAreaEditorFields {
     const entryId = this._config?.config_entry_id;
-    const permitZones = entryId
-      ? (this._zonesByEntryId.get(entryId) ?? [])
+    const permitParkingAreas = entryId
+      ? (this._parkingAreasByEntryId.get(entryId) ?? [])
       : [];
-    const { showZoneSelect, showZoneToggle } = getZoneEditorVisibility({
-      permitConfigured: Boolean(entryId),
-      permitZoneCount: permitZones.length,
-      anyPermitHasZones: (this._permitIds ?? []).some(
-        (id) =>
-          (this._zonesByEntryId.get(id)?.length ?? 0) >= MIN_SELECTABLE_ZONES,
-      ),
-    });
+    const { showParkingAreaSelect, showParkingAreaToggle } =
+      getParkingAreaEditorVisibility({
+        permitConfigured: Boolean(entryId),
+        permitParkingAreaCount: permitParkingAreas.length,
+        anyPermitHasParkingAreas: (this._permitIds ?? []).some(
+          (id) =>
+            (this._parkingAreasByEntryId.get(id)?.length ?? 0) >=
+            MIN_SELECTABLE_PARKING_AREAS,
+        ),
+      });
     return {
-      zoneOptions: showZoneSelect
-        ? permitZones.map((zone) => ({
-            value: zone.zone_id,
-            label: zone.name || zone.zone_id,
+      parkingAreaOptions: showParkingAreaSelect
+        ? permitParkingAreas.map((parkingArea) => ({
+            value: parkingArea.parking_area_id,
+            label: parkingArea.name || parkingArea.parking_area_id,
           }))
         : null,
-      showZoneToggle,
+      showParkingAreaToggle,
     };
   }
 
   /**
-   * Loads the zones that decide which zone settings are shown: those of the
+   * Loads the parking areas that decide which parking area settings are shown: those of the
    * configured permit, or, without one, those of every enabled permit.
    */
-  private _ensureZones(hass: HomeAssistant): void {
+  private _ensureParkingAreas(hass: HomeAssistant): void {
     const entryId = this._config?.config_entry_id;
     if (entryId) {
-      this._loadZones(hass, entryId);
+      this._loadParkingAreas(hass, entryId);
       return;
     }
     if (this._permitIds) {
-      for (const id of this._permitIds) this._loadZones(hass, id);
+      for (const id of this._permitIds) this._loadParkingAreas(hass, id);
       return;
     }
     if (this._permitIdsLoading) return;
@@ -238,14 +249,17 @@ export class CityVisitorParkingCardEditor extends BaseCardEditor<ParkingCardEdit
       });
   }
 
-  private _loadZones(hass: HomeAssistant, entryId: string): void {
-    if (this._zonesByEntryId.has(entryId) || this._zonesLoading.has(entryId)) {
+  private _loadParkingAreas(hass: HomeAssistant, entryId: string): void {
+    if (
+      this._parkingAreasByEntryId.has(entryId) ||
+      this._parkingAreasLoading.has(entryId)
+    ) {
       return;
     }
-    this._zonesLoading.add(entryId);
-    void fetchPermitZones(hass, entryId).then((zones) => {
-      this._zonesByEntryId.set(entryId, zones);
-      this._zonesLoading.delete(entryId);
+    this._parkingAreasLoading.add(entryId);
+    void fetchPermitParkingAreas(hass, entryId).then((parkingAreas) => {
+      this._parkingAreasByEntryId.set(entryId, parkingAreas);
+      this._parkingAreasLoading.delete(entryId);
       this.requestUpdate();
     });
   }

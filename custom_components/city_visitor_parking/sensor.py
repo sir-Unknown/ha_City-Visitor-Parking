@@ -9,9 +9,9 @@ from homeassistant.const import EntityCategory, UnitOfTime
 from homeassistant.core import callback
 from homeassistant.util import dt as dt_util
 
-from .const import STATE_CHARGEABLE, STATE_FREE
+from .const import STATE_FREE, STATE_PAID
 from .entity import CityVisitorParkingEntity
-from .payloads import reservation_zone_payload, utc_iso
+from .payloads import reservation_parking_area_payload, utc_iso
 from .time_windows import (
     current_or_next_window,
     current_or_next_window_with_overrides,
@@ -25,12 +25,12 @@ if TYPE_CHECKING:
     from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
     from .coordinator import CityVisitorParkingCoordinator
-    from .models import CoordinatorData, TimeRange, Zone, ZoneAvailability
+    from .models import CoordinatorData, ParkingArea, TimeRange, ZoneAvailability
     from .runtime_data import CityVisitorParkingConfigEntry
 
 PARALLEL_UPDATES = 0
-# Single-zone permits are fully covered by the permit-level sensors.
-MIN_ZONES_FOR_ZONE_SENSORS = 2
+# Single parking area permits are fully covered by the permit-level sensors.
+MIN_PARKING_AREAS_FOR_PARKING_AREA_SENSORS = 2
 
 
 async def async_setup_entry(
@@ -45,42 +45,50 @@ async def async_setup_entry(
             ActiveReservationsSensor(coordinator, entry),
             FutureReservationsSensor(coordinator, entry),
             RemainingTimeSensor(coordinator, entry),
-            PermitZoneAvailabilitySensor(coordinator, entry),
-            ProviderChargeableStartSensor(coordinator, entry),
-            ProviderChargeableEndSensor(coordinator, entry),
-            NextChargeableStartSensor(coordinator, entry),
-            NextChargeableEndSensor(coordinator, entry),
+            PaidParkingSensor(coordinator, entry),
+            ProviderPaidParkingStartSensor(coordinator, entry),
+            ProviderPaidParkingEndSensor(coordinator, entry),
+            PaidParkingStartSensor(coordinator, entry),
+            PaidParkingEndSensor(coordinator, entry),
             FavoritesSensor(coordinator, entry),
         ]
     )
 
-    known_zone_ids: set[str] = set()
+    known_parking_area_ids: set[str] = set()
 
     @callback
-    def _async_add_zone_sensors() -> None:
-        """Add per-zone sensors for zones that have no entities yet.
+    def _async_add_parking_area_sensors() -> None:
+        """Add per-parking-area sensors for parking areas that have no entities yet.
 
-        Zones are only known from coordinator data and may change between
-        refreshes, so this also runs on every coordinator update. Zones that
+        Parking areas are only known from coordinator data and may change between
+        refreshes, so this also runs on every coordinator update. ParkingAreas that
         disappear keep their entities, which then report unavailable.
         """
         data = coordinator.data
-        if len(data.zones) < MIN_ZONES_FOR_ZONE_SENSORS:
+        if len(data.parking_areas) < MIN_PARKING_AREAS_FOR_PARKING_AREA_SENSORS:
             return
-        new_zones = [zone for zone in data.zones if zone.zone_id not in known_zone_ids]
-        if not new_zones:
+        new_parking_areas = [
+            parking_area
+            for parking_area in data.parking_areas
+            if parking_area.parking_area_id not in known_parking_area_ids
+        ]
+        if not new_parking_areas:
             return
-        known_zone_ids.update(zone.zone_id for zone in new_zones)
+        known_parking_area_ids.update(
+            parking_area.parking_area_id for parking_area in new_parking_areas
+        )
         async_add_entities(
             [
-                sensor_cls(coordinator, entry, zone)
-                for zone in new_zones
-                for sensor_cls in ZONE_SENSOR_CLASSES
+                sensor_cls(coordinator, entry, parking_area)
+                for parking_area in new_parking_areas
+                for sensor_cls in PARKING_AREA_SENSOR_CLASSES
             ]
         )
 
-    _async_add_zone_sensors()
-    entry.async_on_unload(coordinator.async_add_listener(_async_add_zone_sensors))
+    _async_add_parking_area_sensors()
+    entry.async_on_unload(
+        coordinator.async_add_listener(_async_add_parking_area_sensors)
+    )
 
 
 class ActiveReservationsSensor(CityVisitorParkingEntity):
@@ -95,16 +103,16 @@ class ActiveReservationsSensor(CityVisitorParkingEntity):
         data = self.coordinator.data
         self._attr_native_value = len(data.active_reservations)
         now = dt_util.utcnow()
-        # License plates stay out of entity attributes (privacy); the zone and its
-        # paid window per reservation let automations act on the right zone.
+        # License plates stay out of entity attributes (privacy); the parking area and
+        # its paid window per reservation let automations act on the right parking area.
         self._attr_extra_state_attributes = {
             "reservations": [
                 {
                     "reservation_id": reservation.reservation_id,
                     "start_time": utc_iso(reservation.start_time),
                     "end_time": utc_iso(reservation.end_time),
-                    **reservation_zone_payload(
-                        reservation, data.zones, self._entry.options, now
+                    **reservation_parking_area_payload(
+                        reservation, data.parking_areas, self._entry.options, now
                     ),
                 }
                 for reservation in data.active_reservations
@@ -177,28 +185,31 @@ class RemainingTimeSensor(CityVisitorParkingEntity):
         self._attr_extra_state_attributes = attributes
 
 
-class _ChargeableWindowSensor(CityVisitorParkingEntity):
-    """Base for sensors derived from one set of chargeable windows.
+class _PaidParkingWindowSensor(CityVisitorParkingEntity):
+    """Base for sensors derived from one set of paid windows.
 
-    Permit-level sensors read the default zone from the coordinator data;
-    per-zone subclasses override ``_zone_source`` to read their own zone.
+    Permit-level sensors read the default parking area from the coordinator data; per-
+    parking area subclasses override ``_parking_area_source`` to read their own parking
+    area.
     """
 
-    def _zone_source(self) -> tuple[tuple[TimeRange, ...], ZoneAvailability] | None:
-        """Return the zone validity and availability, or None when unknown."""
+    def _parking_area_source(
+        self,
+    ) -> tuple[tuple[TimeRange, ...], ZoneAvailability] | None:
+        """Return the parking area validity and availability, or None when unknown."""
         data = self.coordinator.data
         return data.zone_validity, data.zone_availability
 
 
-class PermitZoneAvailabilitySensor(_ChargeableWindowSensor):
-    """Sensor for permit zone availability."""
+class PaidParkingSensor(_PaidParkingWindowSensor):
+    """Sensor for whether paid parking is active for the permit."""
 
-    _entity_key = "permit_zone_availability"
-    _attr_translation_key: str | None = "permit_zone_availability"
+    _entity_key = "paid_parking"
+    _attr_translation_key: str | None = "paid_parking"
 
     def _update_from_coordinator(self) -> None:
         """Update the sensor from coordinator data."""
-        source = self._zone_source()
+        source = self._parking_area_source()
         if source is None:
             return
         zone_validity, availability = source
@@ -213,7 +224,7 @@ class PermitZoneAvailabilitySensor(_ChargeableWindowSensor):
         attributes: dict[str, object] = dict(self._attr_extra_state_attributes or {})  # type: ignore[has-type]
         attributes.update(
             {
-                "is_chargeable_now": availability.is_chargeable_now,
+                "is_paid_now": availability.is_paid_now,
                 "Today provider": [
                     _timerange_to_dict(window) for window in provider_windows
                 ],
@@ -228,58 +239,56 @@ class PermitZoneAvailabilitySensor(_ChargeableWindowSensor):
                 else None,
             }
         )
-        self._attr_native_value = (
-            STATE_CHARGEABLE if availability.is_chargeable_now else STATE_FREE
-        )
+        self._attr_native_value = STATE_PAID if availability.is_paid_now else STATE_FREE
         self._attr_extra_state_attributes = attributes
 
 
-class ProviderChargeableStartSensor(_ChargeableWindowSensor):
-    """Sensor for the start of the current or next provider chargeable window."""
+class ProviderPaidParkingStartSensor(_PaidParkingWindowSensor):
+    """Sensor for the start of the current or next provider paid window."""
 
-    _entity_key = "provider_chargeable_start"
-    _attr_translation_key: str | None = "provider_chargeable_start"
+    _entity_key = "provider_paid_parking_start"
+    _attr_translation_key: str | None = "provider_paid_parking_start"
     _attr_device_class: SensorDeviceClass | None = SensorDeviceClass.TIMESTAMP
     _attr_entity_category: EntityCategory | None = EntityCategory.DIAGNOSTIC
     _attr_entity_registry_enabled_default: bool = False
 
     def _update_from_coordinator(self) -> None:
         """Update the sensor from coordinator data."""
-        source = self._zone_source()
+        source = self._parking_area_source()
         if source is None:
             return
         window = current_or_next_window(source[0], dt_util.utcnow())
         self._attr_native_value = window.start if window else None
 
 
-class ProviderChargeableEndSensor(_ChargeableWindowSensor):
-    """Sensor for the end of the current or next provider chargeable window."""
+class ProviderPaidParkingEndSensor(_PaidParkingWindowSensor):
+    """Sensor for the end of the current or next provider paid window."""
 
-    _entity_key = "provider_chargeable_end"
-    _attr_translation_key: str | None = "provider_chargeable_end"
+    _entity_key = "provider_paid_parking_end"
+    _attr_translation_key: str | None = "provider_paid_parking_end"
     _attr_device_class: SensorDeviceClass | None = SensorDeviceClass.TIMESTAMP
     _attr_entity_category: EntityCategory | None = EntityCategory.DIAGNOSTIC
     _attr_entity_registry_enabled_default: bool = False
 
     def _update_from_coordinator(self) -> None:
         """Update the sensor from coordinator data."""
-        source = self._zone_source()
+        source = self._parking_area_source()
         if source is None:
             return
         window = current_or_next_window(source[0], dt_util.utcnow())
         self._attr_native_value = window.end if window else None
 
 
-class NextChargeableStartSensor(_ChargeableWindowSensor):
-    """Sensor for the start of the current or next chargeable window."""
+class PaidParkingStartSensor(_PaidParkingWindowSensor):
+    """Sensor for the start of the current or next paid window."""
 
-    _entity_key = "next_chargeable_start"
-    _attr_translation_key: str | None = "next_chargeable_start"
+    _entity_key = "paid_parking_start"
+    _attr_translation_key: str | None = "paid_parking_start"
     _attr_device_class: SensorDeviceClass | None = SensorDeviceClass.TIMESTAMP
 
     def _update_from_coordinator(self) -> None:
         """Update the sensor from coordinator data."""
-        source = self._zone_source()
+        source = self._parking_area_source()
         if source is None:
             return
         window = current_or_next_window_with_overrides(
@@ -290,16 +299,16 @@ class NextChargeableStartSensor(_ChargeableWindowSensor):
         self._attr_native_value = window.start if window else None
 
 
-class NextChargeableEndSensor(_ChargeableWindowSensor):
-    """Sensor for the end of the current or next chargeable window."""
+class PaidParkingEndSensor(_PaidParkingWindowSensor):
+    """Sensor for the end of the current or next paid window."""
 
-    _entity_key = "next_chargeable_end"
-    _attr_translation_key: str | None = "next_chargeable_end"
+    _entity_key = "paid_parking_end"
+    _attr_translation_key: str | None = "paid_parking_end"
     _attr_device_class: SensorDeviceClass | None = SensorDeviceClass.TIMESTAMP
 
     def _update_from_coordinator(self) -> None:
         """Update the sensor from coordinator data."""
-        source = self._zone_source()
+        source = self._parking_area_source()
         if source is None:
             return
         window = current_or_next_window_with_overrides(
@@ -310,87 +319,95 @@ class NextChargeableEndSensor(_ChargeableWindowSensor):
         self._attr_native_value = window.end if window else None
 
 
-class _ZoneSensor(_ChargeableWindowSensor):
-    """Base for sensors of one selectable zone of a multi-zone permit.
+class _ParkingAreaSensor(_PaidParkingWindowSensor):
+    """Base for sensors of one selectable parking area of a multi-parking-area permit.
 
-    The unique ID combines the entry unique ID, the zone ID and a fixed
-    suffix. The entity is unavailable while its zone is missing from the
+    The unique ID combines the entry unique ID, the parking area ID and a fixed
+    suffix. The entity is unavailable while its parking area is missing from the
     coordinator data.
     """
 
-    _zone_entity_suffix: str
+    _parking_area_entity_suffix: str
 
     def __init__(
         self,
         coordinator: CityVisitorParkingCoordinator,
         entry: CityVisitorParkingConfigEntry,
-        zone: Zone,
+        parking_area: ParkingArea,
     ) -> None:
-        """Initialize the zone sensor."""
-        self._zone_id = zone.zone_id
-        self._attr_translation_placeholders = {"zone": zone.name}
+        """Initialize the parking area sensor."""
+        self._parking_area_id = parking_area.parking_area_id
+        self._attr_translation_placeholders = {"parking_area": parking_area.name}
         super().__init__(
-            coordinator, entry, f"zone:{zone.zone_id}:{self._zone_entity_suffix}"
+            coordinator,
+            entry,
+            f"parking_area:{parking_area.parking_area_id}:{self._parking_area_entity_suffix}",
         )
 
     @property
     def available(self) -> bool:  # pyright: ignore[reportIncompatibleVariableOverride]
-        """Return if the coordinator is healthy and the zone still exists."""
-        return super().available and self._zone() is not None
+        """Return if the coordinator is healthy and the parking area still exists."""
+        return super().available and self._parking_area() is not None
 
-    def _zone(self) -> Zone | None:
-        """Return this sensor's zone from the coordinator data."""
-        return self.coordinator.data.zone(self._zone_id)
+    def _parking_area(self) -> ParkingArea | None:
+        """Return this sensor's parking area from the coordinator data."""
+        return self.coordinator.data.parking_area(self._parking_area_id)
 
-    def _zone_source(self) -> tuple[tuple[TimeRange, ...], ZoneAvailability] | None:
-        """Return the zone's validity and availability, or None when gone."""
-        zone = self._zone()
-        if zone is None:
+    def _parking_area_source(
+        self,
+    ) -> tuple[tuple[TimeRange, ...], ZoneAvailability] | None:
+        """Return the parking area's validity and availability, or None when gone."""
+        parking_area = self._parking_area()
+        if parking_area is None:
             return None
-        return zone.zone_validity, zone.zone_availability
+        return parking_area.zone_validity, parking_area.zone_availability
 
 
-class ZoneAvailabilitySensor(_ZoneSensor, PermitZoneAvailabilitySensor):
-    """Sensor for the availability of one zone."""
+class ParkingAreaPaidParkingSensor(_ParkingAreaSensor, PaidParkingSensor):
+    """Sensor for whether paid parking is active in one parking area."""
 
-    _zone_entity_suffix = "availability"
-    _attr_translation_key: str | None = "zone_availability"
-
-
-class ZoneProviderChargeableStartSensor(_ZoneSensor, ProviderChargeableStartSensor):
-    """Sensor for the start of a zone's current or next provider window."""
-
-    _zone_entity_suffix = "provider_chargeable_start"
-    _attr_translation_key: str | None = "zone_provider_chargeable_start"
+    _parking_area_entity_suffix = "paid_parking"
+    _attr_translation_key: str | None = "parking_area_paid_parking"
 
 
-class ZoneProviderChargeableEndSensor(_ZoneSensor, ProviderChargeableEndSensor):
-    """Sensor for the end of a zone's current or next provider window."""
+class ParkingAreaProviderPaidParkingStartSensor(
+    _ParkingAreaSensor, ProviderPaidParkingStartSensor
+):
+    """Sensor for the start of a parking area's current or next provider window."""
 
-    _zone_entity_suffix = "provider_chargeable_end"
-    _attr_translation_key: str | None = "zone_provider_chargeable_end"
-
-
-class ZoneNextChargeableStartSensor(_ZoneSensor, NextChargeableStartSensor):
-    """Sensor for the start of a zone's current or next chargeable window."""
-
-    _zone_entity_suffix = "next_chargeable_start"
-    _attr_translation_key: str | None = "zone_next_chargeable_start"
+    _parking_area_entity_suffix = "provider_paid_parking_start"
+    _attr_translation_key: str | None = "parking_area_provider_paid_parking_start"
 
 
-class ZoneNextChargeableEndSensor(_ZoneSensor, NextChargeableEndSensor):
-    """Sensor for the end of a zone's current or next chargeable window."""
+class ParkingAreaProviderPaidParkingEndSensor(
+    _ParkingAreaSensor, ProviderPaidParkingEndSensor
+):
+    """Sensor for the end of a parking area's current or next provider window."""
 
-    _zone_entity_suffix = "next_chargeable_end"
-    _attr_translation_key: str | None = "zone_next_chargeable_end"
+    _parking_area_entity_suffix = "provider_paid_parking_end"
+    _attr_translation_key: str | None = "parking_area_provider_paid_parking_end"
 
 
-ZONE_SENSOR_CLASSES: tuple[type[_ZoneSensor], ...] = (
-    ZoneAvailabilitySensor,
-    ZoneProviderChargeableStartSensor,
-    ZoneProviderChargeableEndSensor,
-    ZoneNextChargeableStartSensor,
-    ZoneNextChargeableEndSensor,
+class ParkingAreaPaidParkingStartSensor(_ParkingAreaSensor, PaidParkingStartSensor):
+    """Sensor for the start of a parking area's current or next paid window."""
+
+    _parking_area_entity_suffix = "paid_parking_start"
+    _attr_translation_key: str | None = "parking_area_paid_parking_start"
+
+
+class ParkingAreaPaidParkingEndSensor(_ParkingAreaSensor, PaidParkingEndSensor):
+    """Sensor for the end of a parking area's current or next paid window."""
+
+    _parking_area_entity_suffix = "paid_parking_end"
+    _attr_translation_key: str | None = "parking_area_paid_parking_end"
+
+
+PARKING_AREA_SENSOR_CLASSES: tuple[type[_ParkingAreaSensor], ...] = (
+    ParkingAreaPaidParkingSensor,
+    ParkingAreaProviderPaidParkingStartSensor,
+    ParkingAreaProviderPaidParkingEndSensor,
+    ParkingAreaPaidParkingStartSensor,
+    ParkingAreaPaidParkingEndSensor,
 )
 
 

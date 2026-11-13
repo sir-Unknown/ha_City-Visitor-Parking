@@ -513,7 +513,7 @@ def test_override_helper_parsing() -> None:
     assert _format_override_windows({"start": "09:00", "end": "10:00"}) == "09:00-10:00"
     assert _format_override_windows([{"start": "09:00"}]) == ""
     assert normalize_override_windows([]) == []
-    assert _day_windows_key("mon") == "monday_chargeable_windows"
+    assert _day_windows_key("mon") == "monday_paid_hours"
     assert _parse_time(time(8, 0)) == time(8, 0)
     assert _parse_time("08:00") is not None
     assert _parse_time("") is None

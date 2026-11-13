@@ -21,7 +21,7 @@ from .models import TimeRange
 def current_or_next_window(
     windows: Sequence[TimeRange], now: datetime
 ) -> TimeRange | None:
-    """Return the current or next chargeable window."""
+    """Return the current or next paid window."""
     for window in sorted(windows, key=lambda item: item.start):
         if window.end <= now:
             continue
@@ -34,7 +34,7 @@ def current_or_next_window_with_overrides(
     options: Mapping[str, object],
     now: datetime,
 ) -> TimeRange | None:
-    """Return the current or next chargeable window, honoring overrides."""
+    """Return the current or next paid window, honoring overrides."""
     overrides = options.get(CONF_OPERATING_TIME_OVERRIDES)
     free_dates_raw = options.get(CONF_FREE_DATES)
     free_weekdays_raw = options.get(CONF_FREE_WEEKDAYS)
@@ -61,7 +61,7 @@ def current_or_next_window_with_overrides(
                 if block.end <= now:
                     continue
                 # Probe each calendar day in the block; block.start may be a
-                # free day while later days in the same block are chargeable.
+                # free day while later days in the same block are paid.
                 probe = max(block.start, now)
                 probe = probe.replace(hour=0, minute=0, second=0, microsecond=0)
                 while probe < block.end:
@@ -81,11 +81,11 @@ def windows_for_today(
     options: Mapping[str, object],
     now: datetime,
 ) -> list[TimeRange]:
-    """Return chargeable windows for today, applying overrides if present."""
+    """Return paid windows for today, applying overrides if present."""
     local_now = dt_util.as_local(now)
     local_date = local_now.date()
 
-    # Return no chargeable windows when today is a configured free date.
+    # Return no paid windows when today is a configured free date.
     free_dates_raw = options.get(CONF_FREE_DATES)
     if isinstance(free_dates_raw, str) and free_dates_raw.strip():
         today_ddmm = local_now.strftime("%d-%m")
@@ -96,7 +96,7 @@ def windows_for_today(
 
     local_day = WEEKDAY_KEYS[local_now.weekday()]
 
-    # Return no chargeable windows when today is a configured free weekday.
+    # Return no paid windows when today is a configured free weekday.
     free_weekdays_raw = options.get(CONF_FREE_WEEKDAYS)
     if isinstance(free_weekdays_raw, list) and local_day in free_weekdays_raw:
         return []

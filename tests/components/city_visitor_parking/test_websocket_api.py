@@ -20,8 +20,8 @@ from custom_components.city_visitor_parking.const import (
     CONF_PERMIT_ID,
     CONF_PROVIDER_ID,
     DOMAIN,
-    STATE_CHARGEABLE,
     STATE_FREE,
+    STATE_PAID,
 )
 from custom_components.city_visitor_parking.models import (
     AutoEndState,
@@ -156,7 +156,7 @@ async def test_ws_list_favorites_provider_error(hass: HomeAssistant) -> None:
 
 
 async def test_ws_get_status_current_window(hass: HomeAssistant) -> None:
-    """Websocket should return current chargeable window details."""
+    """Websocket should return current paid window details."""
     entry = _create_entry()
     entry.add_to_hass(hass)
     entry.mock_state(hass, config_entries.ConfigEntryState.LOADED)
@@ -174,7 +174,7 @@ async def test_ws_get_status_current_window(hass: HomeAssistant) -> None:
         reservations=(),
         favorites=(),
         zone_availability=ZoneAvailability(
-            is_chargeable_now=True,
+            is_paid_now=True,
             next_change_time=window.end,
             windows_today=(window,),
         ),
@@ -193,7 +193,7 @@ async def test_ws_get_status_current_window(hass: HomeAssistant) -> None:
         await hass.async_block_till_done()
 
     response = _first_result(raw_connection)
-    assert response["state"] == STATE_CHARGEABLE
+    assert response["state"] == STATE_PAID
     assert response["window_kind"] == "current"
     assert response["window_start"] == dt_util.as_utc(window.start).isoformat()
     assert response["window_end"] == dt_util.as_utc(window.end).isoformat()
@@ -218,7 +218,7 @@ async def test_ws_get_status_next_window_override(hass: HomeAssistant) -> None:
         reservations=(),
         favorites=(),
         zone_availability=ZoneAvailability(
-            is_chargeable_now=False,
+            is_paid_now=False,
             next_change_time=None,
             windows_today=(),
         ),
@@ -305,7 +305,7 @@ async def test_ws_list_reservations_reads_coordinator_data(
         reservations=(running, upcoming, ended),
         favorites=(Favorite(favorite_id="fav1", license_plate="AB12CD", name="Mom"),),
         zone_availability=ZoneAvailability(
-            is_chargeable_now=False, next_change_time=None, windows_today=()
+            is_paid_now=False, next_change_time=None, windows_today=()
         ),
         active_reservations=(running,),
     )

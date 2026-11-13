@@ -14,7 +14,7 @@ from custom_components.city_visitor_parking.config_flow import (
 )
 from custom_components.city_visitor_parking.const import (
     CONF_AUTO_END,
-    CONF_DEFAULT_ZONE,
+    CONF_DEFAULT_PARKING_AREA,
     CONF_FREE_DATES,
     CONF_MUNICIPALITY,
     CONF_OPERATING_TIME_OVERRIDES,
@@ -22,7 +22,7 @@ from custom_components.city_visitor_parking.const import (
     CONF_PROVIDER_ID,
     DOMAIN,
 )
-from custom_components.city_visitor_parking.models import Zone, ZoneAvailability
+from custom_components.city_visitor_parking.models import ParkingArea, ZoneAvailability
 
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
@@ -41,7 +41,7 @@ async def test_options_flow_save_overrides(hass: HomeAssistant) -> None:
         {
             CONF_AUTO_END: True,
             "operating_times": {
-                "monday_chargeable_windows": "09:00-13:00, 14:00-17:30",
+                "monday_paid_hours": "09:00-13:00, 14:00-17:30",
             },
             "free_parking_dates": {CONF_FREE_DATES: ""},
         },
@@ -67,7 +67,7 @@ async def test_options_flow_invalid_range(hass: HomeAssistant) -> None:
         result["flow_id"],
         {
             CONF_AUTO_END: False,
-            "operating_times": {"monday_chargeable_windows": "18:00-08:00"},
+            "operating_times": {"monday_paid_hours": "18:00-08:00"},
             "free_parking_dates": {CONF_FREE_DATES: ""},
         },
     )
@@ -86,7 +86,7 @@ async def test_options_flow_incomplete_override(hass: HomeAssistant) -> None:
         result["flow_id"],
         {
             CONF_AUTO_END: False,
-            "operating_times": {"monday_chargeable_windows": "08:00-"},
+            "operating_times": {"monday_paid_hours": "08:00-"},
             "free_parking_dates": {CONF_FREE_DATES: ""},
         },
     )
@@ -136,47 +136,52 @@ async def test_options_flow_expands_with_overrides(hass: HomeAssistant) -> None:
     assert result["type"] == "form"
 
 
-async def test_options_flow_stores_the_default_zone(hass: HomeAssistant) -> None:
-    """A loaded permit with several zones offers and stores a default zone."""
+async def test_options_flow_stores_the_default_parking_area(
+    hass: HomeAssistant,
+) -> None:
+    """A permit with several parking areas offers and stores a default area."""
     entry = _create_entry()
     entry.add_to_hass(hass)
     entry.mock_state(hass, config_entries.ConfigEntryState.LOADED)
-    free = ZoneAvailability(
-        is_chargeable_now=False, next_change_time=None, windows_today=()
-    )
-    zones = tuple(
-        Zone(zone_id=zone_id, name=zone_id, zone_validity=(), zone_availability=free)
-        for zone_id in ("10", "630")
+    free = ZoneAvailability(is_paid_now=False, next_change_time=None, windows_today=())
+    parking_areas = tuple(
+        ParkingArea(
+            parking_area_id=parking_area_id,
+            name=parking_area_id,
+            zone_validity=(),
+            zone_availability=free,
+        )
+        for parking_area_id in ("10", "630")
     )
     entry.runtime_data = SimpleNamespace(
-        coordinator=SimpleNamespace(data=SimpleNamespace(zones=zones))
+        coordinator=SimpleNamespace(data=SimpleNamespace(parking_areas=parking_areas))
     )
 
     result = await hass.config_entries.options.async_init(entry.entry_id)
-    assert CONF_DEFAULT_ZONE in result["data_schema"].schema
+    assert CONF_DEFAULT_PARKING_AREA in result["data_schema"].schema
 
     result = await hass.config_entries.options.async_configure(
         result["flow_id"],
         {
             CONF_AUTO_END: False,
-            CONF_DEFAULT_ZONE: "630",
+            CONF_DEFAULT_PARKING_AREA: "630",
             "operating_times": {},
             "free_parking_dates": {CONF_FREE_DATES: ""},
         },
     )
 
-    assert result["data"][CONF_DEFAULT_ZONE] == "630"
+    assert result["data"][CONF_DEFAULT_PARKING_AREA] == "630"
 
 
-async def test_options_flow_keeps_the_default_zone_when_zones_are_unknown(
+async def test_options_flow_keeps_the_default_area_when_areas_are_unknown(
     hass: HomeAssistant,
 ) -> None:
-    """Saving while zones are unavailable must not drop the stored default zone."""
-    entry = _create_entry(options={CONF_DEFAULT_ZONE: "630"})
+    """Saving without known parking areas must keep the stored default area."""
+    entry = _create_entry(options={CONF_DEFAULT_PARKING_AREA: "630"})
     entry.add_to_hass(hass)
 
     result = await hass.config_entries.options.async_init(entry.entry_id)
-    assert CONF_DEFAULT_ZONE not in result["data_schema"].schema
+    assert CONF_DEFAULT_PARKING_AREA not in result["data_schema"].schema
     result = await hass.config_entries.options.async_configure(
         result["flow_id"],
         {
@@ -186,7 +191,7 @@ async def test_options_flow_keeps_the_default_zone_when_zones_are_unknown(
         },
     )
 
-    assert result["data"][CONF_DEFAULT_ZONE] == "630"
+    assert result["data"][CONF_DEFAULT_PARKING_AREA] == "630"
 
 
 def _create_entry(

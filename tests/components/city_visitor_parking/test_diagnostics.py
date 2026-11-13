@@ -64,7 +64,7 @@ async def test_diagnostics_redacts_sensitive_data(hass: HomeAssistant) -> None:
     entry.add_to_hass(hass)
 
     availability = ZoneAvailability(
-        is_chargeable_now=True,
+        is_paid_now=True,
         next_change_time=None,
         windows_today=(),
     )

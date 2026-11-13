@@ -7,7 +7,7 @@ import type {
   ProgressButtonElement,
   StatusState,
   StatusType,
-  ZoneStatusZone,
+  ParkingAreaStatus,
 } from "./types";
 import { getGlobalHass, localize } from "./translations";
 import { DOMAIN, formatBalanceLabel, normalizeMatchValue } from "./helpers";
@@ -229,11 +229,11 @@ export const renderPermitSelect = (params: {
   `;
 };
 
-/** Renders the zone selector for permits with multiple zones, or a preview. */
-export const renderZoneSelect = (params: {
+/** Renders the parking area selector for permits with multiple parking areas, or a preview. */
+export const renderParkingAreaSelect = (params: {
   hass: HomeAssistant | null | undefined;
   label: string;
-  zones: readonly ZoneStatusZone[];
+  parkingAreas: readonly ParkingAreaStatus[];
   value: string;
   disabled: boolean;
   preview?: boolean;
@@ -245,8 +245,9 @@ export const renderZoneSelect = (params: {
         <ha-input
           appearance="material"
           .label=${params.label}
-          .value=${params.zones.find((zone) => zone.zone_id === params.value)
-            ?.name ?? ""}
+          .value=${params.parkingAreas.find(
+            (parkingArea) => parkingArea.parking_area_id === params.value,
+          )?.name ?? ""}
           ?disabled=${true}
         ></ha-input>
       </div>
@@ -255,13 +256,13 @@ export const renderZoneSelect = (params: {
   return html`
     <div class="row">
       <ha-selector
-        id="zoneSelect"
+        id="parkingAreaSelect"
         .hass=${params.hass}
         .selector=${{
           select: {
-            options: params.zones.map((zone) => ({
-              value: zone.zone_id,
-              label: zone.name || zone.zone_id,
+            options: params.parkingAreas.map((parkingArea) => ({
+              value: parkingArea.parking_area_id,
+              label: parkingArea.name || parkingArea.parking_area_id,
             })),
             mode: "dropdown",
           },

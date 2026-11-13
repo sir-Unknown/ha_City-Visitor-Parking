@@ -16,7 +16,7 @@ import {
   fetchReservations,
   filterDomainDevices,
   formatOptionalDateTimeLocal,
-  formatReservationZone,
+  formatReservationParkingArea,
   getConfigEntryId,
   isHassRunning,
   makeDedupedLoader,
@@ -400,7 +400,7 @@ class CityVisitorParkingActiveCard extends BaseLocalizedCard<CardConfig> {
     const permitLabel = reservation.device_id
       ? this._permitLabelsByDeviceId.get(reservation.device_id)
       : null;
-    const zoneLabel = formatReservationZone(reservation);
+    const parkingAreaLabel = formatReservationParkingArea(reservation);
     const updateFlags = this._getReservationUpdateFlags(reservation.device_id);
     const allowStart = Boolean(updateFlags & UPDATE_START_FLAG);
     const allowEnd = Boolean(updateFlags & UPDATE_END_FLAG);
@@ -430,9 +430,9 @@ class CityVisitorParkingActiveCard extends BaseLocalizedCard<CardConfig> {
                 ${this._localize("field.permit")}: ${permitLabel}
               </div>`
             : nothing}
-          ${zoneLabel
+          ${parkingAreaLabel
             ? html`<div class="active-reservation-label">
-                ${this._localize("field.zone")}: ${zoneLabel}
+                ${this._localize("field.parking_area")}: ${parkingAreaLabel}
               </div>`
             : nothing}
         </div>

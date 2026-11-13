@@ -77,7 +77,7 @@ def test_current_or_next_window_with_overrides_no_windows() -> None:
 # --- free_dates: windows_for_today ---
 
 
-def _make_zone(now: datetime) -> list[TimeRange]:
+def _make_validity(now: datetime) -> list[TimeRange]:
     """Return a zone validity block covering the full day of now (UTC)."""
     day_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
     return [TimeRange(start=day_start, end=day_start.replace(hour=23, minute=59))]
@@ -87,7 +87,7 @@ def test_windows_for_today_annual_free_date_returns_empty() -> None:
     """windows_for_today returns [] when today matches a DD-MM free date."""
     # 2025-12-25 UTC
     now = datetime(2025, 12, 25, 10, 0, tzinfo=UTC)
-    zone_validity = _make_zone(now)
+    zone_validity = _make_validity(now)
     options = {CONF_FREE_DATES: "25-12"}
 
     result = windows_for_today(zone_validity, options, now)
@@ -98,7 +98,7 @@ def test_windows_for_today_annual_free_date_returns_empty() -> None:
 def test_windows_for_today_specific_free_date_returns_empty() -> None:
     """windows_for_today returns [] when today matches a DD-MM-YYYY free date."""
     now = datetime(2025, 4, 18, 10, 0, tzinfo=UTC)
-    zone_validity = _make_zone(now)
+    zone_validity = _make_validity(now)
     options = {CONF_FREE_DATES: "18-04-2025"}
 
     result = windows_for_today(zone_validity, options, now)
@@ -109,7 +109,7 @@ def test_windows_for_today_specific_free_date_returns_empty() -> None:
 def test_windows_for_today_specific_free_date_other_year_not_matched() -> None:
     """A DD-MM-YYYY free date does not suppress windows in a different year."""
     now = datetime(2026, 4, 18, 10, 0, tzinfo=UTC)
-    zone_validity = _make_zone(now)
+    zone_validity = _make_validity(now)
     options = {CONF_FREE_DATES: "18-04-2025"}
 
     result = windows_for_today(zone_validity, options, now)
@@ -120,7 +120,7 @@ def test_windows_for_today_specific_free_date_other_year_not_matched() -> None:
 def test_windows_for_today_non_matching_free_date_returns_windows() -> None:
     """windows_for_today returns normal windows when today is not a free date."""
     now = datetime(2025, 12, 26, 10, 0, tzinfo=UTC)
-    zone_validity = _make_zone(now)
+    zone_validity = _make_validity(now)
     options = {CONF_FREE_DATES: "25-12"}
 
     result = windows_for_today(zone_validity, options, now)
@@ -131,7 +131,7 @@ def test_windows_for_today_non_matching_free_date_returns_windows() -> None:
 def test_windows_for_today_multiple_free_dates() -> None:
     """windows_for_today matches any date in a comma-separated list."""
     now = datetime(2025, 1, 1, 10, 0, tzinfo=UTC)
-    zone_validity = _make_zone(now)
+    zone_validity = _make_validity(now)
     options = {CONF_FREE_DATES: "25-12, 01-01"}
 
     result = windows_for_today(zone_validity, options, now)
@@ -145,7 +145,7 @@ def test_windows_for_today_multiple_free_dates() -> None:
 def test_current_or_next_window_free_date_no_overrides_returns_none() -> None:
     """free_dates suppresses the window even when no day overrides are set."""
     now = datetime(2025, 12, 25, 10, 0, tzinfo=UTC)
-    zone_validity = _make_zone(now)
+    zone_validity = _make_validity(now)
     options = {CONF_FREE_DATES: "25-12"}
 
     window = current_or_next_window_with_overrides(zone_validity, options, now)
@@ -157,7 +157,7 @@ def test_current_or_next_window_free_date_with_overrides_finds_next_week() -> No
     """free_dates suppresses today; the same-weekday override next week is found."""
     # 2025-12-25 is a Thursday; the next Thursday is 2026-01-01 (offset 7).
     now = datetime(2025, 12, 25, 10, 0, tzinfo=UTC)
-    zone_validity = _make_zone(now)
+    zone_validity = _make_validity(now)
     options = {
         CONF_FREE_DATES: "25-12",
         CONF_OPERATING_TIME_OVERRIDES: {"thu": [{"start": "09:00", "end": "17:00"}]},

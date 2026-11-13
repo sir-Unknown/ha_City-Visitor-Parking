@@ -17,7 +17,7 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 from custom_components.city_visitor_parking.const import (
     CONF_OPERATING_TIME_OVERRIDES,
     DOMAIN,
-    STATE_CHARGEABLE,
+    STATE_PAID,
 )
 from custom_components.city_visitor_parking.coordinator import (
     _compute_zone_availability,
@@ -26,26 +26,26 @@ from custom_components.city_visitor_parking.entity import CityVisitorParkingEnti
 from custom_components.city_visitor_parking.models import (
     CoordinatorData,
     Favorite,
+    ParkingArea,
     Reservation,
     TimeRange,
-    Zone,
     ZoneAvailability,
 )
 from custom_components.city_visitor_parking.sensor import (
     ActiveReservationsSensor,
     FavoritesSensor,
     FutureReservationsSensor,
-    NextChargeableEndSensor,
-    NextChargeableStartSensor,
-    PermitZoneAvailabilitySensor,
-    ProviderChargeableEndSensor,
-    ProviderChargeableStartSensor,
+    PaidParkingEndSensor,
+    PaidParkingSensor,
+    PaidParkingStartSensor,
+    ParkingAreaPaidParkingEndSensor,
+    ParkingAreaPaidParkingSensor,
+    ParkingAreaPaidParkingStartSensor,
+    ParkingAreaProviderPaidParkingEndSensor,
+    ParkingAreaProviderPaidParkingStartSensor,
+    ProviderPaidParkingEndSensor,
+    ProviderPaidParkingStartSensor,
     RemainingTimeSensor,
-    ZoneAvailabilitySensor,
-    ZoneNextChargeableEndSensor,
-    ZoneNextChargeableStartSensor,
-    ZoneProviderChargeableEndSensor,
-    ZoneProviderChargeableStartSensor,
     _as_utc_iso,
     _next_end_time,
     _remaining_balance,
@@ -69,12 +69,12 @@ EXPECTED_DURATION_BALANCE = 120
 EXPECTED_MONETARY_BALANCE = 12.5
 EXPECTED_EURO_BALANCE = 237.5
 PERMIT_SENSOR_COUNT = 9
-ZONE_SENSOR_SUFFIXES = (
-    "availability",
-    "provider_chargeable_start",
-    "provider_chargeable_end",
-    "next_chargeable_start",
-    "next_chargeable_end",
+PARKING_AREA_SENSOR_SUFFIXES = (
+    "paid_parking",
+    "provider_paid_parking_start",
+    "provider_paid_parking_end",
+    "paid_parking_start",
+    "paid_parking_end",
 )
 
 
@@ -129,7 +129,7 @@ async def test_entity_device_info_includes_configuration_url() -> None:
 
 
 async def test_zone_availability_uses_overrides() -> None:
-    """Zone availability should reflect overrides for the current day."""
+    """Paid parking should reflect overrides for the current day."""
     now = datetime(2025, 1, 6, 9, 30, tzinfo=UTC)
     zone_validity = [
         TimeRange(
@@ -144,7 +144,7 @@ async def test_zone_availability_uses_overrides() -> None:
     with freeze_time(now):
         availability = _compute_zone_availability(zone_validity, options, now)
 
-        assert availability.is_chargeable_now is False
+        assert availability.is_paid_now is False
         local_now = dt_util.as_local(now)
         expected_local = datetime.combine(
             local_now.date(),
@@ -165,7 +165,7 @@ async def test_zone_availability_uses_overrides() -> None:
         )
         coordinator = _make_coordinator(data)
         entry = _create_entry("provider:permit1:city", options=options)
-        sensor = PermitZoneAvailabilitySensor(coordinator, entry)
+        sensor = PaidParkingSensor(coordinator, entry)
 
         assert sensor.native_value == "free"
         attributes = sensor.extra_state_attributes
@@ -188,14 +188,14 @@ async def test_zone_availability_uses_overrides() -> None:
         assert attributes["Today user entered"] == [expected_user]
         assert attributes["Next provider"] == expected_provider
         assert attributes["Next user entered"] == expected_user
-        provider_start_sensor = ProviderChargeableStartSensor(coordinator, entry)
-        provider_end_sensor = ProviderChargeableEndSensor(coordinator, entry)
+        provider_start_sensor = ProviderPaidParkingStartSensor(coordinator, entry)
+        provider_end_sensor = ProviderPaidParkingEndSensor(coordinator, entry)
         assert provider_start_sensor.native_value == zone_validity[0].start
         assert provider_end_sensor.native_value == zone_validity[0].end
 
 
-async def test_next_chargeable_window_uses_overrides() -> None:
-    """Next chargeable window should use overrides when configured."""
+async def test_next_paid_window_uses_overrides() -> None:
+    """Next paid window should use overrides when configured."""
     now = datetime(2025, 1, 6, 9, 30, tzinfo=UTC)
     zone_validity = [
         TimeRange(
@@ -227,8 +227,8 @@ async def test_next_chargeable_window_uses_overrides() -> None:
             unique_id="provider:permit1:city",
             title="City",
         )
-        start_sensor = NextChargeableStartSensor(coordinator, entry)
-        end_sensor = NextChargeableEndSensor(coordinator, entry)
+        start_sensor = PaidParkingStartSensor(coordinator, entry)
+        end_sensor = PaidParkingEndSensor(coordinator, entry)
 
         local_now = dt_util.as_local(now)
         expected_start_local = datetime.combine(
@@ -270,7 +270,7 @@ async def test_sensors_handle_coordinator_update(
 ) -> None:
     """Sensors should refresh values when coordinator updates."""
     now = datetime(2025, 1, 6, 9, 0, tzinfo=UTC)
-    zone_window = TimeRange(
+    parking_area_window = TimeRange(
         start=now - timedelta(hours=1),
         end=now + timedelta(hours=1),
     )
@@ -278,7 +278,7 @@ async def test_sensors_handle_coordinator_update(
         permit_id="permit",
         permit_remaining_balance=120,
         permit_balance_unit=None,
-        zone_validity=(zone_window,),
+        zone_validity=(parking_area_window,),
         reservations=(
             Reservation(
                 reservation_id="future",
@@ -288,9 +288,9 @@ async def test_sensors_handle_coordinator_update(
         ),
         favorites=(Favorite(favorite_id="fav1"),),
         zone_availability=ZoneAvailability(
-            is_chargeable_now=True,
-            next_change_time=zone_window.end,
-            windows_today=(zone_window,),
+            is_paid_now=True,
+            next_change_time=parking_area_window.end,
+            windows_today=(parking_area_window,),
         ),
         active_reservations=(
             Reservation(
@@ -308,11 +308,11 @@ async def test_sensors_handle_coordinator_update(
         active_sensor = ActiveReservationsSensor(coordinator, entry)
         future_sensor = FutureReservationsSensor(coordinator, entry)
         remaining_sensor = RemainingTimeSensor(coordinator, entry)
-        availability_sensor = PermitZoneAvailabilitySensor(coordinator, entry)
-        provider_start = ProviderChargeableStartSensor(coordinator, entry)
-        provider_end = ProviderChargeableEndSensor(coordinator, entry)
-        next_start = NextChargeableStartSensor(coordinator, entry)
-        next_end = NextChargeableEndSensor(coordinator, entry)
+        availability_sensor = PaidParkingSensor(coordinator, entry)
+        provider_start = ProviderPaidParkingStartSensor(coordinator, entry)
+        provider_end = ProviderPaidParkingEndSensor(coordinator, entry)
+        next_start = PaidParkingStartSensor(coordinator, entry)
+        next_end = PaidParkingEndSensor(coordinator, entry)
         favorites_sensor = FavoritesSensor(coordinator, entry)
 
         for sensor in (
@@ -333,11 +333,11 @@ async def test_sensors_handle_coordinator_update(
     assert future_sensor.native_value == 1
     assert remaining_sensor.native_value == EXPECTED_REMAINING_HOURS
     assert remaining_sensor.device_class == SensorDeviceClass.DURATION
-    assert availability_sensor.native_value == STATE_CHARGEABLE
-    assert provider_start.native_value == zone_window.start
-    assert provider_end.native_value == zone_window.end
-    assert next_start.native_value == zone_window.start
-    assert next_end.native_value == zone_window.end
+    assert availability_sensor.native_value == STATE_PAID
+    assert provider_start.native_value == parking_area_window.start
+    assert provider_end.native_value == parking_area_window.end
+    assert next_start.native_value == parking_area_window.start
+    assert next_end.native_value == parking_area_window.end
     assert favorites_sensor.native_value == 1
 
 
@@ -352,7 +352,7 @@ async def test_remaining_balance_sensor_uses_count_presentation() -> None:
             reservations=(),
             favorites=(),
             zone_availability=ZoneAvailability(
-                is_chargeable_now=True,
+                is_paid_now=True,
                 next_change_time=None,
                 windows_today=(),
             ),
@@ -381,7 +381,7 @@ async def test_remaining_balance_sensor_uses_duration_presentation() -> None:
             reservations=(),
             favorites=(),
             zone_availability=ZoneAvailability(
-                is_chargeable_now=True,
+                is_paid_now=True,
                 next_change_time=None,
                 windows_today=(),
             ),
@@ -412,7 +412,7 @@ async def test_remaining_balance_sensor_uses_monetary_presentation() -> None:
             reservations=(),
             favorites=(),
             zone_availability=ZoneAvailability(
-                is_chargeable_now=True,
+                is_paid_now=True,
                 next_change_time=None,
                 windows_today=(),
             ),
@@ -443,7 +443,7 @@ async def test_remaining_balance_sensor_normalizes_euro_currency_code() -> None:
             reservations=(),
             favorites=(),
             zone_availability=ZoneAvailability(
-                is_chargeable_now=True,
+                is_paid_now=True,
                 next_change_time=None,
                 windows_today=(),
             ),
@@ -462,7 +462,7 @@ async def test_remaining_balance_sensor_normalizes_euro_currency_code() -> None:
 def _sample_data(zone_availability: ZoneAvailability | None = None) -> CoordinatorData:
     """Create coordinator data for tests."""
     availability = zone_availability or ZoneAvailability(
-        is_chargeable_now=True,
+        is_paid_now=True,
         next_change_time=None,
         windows_today=(),
     )
@@ -570,50 +570,52 @@ async def test_entity_availability_follows_coordinator() -> None:
     assert entity.available is False
 
 
-_ZONE_NOW = datetime(2025, 1, 6, 10, 0, tzinfo=UTC)
-_ZONE_ENTRY_ID = "provider:permit1:city"
+_PARKING_AREA_NOW = datetime(2025, 1, 6, 10, 0, tzinfo=UTC)
+_PARKING_AREA_ENTRY_ID = "provider:permit1:city"
 
 
-def _zone(zone_id: str, window: TimeRange | None) -> Zone:
-    """Return a zone that is chargeable during ``window`` (free without one)."""
+def _parking_area(parking_area_id: str, window: TimeRange | None) -> ParkingArea:
+    """Return a parking area that is paid during ``window`` (free without one)."""
     validity = (window,) if window else ()
-    chargeable = window is not None and window.start <= _ZONE_NOW < window.end
-    return Zone(
-        zone_id=zone_id,
-        name=f"Z{zone_id}",
+    paid = window is not None and window.start <= _PARKING_AREA_NOW < window.end
+    return ParkingArea(
+        parking_area_id=parking_area_id,
+        name=f"Z{parking_area_id}",
         zone_validity=validity,
         zone_availability=ZoneAvailability(
-            is_chargeable_now=chargeable,
-            next_change_time=window.end if chargeable and window else None,
+            is_paid_now=paid,
+            next_change_time=window.end if paid and window else None,
             windows_today=validity,
         ),
     )
 
 
-def _zone_data(zones: Iterable[Zone]) -> CoordinatorData:
-    """Return coordinator data whose default zone is the first of ``zones``."""
-    zones = tuple(zones)
+def _parking_area_data(parking_areas: Iterable[ParkingArea]) -> CoordinatorData:
+    """Return coordinator data defaulting to the first of ``parking_areas``."""
+    parking_areas = tuple(parking_areas)
     base = _sample_data()
     return CoordinatorData(
         permit_id=base.permit_id,
         permit_remaining_balance=base.permit_remaining_balance,
         permit_balance_unit=None,
-        zone_validity=zones[0].zone_validity if zones else (),
+        zone_validity=parking_areas[0].zone_validity if parking_areas else (),
         reservations=(),
         favorites=(),
-        zone_availability=zones[0].zone_availability
-        if zones
+        zone_availability=parking_areas[0].zone_availability
+        if parking_areas
         else base.zone_availability,
         active_reservations=(),
-        zones=zones,
+        parking_areas=parking_areas,
     )
 
 
 _CURRENT_WINDOW = TimeRange(
-    start=_ZONE_NOW - timedelta(hours=1), end=_ZONE_NOW + timedelta(hours=13)
+    start=_PARKING_AREA_NOW - timedelta(hours=1),
+    end=_PARKING_AREA_NOW + timedelta(hours=13),
 )
 _NEXT_WINDOW = TimeRange(
-    start=_ZONE_NOW + timedelta(hours=14), end=_ZONE_NOW + timedelta(hours=15)
+    start=_PARKING_AREA_NOW + timedelta(hours=14),
+    end=_PARKING_AREA_NOW + timedelta(hours=15),
 )
 
 
@@ -623,7 +625,7 @@ async def _setup_sensors(
     """Run the sensor platform setup and return coordinator, entities, listener."""
     coordinator = _make_coordinator(data)
     coordinator.last_update_success = True
-    entry = _create_entry(_ZONE_ENTRY_ID)
+    entry = _create_entry(_PARKING_AREA_ENTRY_ID)
     entry.runtime_data = SimpleNamespace(
         coordinator=coordinator, provider_config=SimpleNamespace(gui_url=None)
     )
@@ -637,9 +639,9 @@ async def _setup_sensors(
     return coordinator, added, listener
 
 
-def _zone_sensors(entities: Iterable[SensorEntity]) -> dict[str, SensorEntity]:
-    """Return per-zone entities keyed by unique ID."""
-    prefix = f"{_ZONE_ENTRY_ID}:zone:"
+def _parking_area_sensors(entities: Iterable[SensorEntity]) -> dict[str, SensorEntity]:
+    """Return per-parking-area entities keyed by unique ID."""
+    prefix = f"{_PARKING_AREA_ENTRY_ID}:parking_area:"
     return {
         str(entity.unique_id): entity
         for entity in entities
@@ -647,141 +649,172 @@ def _zone_sensors(entities: Iterable[SensorEntity]) -> dict[str, SensorEntity]:
     }
 
 
-async def test_zone_sensors_created_for_each_zone(hass: HomeAssistant) -> None:
-    """A multi-zone permit gets availability and window sensors per zone."""
-    zones = (
-        _zone("10", None),
-        _zone("630", _CURRENT_WINDOW),
-        _zone("632", _NEXT_WINDOW),
+async def test_parking_area_sensors_created_for_each_parking_area(
+    hass: HomeAssistant,
+) -> None:
+    """A multi-parking-area permit gets paid parking sensors per parking area."""
+    parking_areas = (
+        _parking_area("10", None),
+        _parking_area("630", _CURRENT_WINDOW),
+        _parking_area("632", _NEXT_WINDOW),
     )
-    with freeze_time(_ZONE_NOW):
+    with freeze_time(_PARKING_AREA_NOW):
         _coordinator, entities, _listener = await _setup_sensors(
-            hass, _zone_data(zones)
+            hass, _parking_area_data(parking_areas)
         )
 
-    zone_sensors = _zone_sensors(entities)
-    assert len(entities) == PERMIT_SENSOR_COUNT + len(zones) * len(ZONE_SENSOR_SUFFIXES)
-    assert set(zone_sensors) == {
-        f"{_ZONE_ENTRY_ID}:zone:{zone.zone_id}:{suffix}"
-        for zone in zones
-        for suffix in ZONE_SENSOR_SUFFIXES
+    parking_area_sensors = _parking_area_sensors(entities)
+    assert len(entities) == PERMIT_SENSOR_COUNT + len(parking_areas) * len(
+        PARKING_AREA_SENSOR_SUFFIXES
+    )
+    assert set(parking_area_sensors) == {
+        f"{_PARKING_AREA_ENTRY_ID}:parking_area:{parking_area.parking_area_id}:{suffix}"
+        for parking_area in parking_areas
+        for suffix in PARKING_AREA_SENSOR_SUFFIXES
     }
 
-    def _sensor(zone_id: str, suffix: str) -> SensorEntity:
-        return zone_sensors[f"{_ZONE_ENTRY_ID}:zone:{zone_id}:{suffix}"]
+    def _sensor(parking_area_id: str, suffix: str) -> SensorEntity:
+        return parking_area_sensors[
+            f"{_PARKING_AREA_ENTRY_ID}:parking_area:{parking_area_id}:{suffix}"
+        ]
 
-    availability = _sensor("630", "availability")
-    assert isinstance(availability, ZoneAvailabilitySensor)
-    assert availability.translation_key == "zone_availability"
-    assert availability.translation_placeholders == {"zone": "Z630"}
-    assert availability.native_value == STATE_CHARGEABLE
+    availability = _sensor("630", "paid_parking")
+    assert isinstance(availability, ParkingAreaPaidParkingSensor)
+    assert availability.translation_key == "parking_area_paid_parking"
+    assert availability.translation_placeholders == {"parking_area": "Z630"}
+    assert availability.native_value == STATE_PAID
     attributes = availability.extra_state_attributes
     assert attributes is not None
     assert attributes["Next provider"] == _timerange_to_dict(_CURRENT_WINDOW)
     assert attributes["Today user entered"] == [_timerange_to_dict(_CURRENT_WINDOW)]
-    assert _sensor("10", "availability").native_value == "free"
-    assert _sensor("632", "availability").native_value == "free"
+    assert _sensor("10", "paid_parking").native_value == "free"
+    assert _sensor("632", "paid_parking").native_value == "free"
 
-    provider_start = _sensor("632", "provider_chargeable_start")
-    assert isinstance(provider_start, ZoneProviderChargeableStartSensor)
+    provider_start = _sensor("632", "provider_paid_parking_start")
+    assert isinstance(provider_start, ParkingAreaProviderPaidParkingStartSensor)
     assert provider_start.entity_registry_enabled_default is False
     assert provider_start.native_value == _NEXT_WINDOW.start
     assert isinstance(
-        _sensor("632", "provider_chargeable_end"), ZoneProviderChargeableEndSensor
+        _sensor("632", "provider_paid_parking_end"),
+        ParkingAreaProviderPaidParkingEndSensor,
     )
-    assert _sensor("632", "provider_chargeable_end").native_value == _NEXT_WINDOW.end
-    next_start = _sensor("630", "next_chargeable_start")
-    assert isinstance(next_start, ZoneNextChargeableStartSensor)
+    assert _sensor("632", "provider_paid_parking_end").native_value == _NEXT_WINDOW.end
+    next_start = _sensor("630", "paid_parking_start")
+    assert isinstance(next_start, ParkingAreaPaidParkingStartSensor)
     assert next_start.native_value == _CURRENT_WINDOW.start
-    next_end = _sensor("630", "next_chargeable_end")
-    assert isinstance(next_end, ZoneNextChargeableEndSensor)
+    next_end = _sensor("630", "paid_parking_end")
+    assert isinstance(next_end, ParkingAreaPaidParkingEndSensor)
     assert next_end.native_value == _CURRENT_WINDOW.end
-    assert _sensor("10", "next_chargeable_start").native_value is None
+    assert _sensor("10", "paid_parking_start").native_value is None
 
 
-async def test_zone_sensors_not_created_for_single_zone_permit(
+async def test_parking_area_sensors_not_created_for_single_parking_area_permit(
     hass: HomeAssistant,
 ) -> None:
-    """Permits with zero or one zone only get the permit-level sensors."""
-    for zones in ((), (_zone("10", None),)):
+    """Permits with zero or one parking area only get the permit-level sensors."""
+    for parking_areas in ((), (_parking_area("10", None),)):
         _coordinator, entities, _listener = await _setup_sensors(
-            hass, _zone_data(zones)
+            hass, _parking_area_data(parking_areas)
         )
         assert len(entities) == PERMIT_SENSOR_COUNT
-        assert not _zone_sensors(entities)
+        assert not _parking_area_sensors(entities)
 
 
-async def test_zone_sensors_added_when_zones_appear(hass: HomeAssistant) -> None:
-    """Zones that show up after setup get entities once, without duplicates."""
+async def test_parking_area_sensors_added_when_parking_areas_appear(
+    hass: HomeAssistant,
+) -> None:
+    """Parking areas that show up after setup get entities once, without duplicates."""
     coordinator, entities, listener = await _setup_sensors(
-        hass, _zone_data((_zone("10", None),))
+        hass, _parking_area_data((_parking_area("10", None),))
     )
-    assert not _zone_sensors(entities)
+    assert not _parking_area_sensors(entities)
 
-    coordinator.data = _zone_data((_zone("10", None), _zone("630", None)))
+    coordinator.data = _parking_area_data(
+        (_parking_area("10", None), _parking_area("630", None))
+    )
     listener()
-    assert {unique_id.split(":")[-2] for unique_id in _zone_sensors(entities)} == {
+    assert {
+        unique_id.split(":")[-2] for unique_id in _parking_area_sensors(entities)
+    } == {
         "10",
         "630",
     }
 
-    coordinator.data = _zone_data(
-        (_zone("10", None), _zone("630", None), _zone("632", None))
+    coordinator.data = _parking_area_data(
+        (
+            _parking_area("10", None),
+            _parking_area("630", None),
+            _parking_area("632", None),
+        )
     )
     listener()
     listener()
-    zone_sensors = _zone_sensors(entities)
-    assert len(zone_sensors) == 3 * len(ZONE_SENSOR_SUFFIXES)
-    assert len(entities) == PERMIT_SENSOR_COUNT + len(zone_sensors)
+    parking_area_sensors = _parking_area_sensors(entities)
+    assert len(parking_area_sensors) == 3 * len(PARKING_AREA_SENSOR_SUFFIXES)
+    assert len(entities) == PERMIT_SENSOR_COUNT + len(parking_area_sensors)
 
 
-async def test_zone_sensors_unavailable_when_zone_disappears(
+async def test_parking_area_sensors_unavailable_when_parking_area_disappears(
     hass: HomeAssistant, monkeypatch: MonkeyPatch
 ) -> None:
-    """A zone missing from coordinator data makes its entities unavailable."""
-    with freeze_time(_ZONE_NOW):
+    """A parking area missing from coordinator data makes its entities unavailable."""
+    with freeze_time(_PARKING_AREA_NOW):
         coordinator, entities, _listener = await _setup_sensors(
-            hass, _zone_data((_zone("10", None), _zone("630", _CURRENT_WINDOW)))
+            hass,
+            _parking_area_data(
+                (_parking_area("10", None), _parking_area("630", _CURRENT_WINDOW))
+            ),
         )
-        zone_sensors = _zone_sensors(entities)
-        availability = zone_sensors[f"{_ZONE_ENTRY_ID}:zone:630:availability"]
-        assert isinstance(availability, ZoneAvailabilitySensor)
+        parking_area_sensors = _parking_area_sensors(entities)
+        availability = parking_area_sensors[
+            f"{_PARKING_AREA_ENTRY_ID}:parking_area:630:paid_parking"
+        ]
+        assert isinstance(availability, ParkingAreaPaidParkingSensor)
         monkeypatch.setattr(availability, "async_write_ha_state", MagicMock())
         assert availability.available is True
 
-        coordinator.data = _zone_data((_zone("10", None), _zone("632", None)))
+        coordinator.data = _parking_area_data(
+            (_parking_area("10", None), _parking_area("632", None))
+        )
         availability._handle_coordinator_update()
 
     assert availability.available is False
-    assert availability.native_value == STATE_CHARGEABLE
-    assert zone_sensors[f"{_ZONE_ENTRY_ID}:zone:10:availability"].available is True
+    assert availability.native_value == STATE_PAID
+    assert (
+        parking_area_sensors[
+            f"{_PARKING_AREA_ENTRY_ID}:parking_area:10:paid_parking"
+        ].available
+        is True
+    )
 
 
-async def test_active_reservations_sensor_lists_zone_windows_without_plates() -> None:
-    """Each active reservation exposes its zone and that zone's paid window."""
+async def test_active_reservations_sensor_lists_area_windows_without_plates() -> None:
+    """Each active reservation exposes its parking area and that area's paid window."""
     reservation = Reservation(
         reservation_id="res-630",
-        start_time=_ZONE_NOW - timedelta(minutes=30),
-        end_time=_ZONE_NOW + timedelta(hours=2),
+        start_time=_PARKING_AREA_NOW - timedelta(minutes=30),
+        end_time=_PARKING_AREA_NOW + timedelta(hours=2),
         license_plate="AB12CD",
-        zone_id="630",
+        parking_area_id="630",
     )
     data = dataclasses.replace(
-        _zone_data([_zone("10", _NEXT_WINDOW), _zone("630", _CURRENT_WINDOW)]),
+        _parking_area_data(
+            [_parking_area("10", _NEXT_WINDOW), _parking_area("630", _CURRENT_WINDOW)]
+        ),
         active_reservations=(reservation,),
     )
     sensor = ActiveReservationsSensor(
         _make_coordinator(data), _create_entry("provider:permit1:city")
     )
 
-    with freeze_time(_ZONE_NOW):
+    with freeze_time(_PARKING_AREA_NOW):
         sensor._update_from_coordinator()
 
     assert sensor.native_value == 1
     (item,) = sensor.extra_state_attributes["reservations"]
-    assert item["zone_id"] == "630"
-    assert item["zone_name"] == "Z630"
-    # The reservation's own zone decides, not the default zone (10).
-    assert item["zone_window_start"] == _CURRENT_WINDOW.start.isoformat()
-    assert item["zone_window_end"] == _CURRENT_WINDOW.end.isoformat()
+    assert item["parking_area_id"] == "630"
+    assert item["parking_area_name"] == "Z630"
+    # The reservation's own parking area decides, not the default parking area (10).
+    assert item["parking_area_paid_start"] == _CURRENT_WINDOW.start.isoformat()
+    assert item["parking_area_paid_end"] == _CURRENT_WINDOW.end.isoformat()
     assert "license_plate" not in item

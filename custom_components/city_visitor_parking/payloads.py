@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, cast
 
 from homeassistant.util import dt as dt_util
 
-from .const import STATE_CHARGEABLE, STATE_FREE
+from .const import STATE_FREE, STATE_PAID
 from .helpers import get_attr, normalize_plate
 from .time_windows import (
     current_or_next_window,
@@ -23,9 +23,9 @@ if TYPE_CHECKING:
     from .models import (
         CoordinatorData,
         Favorite,
+        ParkingArea,
         Reservation,
         TimeRange,
-        Zone,
         ZoneAvailability,
     )
 
@@ -45,57 +45,66 @@ def timerange_payload(window: TimeRange) -> dict[str, str]:
     }
 
 
-def reservation_zone_payload(
+def reservation_parking_area_payload(
     reservation: Reservation,
-    zones: Sequence[Zone],
+    parking_areas: Sequence[ParkingArea],
     options: Mapping[str, object],
     now: datetime,
 ) -> dict[str, str]:
-    """Return the zone keys of a reservation; empty when it has no zone.
+    """Return the parking area keys of a reservation; empty when it has no parking area.
 
-    ``zone_name`` falls back to the zone ID when the zone is not in ``zones``.
-    ``zone_window_start``/``zone_window_end`` give the paid window of that zone
-    that applies to the reservation: the window running at its start (or now,
-    once it started), else the next one. They are absent when the zone is
-    unknown or no paid window falls within the reservation.
+    ``parking_area_name`` falls back to the parking area ID when the parking area is not
+    in ``parking_areas``. ``parking_area_paid_start``/``parking_area_paid_end`` give the
+    paid window of that parking area that applies to the reservation: the window running
+    at its start (or now, once it started), else the next one. They are absent when the
+    parking area is unknown or no paid window falls within the reservation.
     """
-    zone_id = reservation.zone_id
-    if not zone_id:
+    parking_area_id = reservation.parking_area_id
+    if not parking_area_id:
         return {}
-    zone = next((zone for zone in zones if zone.zone_id == zone_id), None)
+    parking_area = next(
+        (
+            parking_area
+            for parking_area in parking_areas
+            if parking_area.parking_area_id == parking_area_id
+        ),
+        None,
+    )
     payload = {
-        "zone_id": zone_id,
-        "zone_name": zone.name if zone is not None and zone.name else zone_id,
+        "parking_area_id": parking_area_id,
+        "parking_area_name": parking_area.name
+        if parking_area is not None and parking_area.name
+        else parking_area_id,
     }
-    if zone is None:
+    if parking_area is None:
         return payload
-    # A reservation's own zone decides when it is paid, not the permit default.
+    # A reservation's own parking area decides when it is paid, not the permit default.
     reference = max(now, reservation.start_time)
     window = current_or_next_window_with_overrides(
-        zone.zone_validity, options, reference
+        parking_area.zone_validity, options, reference
     )
     if window is not None and window.start < reservation.end_time:
-        payload["zone_window_start"] = utc_iso(window.start) or ""
-        payload["zone_window_end"] = utc_iso(window.end) or ""
+        payload["parking_area_paid_start"] = utc_iso(window.start) or ""
+        payload["parking_area_paid_end"] = utc_iso(window.end) or ""
     return payload
 
 
 def reservation_payload(
     reservation: Reservation,
     favorite_by_plate: Mapping[str, Favorite],
-    zones: Sequence[Zone],
+    parking_areas: Sequence[ParkingArea],
     options: Mapping[str, object],
     now: datetime,
 ) -> dict[str, str]:
-    """Build a reservation response payload with favorite and zone metadata.
+    """Build a reservation response payload with favorite and parking area metadata.
 
-    Zone keys come from ``reservation_zone_payload``.
+    Parking area keys come from ``reservation_parking_area_payload``.
     """
     payload: dict[str, str] = {
         "reservation_id": reservation.reservation_id,
         "start_time": utc_iso(reservation.start_time) or "",
         "end_time": utc_iso(reservation.end_time) or "",
-        **reservation_zone_payload(reservation, zones, options, now),
+        **reservation_parking_area_payload(reservation, parking_areas, options, now),
     }
 
     license_plate = reservation.license_plate
@@ -146,7 +155,7 @@ def build_reservations_payload(
         "future_count": len(visible) - active_count,
         "reservations": [
             reservation_payload(
-                reservation, favorite_by_plate, data.zones, options, now
+                reservation, favorite_by_plate, data.parking_areas, options, now
             )
             for reservation in visible
         ],
@@ -194,7 +203,7 @@ def _availability_payload(
         options,
         now,
     )
-    is_chargeable_now = availability.is_chargeable_now
+    is_paid_now = availability.is_paid_now
     next_change_time = availability.next_change_time
     if stale:
         current_effective_window = next(
@@ -205,25 +214,25 @@ def _availability_payload(
             ),
             None,
         )
-        is_chargeable_now = current_effective_window is not None
+        is_paid_now = current_effective_window is not None
         if current_effective_window is not None:
             next_change_time = current_effective_window.end
         else:
             next_change_time = effective_window.start if effective_window else None
 
-    state = STATE_CHARGEABLE if is_chargeable_now else STATE_FREE
+    state = STATE_PAID if is_paid_now else STATE_FREE
     window_kind: str | None = None
     if effective_window is not None:
         is_current = effective_window.start <= now < effective_window.end
         is_next = effective_window.start > now
-        if state == STATE_CHARGEABLE and is_current:
+        if state == STATE_PAID and is_current:
             window_kind = "current"
         elif state == STATE_FREE and is_next:
             window_kind = "next"
 
     return {
         "state": state,
-        "is_chargeable_now": is_chargeable_now,
+        "is_paid_now": is_paid_now,
         "next_change_time": utc_iso(next_change_time),
         "window_kind": window_kind,
         "window_start": utc_iso(effective_window.start) if effective_window else None,
@@ -241,9 +250,10 @@ def build_status_payload(
 ) -> dict[str, object]:
     """Build the shared status response for services and websocket.
 
-    Top-level fields describe the default zone. ``zones`` repeats the state and
-    window per selectable zone (default first) so the card can switch zones
-    without another request; it is empty when the permit has no zones.
+    Top-level fields describe the default parking area. ``parking_areas`` repeats the
+    state and window per selectable parking area (default first) so the card can switch
+    parking areas without another request; it is empty when the permit has no parking
+    areas.
     """
     provider_windows_today = windows_for_today(data.zone_validity, {}, now)
     provider_window = current_or_next_window(data.zone_validity, now)
@@ -253,14 +263,24 @@ def build_status_payload(
     effective_windows_today = cast(
         "list[TimeRange]", default_status.pop("effective_windows_today")
     )
-    zones: list[dict[str, object]] = []
-    for zone in data.zones:
-        zone_status = _availability_payload(
-            zone.zone_validity, zone.zone_availability, options, now, stale=stale
+    parking_areas: list[dict[str, object]] = []
+    for parking_area in data.parking_areas:
+        parking_area_status = _availability_payload(
+            parking_area.zone_validity,
+            parking_area.zone_availability,
+            options,
+            now,
+            stale=stale,
         )
-        del zone_status["effective_windows_today"]
-        del zone_status["is_chargeable_now"]
-        zones.append({"zone_id": zone.zone_id, "name": zone.name, **zone_status})
+        del parking_area_status["effective_windows_today"]
+        del parking_area_status["is_paid_now"]
+        parking_areas.append(
+            {
+                "parking_area_id": parking_area.parking_area_id,
+                "name": parking_area.name,
+                **parking_area_status,
+            }
+        )
 
     return {
         **default_status,
@@ -280,5 +300,5 @@ def build_status_payload(
         "remaining_balance": max(0.0, data.permit_remaining_balance),
         "balance_unit": data.permit_balance_unit,
         "permit_id": data.permit_id,
-        "zones": zones,
+        "parking_areas": parking_areas,
     }
