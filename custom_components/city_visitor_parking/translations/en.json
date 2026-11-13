@@ -258,7 +258,7 @@
     },
     "get_status": {
       "name": "Get status",
-      "description": "Return the current permit status and effective chargeable windows for a permit.",
+      "description": "Return the current permit status and effective paid parking hours for a permit.",
       "fields": {
         "device_id": {
           "name": "Device",
@@ -381,40 +381,40 @@
       "permit_zone_availability": {
         "name": "Parking area availability",
         "state": {
-          "chargeable": "Chargeable",
+          "chargeable": "Paid",
           "free": "Free"
         }
       },
       "provider_chargeable_start": {
-        "name": "Provider chargeable window start"
+        "name": "Paid parking start (provider)"
       },
       "provider_chargeable_end": {
-        "name": "Provider chargeable window end"
+        "name": "Paid parking end (provider)"
       },
       "next_chargeable_start": {
-        "name": "Chargeable window start"
+        "name": "Paid parking start"
       },
       "next_chargeable_end": {
-        "name": "Chargeable window end"
+        "name": "Paid parking end"
       },
       "zone_availability": {
         "name": "Parking area {zone} availability",
         "state": {
-          "chargeable": "Chargeable",
+          "chargeable": "Paid",
           "free": "Free"
         }
       },
       "zone_provider_chargeable_start": {
-        "name": "Parking area {zone} provider chargeable window start"
+        "name": "Parking area {zone} paid parking start (provider)"
       },
       "zone_provider_chargeable_end": {
-        "name": "Parking area {zone} provider chargeable window end"
+        "name": "Parking area {zone} paid parking end (provider)"
       },
       "zone_next_chargeable_start": {
-        "name": "Parking area {zone} chargeable window start"
+        "name": "Parking area {zone} paid parking start"
       },
       "zone_next_chargeable_end": {
-        "name": "Parking area {zone} chargeable window end"
+        "name": "Parking area {zone} paid parking end"
       },
       "favorites": {
         "name": "Favorites"

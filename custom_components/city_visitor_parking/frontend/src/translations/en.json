@@ -58,7 +58,7 @@
   "label.window": "Window",
   "label.current": "Current",
   "label.next": "Next",
-  "status.chargeable": "Chargeable",
+  "status.chargeable": "Paid",
   "status.free": "Free",
   "status.unknown": "Unknown",
   "message.invalid_config": "Your card configuration is invalid.",

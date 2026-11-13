@@ -174,7 +174,7 @@ list_reservations:
 
 get_status:
   name: Get status
-  description: Return the current permit status and effective chargeable windows for a permit.
+  description: Return the current permit status and effective paid parking hours for a permit.
   fields:
     device_id:
       name: Device

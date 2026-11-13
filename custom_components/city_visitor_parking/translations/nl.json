@@ -258,7 +258,7 @@
     },
     "get_status": {
       "name": "Status ophalen",
-      "description": "Geeft de huidige vergunningstatus en effectieve betaalvensters voor een vergunning terug.",
+      "description": "Geeft de huidige vergunningstatus en effectieve betaaltijden voor een vergunning terug.",
       "fields": {
         "device_id": {
           "name": "Apparaat",
@@ -386,16 +386,16 @@
         }
       },
       "provider_chargeable_start": {
-        "name": "Start provider betaalvenster"
+        "name": "Start betaald parkeren (provider)"
       },
       "provider_chargeable_end": {
-        "name": "Einde provider betaalvenster"
+        "name": "Einde betaald parkeren (provider)"
       },
       "next_chargeable_start": {
-        "name": "Start betaalvenster"
+        "name": "Start betaald parkeren"
       },
       "next_chargeable_end": {
-        "name": "Einde betaalvenster"
+        "name": "Einde betaald parkeren"
       },
       "zone_availability": {
         "name": "Beschikbaarheid parkeergebied {zone}",
@@ -405,16 +405,16 @@
         }
       },
       "zone_provider_chargeable_start": {
-        "name": "Start provider betaalvenster parkeergebied {zone}"
+        "name": "Parkeergebied {zone}: start betaald parkeren (provider)"
       },
       "zone_provider_chargeable_end": {
-        "name": "Einde provider betaalvenster parkeergebied {zone}"
+        "name": "Parkeergebied {zone}: einde betaald parkeren (provider)"
       },
       "zone_next_chargeable_start": {
-        "name": "Start betaalvenster parkeergebied {zone}"
+        "name": "Parkeergebied {zone}: start betaald parkeren"
       },
       "zone_next_chargeable_end": {
-        "name": "Einde betaalvenster parkeergebied {zone}"
+        "name": "Parkeergebied {zone}: einde betaald parkeren"
       },
       "favorites": {
         "name": "Favorieten"
