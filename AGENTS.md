@@ -84,7 +84,7 @@ Release automation and release notes MUST stay aligned with:
 
 ### Pre-releases
 
-Stable releases (`vX.Y.Z`) are built from `main` and pin the latest stable `pycityvisitorparking` release. A pre-release is a test build of one feature branch. There is no long-lived `beta` branch. `pyCityVisitorParking` uses the same model (see its `docs/RELEASING.md`).
+Stable releases (`vX.Y.Z`) are built from `main` and pin the latest stable `pycityvisitorparking` release. A pre-release is a test build of one branch: a feature branch, or a temporary test branch from `main` that is never merged. There is no long-lived `beta` branch. `pyCityVisitorParking` uses the same model (see its `docs/RELEASING.md`).
 
 - Branch every feature from `main` and open a pull request to `main`. Changes that only make sense with a library pre-release (the pre-release pin, for example `pycityvisitorparking==0.6.0b1`, and `providers.yaml` entries for providers that exist only in that pre-release) live on that feature branch.
 - Keep the feature branch current by merging `main` into it before tagging a pre-release.
@@ -94,7 +94,19 @@ Stable releases (`vX.Y.Z`) are built from `main` and pin the latest stable `pyci
 - `release.yml` builds with the requirement pinned in `manifest.json` on the tagged commit. A `**PyPI:**` or `**Commit:**` line in the release body overrides it; leave both out unless a different library build is needed.
 - Merge the pull request only after the pre-release was tested and approved. A pull request that pins a library pre-release cannot merge: the `Release policy` check fails until the branch pins the latest stable release.
 - Two features that must be tested together go on a temporary integration branch from `main` that merges both; delete it after testing.
+- `release.yml` only builds a zip when `custom_components/` changed since the last stable release. A branch that changes only CI or docs yields a pre-release without an installable asset.
 - Create releases as drafts and publish only when the maintainer asks for it.
+
+Steps, for example for branch `fix/some-change`:
+
+```bash
+git tag -a v0.1.43-some-change.1 -m "Pre-release: test some change"
+git push origin v0.1.43-some-change.1
+gh run list --workflow Validate --branch v0.1.43-some-change.1   # wait for success
+gh release create v0.1.43-some-change.1 --verify-tag --prerelease --draft \
+  --target fix/some-change --title v0.1.43-some-change.1 --notes-file notes.md
+gh release edit v0.1.43-some-change.1 --draft=false               # publish when asked
+```
 
 ### Pre-releases across both repositories
 
