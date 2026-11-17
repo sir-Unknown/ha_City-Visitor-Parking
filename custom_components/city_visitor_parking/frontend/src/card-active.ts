@@ -15,6 +15,7 @@ import {
   fetchPermitEntries,
   fetchReservations,
   filterDomainDevices,
+  filterDomainDevicesForEntry,
   formatOptionalDateTimeLocal,
   formatReservationParkingArea,
   getConfigEntryId,
@@ -252,9 +253,7 @@ class CityVisitorParkingActiveCard extends BaseLocalizedCard<CardConfig> {
     try {
       let devices = await this._getDomainDevices();
       if (entryId) {
-        devices = devices.filter(
-          (device) => device.config_entry_id === entryId,
-        );
+        devices = filterDomainDevicesForEntry(devices, entryId);
       }
       if (!devices.length) {
         this._activeReservations = [];

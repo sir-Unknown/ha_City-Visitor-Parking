@@ -152,7 +152,7 @@ rules:
 
 ### Config Flow Patterns
 
-- **Version Control**: Always set `VERSION = 1` and `MINOR_VERSION = 1`
+- **Version Control**: Keep `VERSION = 1`. New entries are created at the current `MINOR_VERSION`; raise it only together with a matching step in `async_migrate_entry` (see `__init__.py`) and a test for that step
 - **Unique ID Management**:
   ```python
   await self.async_set_unique_id(device_unique_id)

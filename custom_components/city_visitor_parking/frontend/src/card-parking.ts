@@ -30,7 +30,7 @@ import {
   extractEventValue,
   fetchPermitEntries,
   fetchReservations,
-  filterDomainDevices,
+  filterDomainDevicesForEntry,
   formatDateTimeLocal,
   getConfigEntryId,
   invalidateFavoritesCache,
@@ -333,12 +333,7 @@ class CityVisitorParkingNewReservationCard extends BaseLocalizedCard<CardConfig>
     this._deviceLoadPromise = this._hass
       .callWS<DeviceEntry[]>({ type: "config/device_registry/list" })
       .then((devices) => {
-        const match = devices.find(
-          (device: DeviceEntry) =>
-            (device.identifiers ?? []).some(
-              (identifier: [string, string]) => identifier[0] === DOMAIN,
-            ) && device.config_entry_id === entryId,
-        );
+        const match = filterDomainDevicesForEntry(devices, entryId)[0];
         const deviceId = match ? match.id : null;
         this._deviceId = deviceId;
         if (deviceId) this._deviceIdByEntryId.set(entryId, deviceId);
@@ -1422,9 +1417,7 @@ class CityVisitorParkingNewReservationCard extends BaseLocalizedCard<CardConfig>
       const devices = await hass.callWS<DeviceEntry[]>({
         type: "config/device_registry/list",
       });
-      const domainDevices = filterDomainDevices(devices).filter(
-        (device) => device.config_entry_id === entryId,
-      );
+      const domainDevices = filterDomainDevicesForEntry(devices, entryId);
       const byPlate = new Map<string, Array<{ start: Date; end: Date }>>();
       const results = await Promise.allSettled(
         domainDevices.map((device) => fetchReservations(hass, device, fresh)),

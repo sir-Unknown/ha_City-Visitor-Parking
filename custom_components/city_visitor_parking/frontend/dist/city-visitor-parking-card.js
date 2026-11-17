@@ -858,6 +858,9 @@ var filterDomainDevices = (devices) => devices.filter(
     (identifier) => identifier[0] === DOMAIN
   )
 );
+var filterDomainDevicesForEntry = (devices, entryId) => filterDomainDevices(devices).filter(
+  (device) => device.config_entry_id === entryId
+);
 var makeDedupedLoader = (getPromise, setPromise, factory) => {
   const existing = getPromise();
   if (existing) return existing;
@@ -1772,11 +1775,7 @@ var CityVisitorParkingNewReservationCard = class extends BaseLocalizedCard {
     }
     if (this._deviceLoadPromise) return;
     this._deviceLoadPromise = this._hass.callWS({ type: "config/device_registry/list" }).then((devices) => {
-      const match = devices.find(
-        (device) => (device.identifiers ?? []).some(
-          (identifier) => identifier[0] === DOMAIN
-        ) && device.config_entry_id === entryId
-      );
+      const match = filterDomainDevicesForEntry(devices, entryId)[0];
       const deviceId = match ? match.id : null;
       this._deviceId = deviceId;
       if (deviceId) this._deviceIdByEntryId.set(entryId, deviceId);
@@ -2673,9 +2672,7 @@ var CityVisitorParkingNewReservationCard = class extends BaseLocalizedCard {
       const devices = await hass.callWS({
         type: "config/device_registry/list"
       });
-      const domainDevices = filterDomainDevices(devices).filter(
-        (device) => device.config_entry_id === entryId
-      );
+      const domainDevices = filterDomainDevicesForEntry(devices, entryId);
       const byPlate = /* @__PURE__ */ new Map();
       const results = await Promise.allSettled(
         domainDevices.map((device) => fetchReservations(hass, device, fresh))
@@ -2973,9 +2970,7 @@ var CityVisitorParkingActiveCard = class extends BaseLocalizedCard {
     try {
       let devices = await this._getDomainDevices();
       if (entryId) {
-        devices = devices.filter(
-          (device) => device.config_entry_id === entryId
-        );
+        devices = filterDomainDevicesForEntry(devices, entryId);
       }
       if (!devices.length) {
         this._activeReservations = [];
