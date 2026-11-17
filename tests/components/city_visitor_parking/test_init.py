@@ -23,6 +23,7 @@ from homeassistant.exceptions import (
 )
 from homeassistant.helpers import aiohttp_client
 from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers import issue_registry as ir
 from pycityvisitorparking.exceptions import ServiceUnavailableError
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
@@ -536,7 +537,7 @@ async def test_migrate_entry_rejects_newer_major_version(hass: HomeAssistant) ->
 
 _PAID_PARKING_UNIQUE_ID = "dvsportal:permit:venlo"
 _LEGACY_SENSOR_KEYS = {
-    "permit_paid_parking_status": "paid_parking",
+    "permit_zone_availability": "paid_parking",
     "provider_chargeable_start": "provider_paid_parking_start",
     "provider_chargeable_end": "provider_paid_parking_end",
     "next_chargeable_start": "paid_parking_start",
@@ -591,7 +592,7 @@ async def test_migrate_entry_renames_sensor_unique_ids(hass: HomeAssistant) -> N
     foreign = registry.async_get_or_create(
         "sensor",
         DOMAIN,
-        "other:permit_paid_parking_status",
+        "other:permit_zone_availability",
         config_entry=other,
         suggested_object_id="foreign",
     )
@@ -613,6 +614,12 @@ async def test_migrate_entry_renames_sensor_unique_ids(hass: HomeAssistant) -> N
     assert entry.options[CONF_OPERATING_TIME_OVERRIDES] == {
         "mon": [{"start": "08:00", "end": "09:00"}]
     }
+    # Renamed state and attribute values cannot be migrated in automations, so
+    # the user is told once through a persistent repair issue.
+    issue = ir.async_get(hass).async_get_issue(DOMAIN, "paid_parking_renamed")
+    assert issue is not None
+    assert issue.is_persistent
+    assert issue.translation_key == "paid_parking_renamed"
 
 
 async def test_migrate_entry_leaves_migrated_entry_untouched(
@@ -624,7 +631,7 @@ async def test_migrate_entry_leaves_migrated_entry_untouched(
     )
     entry.add_to_hass(hass)
     entity_ids = _register_sensors(hass, entry, list(_LEGACY_SENSOR_KEYS.values()))
-    legacy_ids = _register_sensors(hass, entry, ["permit_paid_parking_status"])
+    legacy_ids = _register_sensors(hass, entry, ["permit_zone_availability"])
     registry = er.async_get(hass)
 
     assert await init_module.async_migrate_entry(hass, entry)
@@ -633,26 +640,32 @@ async def test_migrate_entry_leaves_migrated_entry_untouched(
         stored = registry.async_get(entity_id)
         assert stored is not None
         assert stored.unique_id == f"{_PAID_PARKING_UNIQUE_ID}:{key}"
-    legacy = registry.async_get(legacy_ids["permit_paid_parking_status"])
+    legacy = registry.async_get(legacy_ids["permit_zone_availability"])
     assert legacy is not None
-    assert legacy.unique_id == f"{_PAID_PARKING_UNIQUE_ID}:permit_paid_parking_status"
+    assert legacy.unique_id == f"{_PAID_PARKING_UNIQUE_ID}:permit_zone_availability"
+    assert ir.async_get(hass).async_get_issue(DOMAIN, "paid_parking_renamed") is None
 
 
-async def test_migrate_entry_skips_taken_unique_id(hass: HomeAssistant) -> None:
+async def test_migrate_entry_skips_taken_unique_id(
+    hass: HomeAssistant, caplog: pytest.LogCaptureFixture
+) -> None:
     """A legacy sensor whose new unique ID already exists is left as it is."""
     entry = _paid_parking_entry(minor_version=3)
     entry.add_to_hass(hass)
     entity_ids = _register_sensors(
-        hass, entry, ["permit_paid_parking_status", "paid_parking"]
+        hass, entry, ["permit_zone_availability", "paid_parking"]
     )
     registry = er.async_get(hass)
 
     assert await init_module.async_migrate_entry(hass, entry)
 
-    legacy = registry.async_get(entity_ids["permit_paid_parking_status"])
+    legacy = registry.async_get(entity_ids["permit_zone_availability"])
     assert legacy is not None
-    assert legacy.unique_id == f"{_PAID_PARKING_UNIQUE_ID}:permit_paid_parking_status"
+    assert legacy.unique_id == f"{_PAID_PARKING_UNIQUE_ID}:permit_zone_availability"
     assert entry.minor_version == CityVisitorParkingConfigFlow.MINOR_VERSION
+    # The duplicate is reported so the user can remove the one not needed.
+    assert entity_ids["permit_zone_availability"] in caplog.text
+    assert entity_ids["paid_parking"] in caplog.text
 
 
 async def test_migrate_entry_without_registered_sensors(hass: HomeAssistant) -> None:

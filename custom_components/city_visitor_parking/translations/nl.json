@@ -367,6 +367,12 @@
       "message": "Het gekozen parkeergebied hoort niet bij deze vergunning."
     }
   },
+  "issues": {
+    "paid_parking_renamed": {
+      "title": "Waarden van betaald parkeren hernoemd",
+      "description": "De sensor **Betaald parkeren** geeft nu `paid` in plaats van `chargeable`, en het attribuut `is_chargeable_now` heet nu `is_paid_now`. De actie `get_status` geeft nu `paid_hours` in plaats van `zone_validity` en `is_paid_now` in plaats van `is_chargeable_now`.\n\nPas automatiseringen, scripts en templates aan die de oude waarden gebruiken. Daarna kun je deze melding negeren."
+    }
+  },
   "entity": {
     "sensor": {
       "active_reservations": {

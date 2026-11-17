@@ -21,6 +21,7 @@ from homeassistant.exceptions import (
 from homeassistant.helpers import aiohttp_client
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers import issue_registry as ir
 from homeassistant.setup import async_when_setup
 from pycityvisitorparking import AuthError, NetworkError
 from pycityvisitorparking.exceptions import (
@@ -75,16 +76,18 @@ _RESOLVED_PARAMS_MIGRATION_MINOR_VERSION: Final = 3
 # Minor config entry version that renamed the paid parking sensor keys.
 _PAID_PARKING_MIGRATION_MINOR_VERSION: Final = 4
 # Sensor keys (the unique ID suffix after ``<entry.unique_id>:``) from before the
-# paid parking rename, mapped to their current keys. Options keep no renamed
-# field: the weekday overrides are stored under ``operating_time_overrides``
-# keyed by weekday, so only the entity registry needs rewriting.
+# paid parking rename, mapped to their current keys. The keys on the left are
+# stored in existing entity registries: never rename them.
 _LEGACY_SENSOR_KEYS: Final[Mapping[str, str]] = {
-    "permit_paid_parking_status": "paid_parking",
+    "permit_zone_availability": "paid_parking",
     "provider_chargeable_start": "provider_paid_parking_start",
     "provider_chargeable_end": "provider_paid_parking_end",
     "next_chargeable_start": "paid_parking_start",
     "next_chargeable_end": "paid_parking_end",
 }
+# Repair issue that tells users about the renamed state, attribute and
+# get_status values; the rename cannot be migrated for their automations.
+_PAID_PARKING_RENAMED_ISSUE_ID: Final = "paid_parking_renamed"
 
 
 class _ResourceStorage(Protocol):
@@ -185,6 +188,17 @@ async def async_migrate_entry(
         hass.config_entries.async_update_entry(
             entry, minor_version=_PAID_PARKING_MIGRATION_MINOR_VERSION
         )
+        # One domain-wide issue: the rename is the same for every entry. It must
+        # be persistent because the migration never runs again for this entry.
+        ir.async_create_issue(
+            hass,
+            DOMAIN,
+            _PAID_PARKING_RENAMED_ISSUE_ID,
+            is_fixable=False,
+            is_persistent=True,
+            severity=ir.IssueSeverity.WARNING,
+            translation_key=_PAID_PARKING_RENAMED_ISSUE_ID,
+        )
     return True
 
 
@@ -204,9 +218,15 @@ def _legacy_sensor_unique_id_update(
             return None
         new_unique_id = f"{prefix}{new_key}"
         # Never collide with an entity that already owns the new unique ID.
-        if registry.async_get_entity_id(
+        if existing := registry.async_get_entity_id(
             registry_entry.domain, registry_entry.platform, new_unique_id
         ):
+            _LOGGER.warning(
+                "Cannot migrate %s to the new unique ID: %s already uses it; "
+                "remove the entity that is no longer needed",
+                registry_entry.entity_id,
+                existing,
+            )
             return None
         return {"new_unique_id": new_unique_id}
 

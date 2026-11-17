@@ -367,6 +367,12 @@
       "message": "The selected parking area is not one of the parking areas of this permit."
     }
   },
+  "issues": {
+    "paid_parking_renamed": {
+      "title": "Paid parking values renamed",
+      "description": "The **Paid parking** sensor now reports `paid` instead of `chargeable`, and its attribute `is_chargeable_now` is now `is_paid_now`. The `get_status` action now returns `paid_hours` instead of `zone_validity` and `is_paid_now` instead of `is_chargeable_now`.\n\nUpdate automations, scripts and templates that use the old values. You can then ignore this repair."
+    }
+  },
   "entity": {
     "sensor": {
       "active_reservations": {
