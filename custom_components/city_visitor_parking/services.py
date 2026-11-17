@@ -429,22 +429,24 @@ async def _async_handle_start_reservation(call: ServiceCall) -> None:
             min_start,
         )
         start = min_start
-    _LOGGER.debug(
-        "Starting reservation with start=%s end=%s now=%s start_local=%s end_local=%s",
-        start,
-        end,
-        now,
-        dt_util.as_local(start),
-        dt_util.as_local(end),
-    )
     if end <= start:
         raise ServiceValidationError(
             translation_domain=DOMAIN,
             translation_key="end_before_start",
         )
 
-    parking_area_id = _resolve_parking_area_id(
-        runtime, call.data.get(ATTR_PARKING_AREA_ID)
+    requested_parking_area_id = call.data.get(ATTR_PARKING_AREA_ID)
+    parking_area_id = _resolve_parking_area_id(runtime, requested_parking_area_id)
+    _LOGGER.debug(
+        "Starting reservation with start=%s end=%s now=%s start_local=%s "
+        "end_local=%s parking_area=%s (%s)",
+        start,
+        end,
+        now,
+        dt_util.as_local(start),
+        dt_util.as_local(end),
+        parking_area_id,
+        "requested" if requested_parking_area_id is not None else "default",
     )
     try:
         await runtime.provider.start_reservation(
