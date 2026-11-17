@@ -235,6 +235,15 @@ export const filterDomainDevices = (devices: DeviceEntry[]): DeviceEntry[] =>
     ),
   );
 
+/** Returns this integration's devices that belong to the given config entry. */
+export const filterDomainDevicesForEntry = (
+  devices: DeviceEntry[],
+  entryId: string,
+): DeviceEntry[] =>
+  filterDomainDevices(devices).filter(
+    (device) => device.config_entry_id === entryId,
+  );
+
 /** Reuses an in-flight async loader so duplicate requests share the same promise. */
 export const makeDedupedLoader = <T>(
   getPromise: () => Promise<T> | null,

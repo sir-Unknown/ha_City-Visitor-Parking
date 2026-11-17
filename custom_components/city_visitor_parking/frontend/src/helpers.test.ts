@@ -4,6 +4,7 @@ import {
   DOMAIN,
   buildPermitTitleMap,
   filterDomainDevices,
+  filterDomainDevicesForEntry,
   getConfigEntryId,
   resolvePermitLabelsByDevice,
 } from "./helpers";
@@ -86,26 +87,38 @@ describe("filterDomainDevices", () => {
       "ours",
     ]);
   });
+});
 
-  it("keeps one device per permit entry so cards can pick by entry", () => {
-    const devices: DeviceEntry[] = [
-      {
-        id: "device-a",
-        identifiers: [[DOMAIN, "entry-a"]],
-        config_entry_id: "entry-a",
-      },
-      {
-        id: "device-b",
-        identifiers: [[DOMAIN, "entry-b"]],
-        config_entry_id: "entry-b",
-      },
-    ];
+describe("filterDomainDevicesForEntry", () => {
+  const devices: DeviceEntry[] = [
+    {
+      id: "device-a",
+      identifiers: [[DOMAIN, "entry-a"]],
+      config_entry_id: "entry-a",
+    },
+    {
+      id: "device-b",
+      identifiers: [[DOMAIN, "entry-b"]],
+      config_entry_id: "entry-b",
+    },
+    // Same config entry id, but owned by another integration.
+    {
+      id: "foreign",
+      identifiers: [["other_domain", "x"]],
+      config_entry_id: "entry-b",
+    },
+  ];
 
-    const domainDevices = filterDomainDevices(devices);
-
+  it("selects only the device of the requested permit entry", () => {
     expect(
-      domainDevices.filter((device) => device.config_entry_id === "entry-b"),
-    ).toEqual([devices[1]]);
+      filterDomainDevicesForEntry(devices, "entry-b").map(
+        (device) => device.id,
+      ),
+    ).toEqual(["device-b"]);
+  });
+
+  it("returns nothing for an entry without a device", () => {
+    expect(filterDomainDevicesForEntry(devices, "entry-c")).toEqual([]);
   });
 });
 
