@@ -123,4 +123,5 @@ async def test_diagnostics_redacts_sensitive_data(hass: HomeAssistant) -> None:
     assert entry_data[CONF_PASSWORD] == REDACTED
     assert runtime["permit_id"] == "permit"
     assert runtime["zone_validity_blocks"] == 1
+    assert runtime["last_update_success_time"] == "2025-01-01T09:00:00+00:00"
     assert runtime["favorites"] == 1
