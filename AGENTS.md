@@ -78,25 +78,33 @@ Progress is tracked in `custom_components/city_visitor_parking/quality_scale.yam
 
 Release automation and release notes MUST stay aligned with:
 
-- `.github/release-drafter.yml` (with shared base `release-drafter-base.yml` and the beta variant)
+- `.github/release-drafter.yml` (with shared base `release-drafter-base.yml`)
 - `.github/workflows/release-drafter.yml`
 - `.github/workflows/release.yml`
 
-### Pre-release channel (betas)
+### Pre-releases
 
-Stable releases (`vX.Y.Z`) are built from `main` and pin the latest stable `pycityvisitorparking` release. A beta (`vX.Y.Z-beta.N`) is a test build: nothing in it reaches `main` before it has been tested and approved.
+Stable releases (`vX.Y.Z`) are built from `main` and pin the latest stable `pycityvisitorparking` release. A pre-release is a test build of one feature branch. There is no long-lived `beta` branch. `pyCityVisitorParking` uses the same model (see its `docs/RELEASING.md`).
 
-- `beta` MUST always contain everything on `main`: merge `main` into `beta` whenever `main` changes, and in any case before drafting a beta. Never rebase or force-push `beta`. `beta` is `main` plus the work under test.
-- Large features that are still in development go to `beta` first (PR into `beta`), are tested in a beta release, and reach `main` in a normal PR only after the beta was tested and approved. Never merge or push untested beta work to `main`.
-- `beta` also carries the changes that only make sense with a library pre-release: the library pre-release pin (for example `pycityvisitorparking==0.6.0b1`) and `providers.yaml` entries for providers that exist only in that pre-release.
-- Branch a feature from `main`. Branch from `beta` only when the feature needs the library pre-release. A feature branched from `beta` MUST reach `main` with only its own commits (`git rebase --onto main` or cherry-pick), never with the beta-only changes below.
-- When testers need exactly one change, a beta MAY instead be built directly from a feature branch (manual flow below). Such a branch MUST also contain everything on `main`.
-- Beta-only changes (the pre-release pin and the entries above) MUST NOT be merged back to `main`. Once the library publishes the provider in a stable release, move the entry to `main` in a normal PR together with the stable pin, then merge `main` into `beta` and drop the pre-release pin.
-- Draft a beta from `beta` with the `Release Drafter` workflow run on ref `beta` with `prerelease=beta` and `version` set to the next stable version, for example `0.1.39`. This creates the tag `vX.Y.Z-beta.N`, targeting `beta`.
-- Release Drafter only drafts betas on ref `beta`. For a beta from a feature branch: push an annotated tag on the branch head, `vX.Y.Z-beta.N` or `vX.Y.Z-<branch-slug>.N` (for example `v0.1.43-rotterdam-provider.1`; the number is the next free one for that name), wait for the `Validate` run on that tag to succeed, then create the draft pre-release by hand from the existing tag with `--target` set to the branch, reusing the body layout of the previous beta.
-- The beta draft body MUST fill in `PyPI` with the exact library version pinned in the beta; `release.yml` rejects a beta without it.
-- The top of the release body MUST state plainly what the pre-release is for (for example "test Rotterdam provider"), which branch it is built from when that is not `beta`, and what is known to be untested, so testers cannot mistake it for a general update. Keep the release title to the tag: a feature-branch tag `vX.Y.Z-<branch-slug>.N` already names what is tested.
+- Branch every feature from `main` and open a pull request to `main`. Changes that only make sense with a library pre-release (the pre-release pin, for example `pycityvisitorparking==0.6.0b1`, and `providers.yaml` entries for providers that exist only in that pre-release) live on that feature branch.
+- Keep the feature branch current by merging `main` into it before tagging a pre-release.
+- Tag the head of the feature branch with an annotated tag `vX.Y.Z-<branch-slug>.N`, for example `v0.1.43-rotterdam-provider.1`. `X.Y.Z` is the next stable version; `N` is the next free number for that name. Never move or reuse a published tag; fix problems with a new number.
+- Wait for the `Validate` run on the tag to succeed, then create the draft pre-release from the existing tag: `gh release create <tag> --verify-tag --prerelease --draft --target <branch>`.
+- The top of the release body MUST state plainly what the pre-release is for (for example "test Rotterdam provider"), which branch it is built from, and what is known to be untested, so testers cannot mistake it for a general update. Keep the release title to the tag.
+- `release.yml` builds with the requirement pinned in `manifest.json` on the tagged commit. A `**PyPI:**` or `**Commit:**` line in the release body overrides it; leave both out unless a different library build is needed.
+- Merge the pull request only after the pre-release was tested and approved. A pull request that pins a library pre-release cannot merge: the `Release policy` check fails until the branch pins the latest stable release.
+- Two features that must be tested together go on a temporary integration branch from `main` that merges both; delete it after testing.
 - Create releases as drafts and publish only when the maintainer asks for it.
+
+### Pre-releases across both repositories
+
+When a feature needs a library change:
+
+1. Library: open the pull request in `pyCityVisitorParking` and publish a library pre-release `vX.Y.ZbN` from its head.
+2. Integration: on the feature branch, pin `pycityvisitorparking==X.Y.ZbN` in `manifest.json` and `pyproject.toml`, refresh `uv.lock`, and tag an integration pre-release.
+3. Test both together. Fix problems with a new library `bN` and a new integration pre-release that pins it.
+4. After approval, merge the library pull request and publish the stable library release.
+5. Pin that stable release on the integration feature branch, merge its pull request, and release the integration from `main`.
 
 ## 6) CI requirements
 
@@ -118,7 +126,7 @@ The repository currently relies on GitHub Actions workflows for validation, labe
 - Python development and CI use `uv` with dependency groups from `pyproject.toml`.
 - Frontend development and CI use the bundle under `custom_components/city_visitor_parking/frontend/`.
 - Treat PR labeling, Release Drafter, dependency review, and release packaging workflows as part of the maintained repository surface.
-- The `Validate` workflow runs on pushes to `main` and `beta`, on pushed tags, and on pull requests to `main` and `beta`. `release.yml` requires a successful `Validate` run on the release commit, so keep `beta` green before publishing a beta from it, and for a beta built from a feature branch wait for the `Validate` run on the beta tag.
+- The `Validate` workflow runs on pushes to `main`, on pushed tags, and on all pull requests. `release.yml` requires a successful `Validate` run on the release commit; for a pre-release that is the run on its tag.
 
 ## 7) Hard rules
 
@@ -161,7 +169,6 @@ The repository currently relies on GitHub Actions workflows for validation, labe
 - Do not add agent-related prefixes or suffixes such as `[codex]`, `[agent]`, or similar markers in branch names, commit titles, or pull request titles.
 - Keep feature branches current with `dev` as needed, but do not rewrite shared history once review is in progress unless explicitly requested.
 - After a feature branch is merged, delete it on GitHub and clean up the local branch as soon as it is no longer needed unless there is an explicit reason to keep it temporarily.
-- `beta` is a long-lived release branch that always contains everything on `main`. Large features in development reach it through a PR from a feature branch, not by direct commits; see "Pre-release channel" in section 5.
 
 ### Python workflow
 
@@ -195,7 +202,7 @@ If frontend output or frontend translation assets are expected by runtime code, 
   - `pyproject.toml`
   - `custom_components/city_visitor_parking/manifest.json`
 - On `main`, the pin MUST be the latest stable PyPI release. The `Release policy` job enforces this.
-- On `beta` and on beta feature branches built from it, the pin MAY be a library pre-release (`==X.Y.ZbN`). `manifest.json` and `pyproject.toml` MUST still match, and `uv.lock` MUST be refreshed. The `Release policy` job skips the "latest on PyPI" comparison only on `beta` and on beta tags; on a beta feature branch that comparison fails for branch pushes, so the `Validate` run on the beta tag is the one that counts.
+- On a feature branch that is tested in a pre-release, the pin MAY be a library pre-release (`==X.Y.ZbN`). `manifest.json` and `pyproject.toml` MUST still match, and `uv.lock` MUST be refreshed. The "latest on PyPI" comparison in `Release policy` then fails on the pull request, which blocks merging until the stable pin is in; it does not run on pre-release tags.
 
 ### CI-sensitive dependency changes
 
@@ -230,7 +237,7 @@ If frontend output or frontend translation assets are expected by runtime code, 
 ### Providers that exist only in a library pre-release
 
 - The municipality dropdown does not check whether the installed library knows a provider. An entry for a provider missing from the pinned library would be offered to users and fail at setup.
-- Therefore add such entries on `beta` (or a beta feature branch built from it) only, together with the library pre-release pin, and never on `main` until `main` pins a stable library that contains the provider.
+- Therefore add such entries only on the feature branch that pins the library pre-release, and never on `main` until `main` pins a stable library that contains the provider.
 
 ## 11) Config entry lifecycle
 

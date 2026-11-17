@@ -6,6 +6,10 @@
 # release is ready, the draft is manually published which triggers the
 # release.yml workflow to build and upload the release asset.
 #
+# Only stable releases are drafted here. Pre-releases are tagged by hand on the
+# head of a feature branch and created with `gh release create --prerelease`;
+# see "Pre-releases" in AGENTS.md.
+#
 # Responsibility split:
 #   - pr-labeling.yml sets and validates PR labels.
 #   - This workflow turns merged PR metadata into draft releases.
@@ -21,24 +25,11 @@ on:
       - custom_components/**
       - .github/release-drafter.yml
       - .github/release-drafter-base.yml
-      - .github/release-drafter-beta.yml
       - .github/workflows/release-drafter.yml
   workflow_dispatch:
     inputs:
-      prerelease:
-        description: "Release type."
-        required: false
-        default: "stable"
-        type: choice
-        options:
-          - stable
-          - beta
       version:
-        description: "Version override (e.g. 0.1.35). Leave empty to auto-resolve from manifest.json."
-        required: false
-        type: string
-      suffix:
-        description: "Build metadata suffix (e.g. dvsportal_new). Leave empty to omit."
+        description: "Version override (e.g. 0.1.35). Leave empty to auto-resolve."
         required: false
         type: string
 
@@ -51,73 +42,15 @@ concurrency:
 jobs:
   update_release_draft:
     name: update_release_draft
+    if: github.ref_name == 'main'
     runs-on: ubuntu-latest
     permissions:
       contents: write
       pull-requests: read
     steps:
-      - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        with:
-          persist-credentials: false
-
-      - name: Run Release Drafter (stable)
-        if: github.ref_name == 'main' && (inputs.prerelease == 'stable' || inputs.prerelease == '')
+      - name: Run Release Drafter
         uses: release-drafter/release-drafter@c2e2804cc59f45f57076a99af580d0fedb697927 # v7.3.0
         with:
           version: ${{ inputs.version }}
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-
-      - name: Get next beta version
-        if: github.ref_name == 'beta' && inputs.prerelease == 'beta'
-        id: next_beta_version
-        env:
-          GH_TOKEN: ${{ github.token }}
-          INPUT_VERSION: ${{ inputs.version }}
-          INPUT_SUFFIX: ${{ inputs.suffix }}
-        run: |
-          if [ -n "${INPUT_VERSION}" ]; then
-            BASE="${INPUT_VERSION}"
-          else
-            MANIFEST_VERSION=$(jq -r '.version' custom_components/city_visitor_parking/manifest.json | sed 's/-.*//')
-            if [ "${MANIFEST_VERSION}" = "0.0.0" ]; then
-              STABLE_DRAFT=$(gh release list --limit 1000 --json tagName,isPrerelease,isDraft \
-                --jq '[.[] | select(.isPrerelease == false and .isDraft == true) | .tagName] | first' \
-                | sed 's/^v//')
-              if [ -n "${STABLE_DRAFT}" ]; then
-                BASE="${STABLE_DRAFT}"
-              else
-                LAST_STABLE=$(gh release list --limit 1000 --json tagName,isPrerelease,isDraft \
-                  --jq '[.[] | select(.isPrerelease == false and .isDraft == false) | .tagName] | first' \
-                  | sed 's/^v//')
-                MAJOR=$(echo "${LAST_STABLE}" | cut -d. -f1)
-                MINOR=$(echo "${LAST_STABLE}" | cut -d. -f2)
-                PATCH=$(echo "${LAST_STABLE}" | cut -d. -f3)
-                BASE="${MAJOR}.${MINOR}.$((PATCH + 1))"
-              fi
-            else
-              BASE="${MANIFEST_VERSION}"
-            fi
-          fi
-          LAST=$(gh release list --limit 1000 --json tagName --jq '.[].tagName' \
-            | grep -E "^v${BASE}-beta\.[0-9]+(\+.*)?$" \
-            | grep -oE "beta\.[0-9]+" \
-            | grep -oE "[0-9]+$" \
-            | sort -n | tail -1)
-          NEXT=$((${LAST:-0} + 1))
-          if [ -n "${INPUT_SUFFIX}" ]; then
-            echo "version=${BASE}-beta.${NEXT}+${INPUT_SUFFIX}" >> "$GITHUB_OUTPUT"
-          else
-            echo "version=${BASE}-beta.${NEXT}" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Run Release Drafter (beta pre-release)
-        if: github.ref_name == 'beta' && inputs.prerelease == 'beta'
-        uses: release-drafter/release-drafter@c2e2804cc59f45f57076a99af580d0fedb697927 # v7.3.0
-        with:
-          config-name: release-drafter-beta.yml
-          prerelease: true
-          version: ${{ steps.next_beta_version.outputs.version }}
         env:
           GITHUB_TOKEN: ${{ github.token }}

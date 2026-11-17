@@ -9,7 +9,7 @@ on:
   schedule:
     - cron: "0 3 * * *"
   push:
-    branches: [main, beta]
+    branches: [main]
     tags:
       - "*"
     paths-ignore:
@@ -17,10 +17,10 @@ on:
       - "LICENSE"
       - ".gitignore"
       - ".github/dependabot.yml"
-  # No path filter on pull requests: this workflow provides required status
-  # checks, and a skipped workflow leaves them pending so the PR cannot merge.
+  # No path or branch filter on pull requests: this workflow provides required
+  # status checks, and a skipped workflow leaves them pending so the PR cannot
+  # merge. Pull requests stacked on a feature branch are validated as well.
   pull_request:
-    branches: [main, beta]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -177,10 +177,10 @@ jobs:
               sys.exit(1)
           PYEOF
 
-      # The beta branch pins a library pre-release on purpose, which never equals
-      # the latest stable release on PyPI, so the freshness check does not apply.
+      # Pre-release tags skip this job. On a feature branch that pins a library
+      # pre-release this check fails on purpose: the pull request cannot merge
+      # until the branch pins the latest stable release.
       - name: Check pycityvisitorparking version in manifest.json
-        if: ${{ github.ref_name != 'beta' && github.base_ref != 'beta' }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
