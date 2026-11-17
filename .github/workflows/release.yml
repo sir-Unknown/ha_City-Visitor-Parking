@@ -305,7 +305,8 @@ jobs:
               pycvp_version = f"[{sha[:7]}]({repo}/commit/{sha})"
           elif pypi_match:
               ver = pypi_match.group(1)
-              pycvp_version = f"[{ver}]({repo}/releases/tag/{ver})"
+              # Library release tags are vX.Y.Z or vX.Y.ZbN.
+              pycvp_version = f"[{ver}]({repo}/releases/tag/v{ver})"
           else:
               pycvp_version = pycvp_req
           with open(os.environ["GITHUB_OUTPUT"], "a") as f:
