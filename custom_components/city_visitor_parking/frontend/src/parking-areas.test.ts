@@ -7,6 +7,7 @@ import {
   getParkingAreaEditorVisibility,
   normalizePaidParkingStatus,
   normalizeParkingAreas,
+  orderParkingAreasForCard,
   resolveCardParkingArea,
 } from "./helpers";
 import type { PaidParkingStatusResponse, ParkingAreaStatus } from "./types";
@@ -96,6 +97,24 @@ describe("card parking area resolution", () => {
         configParkingAreaId: "630",
       }),
     ).toBeNull();
+  });
+});
+
+describe("card parking area picker order", () => {
+  const parkingAreas = [PARKING_AREA_10, PARKING_AREA_630, PARKING_AREA_632];
+  const order = (presetParkingAreaId: string | null | undefined) =>
+    orderParkingAreasForCard(parkingAreas, presetParkingAreaId).map(
+      (parkingArea) => parkingArea.parking_area_id,
+    );
+
+  it("lists the card's preset first and keeps the rest in order", () => {
+    expect(order("632")).toEqual(["632", "10", "630"]);
+    expect(order("10")).toEqual(["10", "630", "632"]);
+  });
+
+  it("keeps the integration order without a known preset", () => {
+    expect(order(undefined)).toEqual(["10", "630", "632"]);
+    expect(order("999")).toEqual(["10", "630", "632"]);
   });
 });
 

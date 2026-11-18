@@ -39,6 +39,7 @@ import {
   normalizePlateValue,
   normalizePaidParkingStatus,
   normalizeParkingAreas,
+  orderParkingAreasForCard,
   parseDateTimeValue,
   resolveCardParkingArea,
   setPendingPermitDefaults,
@@ -572,8 +573,12 @@ class CityVisitorParkingNewReservationCard extends BaseLocalizedCard<CardConfig>
       activeEntryId &&
       this._permitOptions.find((o) => o.id === activeEntryId)?.disabled,
     );
+    // The card's preset parking area is listed first; selection is resolved below.
     const parkingAreas = activeEntryId
-      ? (this._parkingAreasByEntryId.get(activeEntryId) ?? [])
+      ? orderParkingAreasForCard(
+          this._parkingAreasByEntryId.get(activeEntryId) ?? [],
+          this._configParkingAreaId(activeEntryId),
+        )
       : [];
     const selectedParkingArea = activeEntryId
       ? this._resolveParkingArea(activeEntryId)
@@ -871,17 +876,20 @@ class CityVisitorParkingNewReservationCard extends BaseLocalizedCard<CardConfig>
     this._requestRender();
   }
 
+  /** Parking area preset from the card config; it belongs to the configured permit only. */
+  _configParkingAreaId(entryId: string): string | null {
+    return getConfigEntryId(this._config) === entryId
+      ? (this._config?.parking_area_id ?? null)
+      : null;
+  }
+
   /** Parking area the card uses for an entry: user pick, configured preset, or default. */
   _resolveParkingArea(entryId: string): ParkingAreaStatus | null {
     return resolveCardParkingArea(
       this._parkingAreasByEntryId.get(entryId) ?? [],
       {
         showParkingArea: this._config?.show_parking_area !== false,
-        // The configured parking area preset belongs to the configured permit only.
-        configParkingAreaId:
-          getConfigEntryId(this._config) === entryId
-            ? this._config?.parking_area_id
-            : null,
+        configParkingAreaId: this._configParkingAreaId(entryId),
         pickedParkingAreaId: this._selectedParkingAreaIdByEntryId.get(entryId),
       },
     );

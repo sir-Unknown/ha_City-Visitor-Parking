@@ -262,6 +262,25 @@ export const resolveCardParkingArea = (
 };
 
 /**
+ * Returns the parking areas for the card's parking area picker, with the card's
+ * preset parking area first. The others keep their order (the integration's
+ * default parking area first); without a known preset the list is unchanged.
+ */
+export const orderParkingAreasForCard = (
+  parkingAreas: readonly ParkingAreaStatus[],
+  presetParkingAreaId: string | null | undefined,
+): readonly ParkingAreaStatus[] => {
+  const preset = presetParkingAreaId
+    ? parkingAreas.find(
+        (parkingArea) => parkingArea.parking_area_id === presetParkingAreaId,
+      )
+    : undefined;
+  return preset
+    ? [preset, ...parkingAreas.filter((parkingArea) => parkingArea !== preset)]
+    : parkingAreas;
+};
+
+/**
  * Decides which parking area settings the new-reservation card editor shows.
  *
  * The parking area picker needs a configured permit with a parking area choice. The

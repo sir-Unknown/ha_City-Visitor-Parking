@@ -771,6 +771,12 @@ var resolveCardParkingArea = (parkingAreas, options) => {
   ) : void 0;
   return (options.showParkingArea ? find(options.pickedParkingAreaId) : void 0) ?? find(options.configParkingAreaId) ?? parkingAreas[0] ?? null;
 };
+var orderParkingAreasForCard = (parkingAreas, presetParkingAreaId) => {
+  const preset = presetParkingAreaId ? parkingAreas.find(
+    (parkingArea) => parkingArea.parking_area_id === presetParkingAreaId
+  ) : void 0;
+  return preset ? [preset, ...parkingAreas.filter((parkingArea) => parkingArea !== preset)] : parkingAreas;
+};
 var getParkingAreaEditorVisibility = (params) => {
   const permitHasParkingAreas = params.permitConfigured && params.permitParkingAreaCount >= MIN_SELECTABLE_PARKING_AREAS;
   return {
@@ -1981,7 +1987,10 @@ var CityVisitorParkingNewReservationCard = class extends BaseLocalizedCard {
     const selectedPermitDisabled = Boolean(
       activeEntryId && this._permitOptions.find((o5) => o5.id === activeEntryId)?.disabled
     );
-    const parkingAreas = activeEntryId ? this._parkingAreasByEntryId.get(activeEntryId) ?? [] : [];
+    const parkingAreas = activeEntryId ? orderParkingAreasForCard(
+      this._parkingAreasByEntryId.get(activeEntryId) ?? [],
+      this._configParkingAreaId(activeEntryId)
+    ) : [];
     const selectedParkingArea = activeEntryId ? this._resolveParkingArea(activeEntryId) : null;
     const showParkingAreaField = this._config.show_parking_area !== false && (parkingAreas.length >= MIN_SELECTABLE_PARKING_AREAS || controlsDisabled && !activeEntryId && this._permitOptions.some(
       (option) => (this._parkingAreasByEntryId.get(option.id)?.length ?? 0) >= MIN_SELECTABLE_PARKING_AREAS
@@ -2221,14 +2230,17 @@ var CityVisitorParkingNewReservationCard = class extends BaseLocalizedCard {
     this._applyStatusDefaultsToForm(true);
     this._requestRender();
   }
+  /** Parking area preset from the card config; it belongs to the configured permit only. */
+  _configParkingAreaId(entryId) {
+    return getConfigEntryId(this._config) === entryId ? this._config?.parking_area_id ?? null : null;
+  }
   /** Parking area the card uses for an entry: user pick, configured preset, or default. */
   _resolveParkingArea(entryId) {
     return resolveCardParkingArea(
       this._parkingAreasByEntryId.get(entryId) ?? [],
       {
         showParkingArea: this._config?.show_parking_area !== false,
-        // The configured parking area preset belongs to the configured permit only.
-        configParkingAreaId: getConfigEntryId(this._config) === entryId ? this._config?.parking_area_id : null,
+        configParkingAreaId: this._configParkingAreaId(entryId),
         pickedParkingAreaId: this._selectedParkingAreaIdByEntryId.get(entryId)
       }
     );
