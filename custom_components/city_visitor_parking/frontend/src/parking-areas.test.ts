@@ -4,7 +4,7 @@ import {
   applyParkingAreaToStatus,
   dropForeignParkingAreaId,
   formatReservationParkingArea,
-  getParkingAreaEditorVisibility,
+  getEditorParkingAreas,
   normalizePaidParkingStatus,
   normalizeParkingAreas,
   orderParkingAreasForCard,
@@ -161,38 +161,23 @@ describe("parking area selection", () => {
 });
 
 describe("card editor parking area settings", () => {
-  it("shows the parking area picker only for a configured permit with a choice", () => {
+  const ids = (parkingAreas: readonly ParkingAreaStatus[]) =>
+    parkingAreas.map((parkingArea) => parkingArea.parking_area_id);
+
+  it("offers the parking areas of every permit with a choice, each id once", () => {
     expect(
-      getParkingAreaEditorVisibility({
-        permitConfigured: true,
-        permitParkingAreaCount: 3,
-        anyPermitHasParkingAreas: false,
-      }),
-    ).toEqual({ showParkingAreaSelect: true, showParkingAreaToggle: true });
-    expect(
-      getParkingAreaEditorVisibility({
-        permitConfigured: true,
-        permitParkingAreaCount: 1,
-        anyPermitHasParkingAreas: true,
-      }),
-    ).toEqual({ showParkingAreaSelect: false, showParkingAreaToggle: false });
+      ids(
+        getEditorParkingAreas([
+          [PARKING_AREA_10, PARKING_AREA_630],
+          [PARKING_AREA_630, PARKING_AREA_632],
+        ]),
+      ),
+    ).toEqual(["10", "630", "632"]);
   });
 
-  it("shows only the toggle without a permit when any permit has parking areas", () => {
-    expect(
-      getParkingAreaEditorVisibility({
-        permitConfigured: false,
-        permitParkingAreaCount: 0,
-        anyPermitHasParkingAreas: true,
-      }),
-    ).toEqual({ showParkingAreaSelect: false, showParkingAreaToggle: true });
-    expect(
-      getParkingAreaEditorVisibility({
-        permitConfigured: false,
-        permitParkingAreaCount: 0,
-        anyPermitHasParkingAreas: false,
-      }),
-    ).toEqual({ showParkingAreaSelect: false, showParkingAreaToggle: false });
+  it("hides the settings when no permit has a parking area choice", () => {
+    expect(getEditorParkingAreas([[PARKING_AREA_10], []])).toEqual([]);
+    expect(getEditorParkingAreas([])).toEqual([]);
   });
 
   it("drops a parking area that does not belong to a changed or cleared permit", () => {
@@ -210,9 +195,17 @@ describe("card editor parking area settings", () => {
         parkingAreasByEntryId,
       ),
     ).toEqual({ type: "t", config_entry_id: "c" });
+    // Without a permit the card shows a permit picker: any known permit counts.
     expect(
       dropForeignParkingAreaId(
         { ...config, config_entry_id: undefined },
+        "a",
+        parkingAreasByEntryId,
+      ),
+    ).toEqual({ ...config, config_entry_id: undefined });
+    expect(
+      dropForeignParkingAreaId(
+        { ...config, config_entry_id: undefined, parking_area_id: "999" },
         "a",
         parkingAreasByEntryId,
       ),

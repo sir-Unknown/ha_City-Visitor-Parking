@@ -755,9 +755,11 @@ var dropForeignParkingAreaId = (config, previousEntryId, parkingAreasByEntryId) 
   if (!config.parking_area_id || config.config_entry_id === previousEntryId) {
     return config;
   }
-  const parkingAreas = config.config_entry_id ? parkingAreasByEntryId.get(config.config_entry_id) : void 0;
-  if (parkingAreas?.some(
-    (parkingArea) => parkingArea.parking_area_id === config.parking_area_id
+  const candidateLists = config.config_entry_id ? [parkingAreasByEntryId.get(config.config_entry_id) ?? []] : [...parkingAreasByEntryId.values()];
+  if (candidateLists.some(
+    (parkingAreas) => parkingAreas.some(
+      (parkingArea) => parkingArea.parking_area_id === config.parking_area_id
+    )
   ))
     return config;
   const next = { ...config };
@@ -777,12 +779,18 @@ var orderParkingAreasForCard = (parkingAreas, presetParkingAreaId) => {
   ) : void 0;
   return preset ? [preset, ...parkingAreas.filter((parkingArea) => parkingArea !== preset)] : parkingAreas;
 };
-var getParkingAreaEditorVisibility = (params) => {
-  const permitHasParkingAreas = params.permitConfigured && params.permitParkingAreaCount >= MIN_SELECTABLE_PARKING_AREAS;
-  return {
-    showParkingAreaSelect: permitHasParkingAreas,
-    showParkingAreaToggle: params.permitConfigured ? permitHasParkingAreas : params.anyPermitHasParkingAreas
-  };
+var getEditorParkingAreas = (permitParkingAreas) => {
+  const seen = /* @__PURE__ */ new Set();
+  const result = [];
+  for (const parkingAreas of permitParkingAreas) {
+    if (parkingAreas.length < MIN_SELECTABLE_PARKING_AREAS) continue;
+    for (const parkingArea of parkingAreas) {
+      if (seen.has(parkingArea.parking_area_id)) continue;
+      seen.add(parkingArea.parking_area_id);
+      result.push(parkingArea);
+    }
+  }
+  return result;
 };
 var fetchReservations = async (hass, device, fresh) => {
   if (!fresh && device.config_entry_id) {
@@ -1407,11 +1415,7 @@ var buildCardTypeOptions = (localizeTarget, prefix) => {
     ]
   ];
 };
-var NO_PARKING_AREA_FIELDS = {
-  parkingAreaOptions: null,
-  showParkingAreaToggle: false
-};
-var buildCardEditorSchema = (cardTypeOptions, displayOptionsExpanded, parkingAreaFields = NO_PARKING_AREA_FIELDS) => [
+var buildCardEditorSchema = (cardTypeOptions, displayOptionsExpanded, parkingAreaOptions = null) => [
   {
     type: "select",
     name: "type",
@@ -1431,19 +1435,17 @@ var buildCardEditorSchema = (cardTypeOptions, displayOptionsExpanded, parkingAre
         selector: { config_entry: { integration: DOMAIN } },
         required: false
       },
-      ...parkingAreaFields.parkingAreaOptions ? [
+      ...parkingAreaOptions ? [
         {
           name: "parking_area_id",
           selector: {
             select: {
-              options: parkingAreaFields.parkingAreaOptions,
+              options: parkingAreaOptions,
               mode: "dropdown"
             }
           },
           required: false
-        }
-      ] : [],
-      ...parkingAreaFields.showParkingAreaToggle ? [
+        },
         {
           name: "show_parking_area",
           selector: { boolean: {} },
@@ -1494,7 +1496,7 @@ var CityVisitorParkingCardEditor = class extends BaseCardEditor {
         .schema=${buildCardEditorSchema(
       cardTypeOptions,
       displayOptionsExpanded,
-      this._getParkingAreaFields()
+      this._getParkingAreaOptions()
     )}
         .computeLabel=${computeLabel}
         .computeHelper=${computeHelper}
@@ -1509,24 +1511,17 @@ var CityVisitorParkingCardEditor = class extends BaseCardEditor {
       this._parkingAreasByEntryId
     );
   }
-  /** Parking area settings for the current config; see `getParkingAreaEditorVisibility`. */
-  _getParkingAreaFields() {
+  /** Default parking area options for the current config; see `getEditorParkingAreas`. */
+  _getParkingAreaOptions() {
     const entryId = this._config?.config_entry_id;
-    const permitParkingAreas = entryId ? this._parkingAreasByEntryId.get(entryId) ?? [] : [];
-    const { showParkingAreaSelect, showParkingAreaToggle } = getParkingAreaEditorVisibility({
-      permitConfigured: Boolean(entryId),
-      permitParkingAreaCount: permitParkingAreas.length,
-      anyPermitHasParkingAreas: (this._permitIds ?? []).some(
-        (id) => (this._parkingAreasByEntryId.get(id)?.length ?? 0) >= MIN_SELECTABLE_PARKING_AREAS
-      )
-    });
-    return {
-      parkingAreaOptions: showParkingAreaSelect ? permitParkingAreas.map((parkingArea) => ({
-        value: parkingArea.parking_area_id,
-        label: parkingArea.name || parkingArea.parking_area_id
-      })) : null,
-      showParkingAreaToggle
-    };
+    const permitIds = entryId ? [entryId] : this._permitIds ?? [];
+    const parkingAreas = getEditorParkingAreas(
+      permitIds.map((id) => this._parkingAreasByEntryId.get(id) ?? [])
+    );
+    return parkingAreas.length ? parkingAreas.map((parkingArea) => ({
+      value: parkingArea.parking_area_id,
+      label: parkingArea.name || parkingArea.parking_area_id
+    })) : null;
   }
   /**
    * Loads the parking areas that decide which parking area settings are shown: those of the
@@ -2230,9 +2225,14 @@ var CityVisitorParkingNewReservationCard = class extends BaseLocalizedCard {
     this._applyStatusDefaultsToForm(true);
     this._requestRender();
   }
-  /** Parking area preset from the card config; it belongs to the configured permit only. */
+  /**
+   * Parking area preset from the card config for an entry. With a linked permit
+   * it belongs to that permit only; with the permit picker it applies to every
+   * permit, and permits without that parking area ignore it.
+   */
   _configParkingAreaId(entryId) {
-    return getConfigEntryId(this._config) === entryId ? this._config?.parking_area_id ?? null : null;
+    const configEntryId = getConfigEntryId(this._config);
+    return !configEntryId || configEntryId === entryId ? this._config?.parking_area_id ?? null : null;
   }
   /** Parking area the card uses for an entry: user pick, configured preset, or default. */
   _resolveParkingArea(entryId) {

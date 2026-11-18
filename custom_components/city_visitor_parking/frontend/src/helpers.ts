@@ -196,8 +196,9 @@ export const applyParkingAreaToStatus = (
 
 /**
  * Drops a configured `parking_area_id` once the permit changed or was cleared.
- * Parking area ids are per permit, so the parking area survives only when the new permit's
- * known parking areas list it.
+ * Parking area ids are per permit, so the parking area survives only when the new
+ * permit lists it, or, without a permit (the card shows a permit picker), when any
+ * known permit lists it.
  */
 export const dropForeignParkingAreaId = <
   T extends { config_entry_id?: string; parking_area_id?: string },
@@ -209,12 +210,14 @@ export const dropForeignParkingAreaId = <
   if (!config.parking_area_id || config.config_entry_id === previousEntryId) {
     return config;
   }
-  const parkingAreas = config.config_entry_id
-    ? parkingAreasByEntryId.get(config.config_entry_id)
-    : undefined;
+  const candidateLists = config.config_entry_id
+    ? [parkingAreasByEntryId.get(config.config_entry_id) ?? []]
+    : [...parkingAreasByEntryId.values()];
   if (
-    parkingAreas?.some(
-      (parkingArea) => parkingArea.parking_area_id === config.parking_area_id,
+    candidateLists.some((parkingAreas) =>
+      parkingAreas.some(
+        (parkingArea) => parkingArea.parking_area_id === config.parking_area_id,
+      ),
     )
   )
     return config;
@@ -230,7 +233,7 @@ export const MIN_SELECTABLE_PARKING_AREAS = 2;
 export type CardParkingAreaOptions = {
   /** Whether the card shows its parking area field (`show_parking_area`). */
   showParkingArea: boolean;
-  /** Preset parking area from the card config (`parking_area_id`) for the configured permit. */
+  /** Preset parking area from the card config (`parking_area_id`) that applies to this permit. */
   configParkingAreaId?: string | null;
   /** Parking area the user picked in the card's parking area field. */
   pickedParkingAreaId?: string | null;
@@ -281,26 +284,26 @@ export const orderParkingAreasForCard = (
 };
 
 /**
- * Decides which parking area settings the new-reservation card editor shows.
- *
- * The parking area picker needs a configured permit with a parking area choice. The
- * `show_parking_area` toggle follows the configured permit, or, without one (the card
- * then shows a permit picker), any permit with a parking area choice.
+ * Returns the parking areas the new-reservation card editor offers as default
+ * parking area, from the configured permit or, without one (the card then shows
+ * a permit picker), from every permit. Only permits with a parking area choice
+ * contribute, and an id listed by several permits appears once. An empty result
+ * hides the parking area settings.
  */
-export const getParkingAreaEditorVisibility = (params: {
-  permitConfigured: boolean;
-  permitParkingAreaCount: number;
-  anyPermitHasParkingAreas: boolean;
-}): { showParkingAreaSelect: boolean; showParkingAreaToggle: boolean } => {
-  const permitHasParkingAreas =
-    params.permitConfigured &&
-    params.permitParkingAreaCount >= MIN_SELECTABLE_PARKING_AREAS;
-  return {
-    showParkingAreaSelect: permitHasParkingAreas,
-    showParkingAreaToggle: params.permitConfigured
-      ? permitHasParkingAreas
-      : params.anyPermitHasParkingAreas,
-  };
+export const getEditorParkingAreas = (
+  permitParkingAreas: ReadonlyArray<readonly ParkingAreaStatus[]>,
+): ParkingAreaStatus[] => {
+  const seen = new Set<string>();
+  const result: ParkingAreaStatus[] = [];
+  for (const parkingAreas of permitParkingAreas) {
+    if (parkingAreas.length < MIN_SELECTABLE_PARKING_AREAS) continue;
+    for (const parkingArea of parkingAreas) {
+      if (seen.has(parkingArea.parking_area_id)) continue;
+      seen.add(parkingArea.parking_area_id);
+      result.push(parkingArea);
+    }
+  }
+  return result;
 };
 
 /**

@@ -11,11 +11,10 @@ import type {
 } from "./types";
 import {
   DOMAIN,
-  MIN_SELECTABLE_PARKING_AREAS,
   dropForeignParkingAreaId,
   fetchPermitEntries,
   fetchPermitParkingAreas,
-  getParkingAreaEditorVisibility,
+  getEditorParkingAreas,
   isPermitEntryDisabled,
 } from "./helpers";
 import { ensureTranslations, localize, getGlobalHass } from "./translations";
@@ -61,22 +60,13 @@ export const buildCardTypeOptions = (
   ];
 };
 
-/** Parking area settings shown next to the permit setting; omitted when not offered. */
-type ParkingAreaEditorFields = {
-  /** Options for the `parking_area_id` picker, or `null` to hide it. */
-  parkingAreaOptions: Array<{ value: string; label: string }> | null;
-  showParkingAreaToggle: boolean;
-};
-
-const NO_PARKING_AREA_FIELDS: ParkingAreaEditorFields = {
-  parkingAreaOptions: null,
-  showParkingAreaToggle: false,
-};
+/** Options for the `parking_area_id` picker; `null` hides the parking area settings. */
+type ParkingAreaOptions = Array<{ value: string; label: string }> | null;
 
 const buildCardEditorSchema = (
   cardTypeOptions: ReadonlyArray<readonly [string, string]>,
   displayOptionsExpanded: boolean,
-  parkingAreaFields: ParkingAreaEditorFields = NO_PARKING_AREA_FIELDS,
+  parkingAreaOptions: ParkingAreaOptions = null,
 ): CardEditorFormSchema => [
   {
     type: "select",
@@ -97,22 +87,18 @@ const buildCardEditorSchema = (
         selector: { config_entry: { integration: DOMAIN } },
         required: false,
       },
-      ...(parkingAreaFields.parkingAreaOptions
+      ...(parkingAreaOptions
         ? [
             {
               name: "parking_area_id",
               selector: {
                 select: {
-                  options: parkingAreaFields.parkingAreaOptions,
+                  options: parkingAreaOptions,
                   mode: "dropdown",
                 },
               },
               required: false,
             },
-          ]
-        : []),
-      ...(parkingAreaFields.showParkingAreaToggle
-        ? [
             {
               name: "show_parking_area",
               selector: { boolean: {} },
@@ -172,7 +158,7 @@ export class CityVisitorParkingCardEditor extends BaseCardEditor<ParkingCardEdit
         .schema=${buildCardEditorSchema(
           cardTypeOptions,
           displayOptionsExpanded,
-          this._getParkingAreaFields(),
+          this._getParkingAreaOptions(),
         )}
         .computeLabel=${computeLabel}
         .computeHelper=${computeHelper}
@@ -191,31 +177,19 @@ export class CityVisitorParkingCardEditor extends BaseCardEditor<ParkingCardEdit
     );
   }
 
-  /** Parking area settings for the current config; see `getParkingAreaEditorVisibility`. */
-  private _getParkingAreaFields(): ParkingAreaEditorFields {
+  /** Default parking area options for the current config; see `getEditorParkingAreas`. */
+  private _getParkingAreaOptions(): ParkingAreaOptions {
     const entryId = this._config?.config_entry_id;
-    const permitParkingAreas = entryId
-      ? (this._parkingAreasByEntryId.get(entryId) ?? [])
-      : [];
-    const { showParkingAreaSelect, showParkingAreaToggle } =
-      getParkingAreaEditorVisibility({
-        permitConfigured: Boolean(entryId),
-        permitParkingAreaCount: permitParkingAreas.length,
-        anyPermitHasParkingAreas: (this._permitIds ?? []).some(
-          (id) =>
-            (this._parkingAreasByEntryId.get(id)?.length ?? 0) >=
-            MIN_SELECTABLE_PARKING_AREAS,
-        ),
-      });
-    return {
-      parkingAreaOptions: showParkingAreaSelect
-        ? permitParkingAreas.map((parkingArea) => ({
-            value: parkingArea.parking_area_id,
-            label: parkingArea.name || parkingArea.parking_area_id,
-          }))
-        : null,
-      showParkingAreaToggle,
-    };
+    const permitIds = entryId ? [entryId] : (this._permitIds ?? []);
+    const parkingAreas = getEditorParkingAreas(
+      permitIds.map((id) => this._parkingAreasByEntryId.get(id) ?? []),
+    );
+    return parkingAreas.length
+      ? parkingAreas.map((parkingArea) => ({
+          value: parkingArea.parking_area_id,
+          label: parkingArea.name || parkingArea.parking_area_id,
+        }))
+      : null;
   }
 
   /**

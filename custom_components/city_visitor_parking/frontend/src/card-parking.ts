@@ -876,9 +876,14 @@ class CityVisitorParkingNewReservationCard extends BaseLocalizedCard<CardConfig>
     this._requestRender();
   }
 
-  /** Parking area preset from the card config; it belongs to the configured permit only. */
+  /**
+   * Parking area preset from the card config for an entry. With a linked permit
+   * it belongs to that permit only; with the permit picker it applies to every
+   * permit, and permits without that parking area ignore it.
+   */
   _configParkingAreaId(entryId: string): string | null {
-    return getConfigEntryId(this._config) === entryId
+    const configEntryId = getConfigEntryId(this._config);
+    return !configEntryId || configEntryId === entryId
       ? (this._config?.parking_area_id ?? null)
       : null;
   }
