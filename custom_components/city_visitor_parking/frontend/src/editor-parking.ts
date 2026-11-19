@@ -11,10 +11,9 @@ import type {
 } from "./types";
 import {
   DOMAIN,
-  dropForeignParkingAreaId,
+  MIN_SELECTABLE_PARKING_AREAS,
   fetchPermitEntries,
   fetchPermitParkingAreas,
-  getEditorParkingAreas,
   isPermitEntryDisabled,
 } from "./helpers";
 import { ensureTranslations, localize, getGlobalHass } from "./translations";
@@ -60,13 +59,10 @@ export const buildCardTypeOptions = (
   ];
 };
 
-/** Options for the `parking_area_id` picker; `null` hides the parking area settings. */
-type ParkingAreaOptions = Array<{ value: string; label: string }> | null;
-
 const buildCardEditorSchema = (
   cardTypeOptions: ReadonlyArray<readonly [string, string]>,
   displayOptionsExpanded: boolean,
-  parkingAreaOptions: ParkingAreaOptions = null,
+  showParkingAreaToggle = false,
 ): CardEditorFormSchema => [
   {
     type: "select",
@@ -87,18 +83,8 @@ const buildCardEditorSchema = (
         selector: { config_entry: { integration: DOMAIN } },
         required: false,
       },
-      ...(parkingAreaOptions
+      ...(showParkingAreaToggle
         ? [
-            {
-              name: "parking_area_id",
-              selector: {
-                select: {
-                  options: parkingAreaOptions,
-                  mode: "dropdown",
-                },
-              },
-              required: false,
-            },
             {
               name: "show_parking_area",
               selector: { boolean: {} },
@@ -143,7 +129,6 @@ export class CityVisitorParkingCardEditor extends BaseCardEditor<ParkingCardEdit
     const cardTypeOptions = buildCardTypeOptions(localizeTarget, "editor");
     const displayOptionsExpanded = Boolean(
       this._config?.config_entry_id ||
-      this._config?.parking_area_id ||
       this._config?.show_parking_area === false ||
       this._config?.show_name === false ||
       this._config?.show_favorites === false ||
@@ -158,7 +143,7 @@ export class CityVisitorParkingCardEditor extends BaseCardEditor<ParkingCardEdit
         .schema=${buildCardEditorSchema(
           cardTypeOptions,
           displayOptionsExpanded,
-          this._getParkingAreaOptions(),
+          this._hasParkingAreaChoice(),
         )}
         .computeLabel=${computeLabel}
         .computeHelper=${computeHelper}
@@ -167,29 +152,18 @@ export class CityVisitorParkingCardEditor extends BaseCardEditor<ParkingCardEdit
     `;
   }
 
-  protected _normalizeConfig(
-    config: ParkingCardEditorConfig,
-  ): ParkingCardEditorConfig {
-    return dropForeignParkingAreaId(
-      config,
-      this._config?.config_entry_id,
-      this._parkingAreasByEntryId,
-    );
-  }
-
-  /** Default parking area options for the current config; see `getEditorParkingAreas`. */
-  private _getParkingAreaOptions(): ParkingAreaOptions {
+  /**
+   * Whether the card can offer a parking area choice: the configured permit, or,
+   * without one (the card then shows a permit picker), any permit has one.
+   */
+  private _hasParkingAreaChoice(): boolean {
     const entryId = this._config?.config_entry_id;
     const permitIds = entryId ? [entryId] : (this._permitIds ?? []);
-    const parkingAreas = getEditorParkingAreas(
-      permitIds.map((id) => this._parkingAreasByEntryId.get(id) ?? []),
+    return permitIds.some(
+      (id) =>
+        (this._parkingAreasByEntryId.get(id)?.length ?? 0) >=
+        MIN_SELECTABLE_PARKING_AREAS,
     );
-    return parkingAreas.length
-      ? parkingAreas.map((parkingArea) => ({
-          value: parkingArea.parking_area_id,
-          label: parkingArea.name || parkingArea.parking_area_id,
-        }))
-      : null;
   }
 
   /**

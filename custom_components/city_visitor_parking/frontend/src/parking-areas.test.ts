@@ -2,12 +2,9 @@ import { describe, expect, it } from "vitest";
 import {
   EMPTY_PAID_PARKING_STATUS,
   applyParkingAreaToStatus,
-  dropForeignParkingAreaId,
   formatReservationParkingArea,
-  getEditorParkingAreas,
   normalizePaidParkingStatus,
   normalizeParkingAreas,
-  orderParkingAreasForCard,
   resolveCardParkingArea,
 } from "./helpers";
 import type { PaidParkingStatusResponse, ParkingAreaStatus } from "./types";
@@ -50,71 +47,18 @@ const PARKING_AREA_632: ParkingAreaStatus = {
 
 describe("card parking area resolution", () => {
   const parkingAreas = [PARKING_AREA_10, PARKING_AREA_630, PARKING_AREA_632];
-  const resolve = (options: Parameters<typeof resolveCardParkingArea>[1]) =>
-    resolveCardParkingArea(parkingAreas, options)?.parking_area_id;
+  const resolve = (pickedParkingAreaId: string | null | undefined) =>
+    resolveCardParkingArea(parkingAreas, pickedParkingAreaId)?.parking_area_id;
 
-  it("lets a shown parking area field prefer the user's pick over the preset", () => {
-    expect(resolve({ showParkingArea: true })).toBe("10");
-    expect(resolve({ showParkingArea: true, configParkingAreaId: "630" })).toBe(
-      "630",
-    );
-    expect(
-      resolve({
-        showParkingArea: true,
-        configParkingAreaId: "630",
-        pickedParkingAreaId: "632",
-      }),
-    ).toBe("632");
-    expect(
-      resolve({
-        showParkingArea: true,
-        configParkingAreaId: "630",
-        pickedParkingAreaId: "999",
-      }),
-    ).toBe("630");
-  });
-
-  it("uses only the preset when the parking area field is hidden", () => {
-    expect(
-      resolve({
-        showParkingArea: false,
-        configParkingAreaId: "630",
-        pickedParkingAreaId: "632",
-      }),
-    ).toBe("630");
-    expect(
-      resolve({ showParkingArea: false, pickedParkingAreaId: "632" }),
-    ).toBe("10");
-    expect(
-      resolve({ showParkingArea: false, configParkingAreaId: "999" }),
-    ).toBe("10");
+  it("uses the user's pick, else the integration's default parking area", () => {
+    expect(resolve("632")).toBe("632");
+    expect(resolve(undefined)).toBe("10");
+    expect(resolve(null)).toBe("10");
+    expect(resolve("999")).toBe("10");
   });
 
   it("returns no parking area for permits without parking areas", () => {
-    expect(
-      resolveCardParkingArea([], {
-        showParkingArea: true,
-        configParkingAreaId: "630",
-      }),
-    ).toBeNull();
-  });
-});
-
-describe("card parking area picker order", () => {
-  const parkingAreas = [PARKING_AREA_10, PARKING_AREA_630, PARKING_AREA_632];
-  const order = (presetParkingAreaId: string | null | undefined) =>
-    orderParkingAreasForCard(parkingAreas, presetParkingAreaId).map(
-      (parkingArea) => parkingArea.parking_area_id,
-    );
-
-  it("lists the card's preset first and keeps the rest in order", () => {
-    expect(order("632")).toEqual(["632", "10", "630"]);
-    expect(order("10")).toEqual(["10", "630", "632"]);
-  });
-
-  it("keeps the integration order without a known preset", () => {
-    expect(order(undefined)).toEqual(["10", "630", "632"]);
-    expect(order("999")).toEqual(["10", "630", "632"]);
+    expect(resolveCardParkingArea([], "630")).toBeNull();
   });
 });
 
@@ -157,66 +101,6 @@ describe("parking area selection", () => {
     expect(
       applyParkingAreaToStatus(EMPTY_PAID_PARKING_STATUS, PARKING_AREA_630),
     ).toBe(EMPTY_PAID_PARKING_STATUS);
-  });
-});
-
-describe("card editor parking area settings", () => {
-  const ids = (parkingAreas: readonly ParkingAreaStatus[]) =>
-    parkingAreas.map((parkingArea) => parkingArea.parking_area_id);
-
-  it("offers the parking areas of every permit with a choice, each id once", () => {
-    expect(
-      ids(
-        getEditorParkingAreas([
-          [PARKING_AREA_10, PARKING_AREA_630],
-          [PARKING_AREA_630, PARKING_AREA_632],
-        ]),
-      ),
-    ).toEqual(["10", "630", "632"]);
-  });
-
-  it("hides the settings when no permit has a parking area choice", () => {
-    expect(getEditorParkingAreas([[PARKING_AREA_10], []])).toEqual([]);
-    expect(getEditorParkingAreas([])).toEqual([]);
-  });
-
-  it("drops a parking area that does not belong to a changed or cleared permit", () => {
-    const parkingAreasByEntryId = new Map([
-      ["b", [PARKING_AREA_10, PARKING_AREA_630]],
-    ]);
-    const config = { type: "t", config_entry_id: "a", parking_area_id: "630" };
-    expect(dropForeignParkingAreaId(config, "a", parkingAreasByEntryId)).toBe(
-      config,
-    );
-    expect(
-      dropForeignParkingAreaId(
-        { ...config, config_entry_id: "c" },
-        "a",
-        parkingAreasByEntryId,
-      ),
-    ).toEqual({ type: "t", config_entry_id: "c" });
-    // Without a permit the card shows a permit picker: any known permit counts.
-    expect(
-      dropForeignParkingAreaId(
-        { ...config, config_entry_id: undefined },
-        "a",
-        parkingAreasByEntryId,
-      ),
-    ).toEqual({ ...config, config_entry_id: undefined });
-    expect(
-      dropForeignParkingAreaId(
-        { ...config, config_entry_id: undefined, parking_area_id: "999" },
-        "a",
-        parkingAreasByEntryId,
-      ),
-    ).toEqual({ type: "t", config_entry_id: undefined });
-    expect(
-      dropForeignParkingAreaId(
-        { ...config, config_entry_id: "b" },
-        "a",
-        parkingAreasByEntryId,
-      ),
-    ).toEqual({ ...config, config_entry_id: "b" });
   });
 });
 

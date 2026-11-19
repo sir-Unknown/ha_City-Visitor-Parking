@@ -39,7 +39,6 @@ import {
   normalizePlateValue,
   normalizePaidParkingStatus,
   normalizeParkingAreas,
-  orderParkingAreasForCard,
   parseDateTimeValue,
   resolveCardParkingArea,
   setPendingPermitDefaults,
@@ -75,7 +74,6 @@ type CardConfig = {
   show_end_time?: boolean;
   default_license_plate?: string;
   config_entry_id?: string;
-  parking_area_id?: string;
   show_parking_area?: boolean;
   device_id?: string;
 };
@@ -573,12 +571,9 @@ class CityVisitorParkingNewReservationCard extends BaseLocalizedCard<CardConfig>
       activeEntryId &&
       this._permitOptions.find((o) => o.id === activeEntryId)?.disabled,
     );
-    // The card's preset parking area is listed first; selection is resolved below.
+    // Parking areas arrive with the integration's default parking area first.
     const parkingAreas = activeEntryId
-      ? orderParkingAreasForCard(
-          this._parkingAreasByEntryId.get(activeEntryId) ?? [],
-          this._configParkingAreaId(activeEntryId),
-        )
+      ? (this._parkingAreasByEntryId.get(activeEntryId) ?? [])
       : [];
     const selectedParkingArea = activeEntryId
       ? this._resolveParkingArea(activeEntryId)
@@ -876,27 +871,14 @@ class CityVisitorParkingNewReservationCard extends BaseLocalizedCard<CardConfig>
     this._requestRender();
   }
 
-  /**
-   * Parking area preset from the card config for an entry. With a linked permit
-   * it belongs to that permit only; with the permit picker it applies to every
-   * permit, and permits without that parking area ignore it.
-   */
-  _configParkingAreaId(entryId: string): string | null {
-    const configEntryId = getConfigEntryId(this._config);
-    return !configEntryId || configEntryId === entryId
-      ? (this._config?.parking_area_id ?? null)
-      : null;
-  }
-
-  /** Parking area the card uses for an entry: user pick, configured preset, or default. */
+  /** Parking area the card uses for an entry: the user's pick or the default. */
   _resolveParkingArea(entryId: string): ParkingAreaStatus | null {
     return resolveCardParkingArea(
       this._parkingAreasByEntryId.get(entryId) ?? [],
-      {
-        showParkingArea: this._config?.show_parking_area !== false,
-        configParkingAreaId: this._configParkingAreaId(entryId),
-        pickedParkingAreaId: this._selectedParkingAreaIdByEntryId.get(entryId),
-      },
+      // With the field hidden there is nothing to pick: the default applies.
+      this._config?.show_parking_area !== false
+        ? this._selectedParkingAreaIdByEntryId.get(entryId)
+        : null,
     );
   }
 

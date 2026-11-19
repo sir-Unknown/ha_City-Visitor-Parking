@@ -239,7 +239,6 @@ export type ParkingCardEditorConfig = {
   show_end_time?: boolean;
   default_license_plate?: string;
   config_entry_id?: string;
-  parking_area_id?: string;
   show_parking_area?: boolean;
 };
 
