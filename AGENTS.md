@@ -255,22 +255,19 @@ If frontend output or frontend translation assets are expected by runtime code, 
 
 ### Config flow requirements
 
-Recommended steps:
+Steps:
 
 1. Select municipality
 2. If `Other`, enter manual municipality/provider config
 3. Enter credentials
 4. Validate connection/login with a safe test call
 5. Fetch permits and select `permit_id`
-6. Optional description
 
 ### Entry identity & title
 
 - Set a stable `unique_id` and prevent duplicates.
 - Preferred `unique_id` strategy: include `provider_id` and `permit_id` if stable and non-PII.
-- Entry title MUST be unique and follow:
-  - `"{description} - {permit_id}"` if description is provided
-  - otherwise `"{municipality_name} - {permit_id}"`
+- Entry title and device name MUST be unique and follow `"{municipality_name} - {permit_id}"`. Users who want shorter names rename the device in Home Assistant; the integration has no description field.
 
 ### Setup/unload
 

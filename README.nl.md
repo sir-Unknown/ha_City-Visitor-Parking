@@ -49,6 +49,12 @@ Zo hoef je niet elke keer handmatig in te loggen op het parkeerportaal van de ge
 
 ---
 
+## Apparaat- en entiteitsnamen
+
+Elke vergunning krijgt één apparaat met de naam `{gemeente} - {vergunnings-ID}`, en de entiteit-ID's beginnen met die naam. Sommige gemeenten gebruiken lange vergunnings-ID's. Voor kortere entiteit-ID's hernoem je het apparaat via **Instellingen** → **Apparaten & diensten** → **Apparaten** en laat je Home Assistant ook de entiteit-ID's hernoemen. Pas daarna automatiseringen en dashboards aan die de oude entiteit-ID's gebruiken.
+
+---
+
 ## Belangrijk
 
 > [!IMPORTANT]
