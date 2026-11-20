@@ -42,6 +42,7 @@ Met deze integratie kun je:
 
 - een parkeersessie starten, wijzigen en stoppen
 - snel een opgeslagen kenteken kiezen
+- het parkeergebied kiezen bij vergunningen voor meerdere parkeergebieden
 - direct zien of parkeren betaald of gratis is
 - bezoekersparkeren automatiseren met Home Assistant-automatiseringen en -scripts
 
@@ -95,6 +96,7 @@ De integratie ondersteunt een groeiend aantal Nederlandse gemeenten en maakt ver
 | Roermond         | [parkeren.roermond.nl](https://parkeren.roermond.nl/DVSPortal/)                         |
 | Den Haag         | [parkerendenhaag.denhaag.nl](https://parkerendenhaag.denhaag.nl/)                       |
 | Roosendaal       | [mijn.2park.nl](https://mijn.2park.nl/)                                                 |
+| Rotterdam        | [bezoek.rotterdam.nl](https://bezoek.rotterdam.nl/)                                     |
 | Deventer         | [mijn.2park.nl](https://mijn.2park.nl/)                                                 |
 | Sittard-Geleen   | [parkeren.sittard-geleen.nl](https://parkeren.sittard-geleen.nl/DVSPortal/)             |
 | Doetinchem       | [parkeren.buha.nl](https://parkeren.buha.nl/DVSPortal/)                                 |

@@ -285,8 +285,6 @@ roosendaal:
   gui_url: "https://mijn.2park.nl/"
   api_url: "/gsmpark-app-www/json"
 
-# Only available in the pycityvisitorparking pre-release pinned on the beta branch.
-# Never add this entry to main until main pins a stable library that contains it.
 rotterdam:
   municipality_name: Rotterdam
   provider_id: rotterdam
@@ -450,7 +448,7 @@ groningen_demo:
   municipality_name: Groningen Demo
   provider_id: demo
 
-# Only in the pycityvisitorparking pre-release pinned on beta: a demo permit with parking areas.
+# A demo permit with parking areas.
 rotterdam_demo:
   municipality_name: Rotterdam Demo
   provider_id: demo
