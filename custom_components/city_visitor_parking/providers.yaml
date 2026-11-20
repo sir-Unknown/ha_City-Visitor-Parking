@@ -14,6 +14,10 @@ amsterdam:
   base_url: "https://api.parkeervergunningen.egisparkingservices.nl"
   api_url: "api"
 
+# amsterdam_demo:
+#   municipality_name: Amsterdam Demo
+#   provider_id: demo
+
 apeldoorn:
   municipality_name: Apeldoorn
   provider_id: dvsportal
@@ -444,6 +448,12 @@ zwolle:
 # Requires `city_visitor_parking:\n  demo: true` in configuration.yaml.
 # No real credentials needed — returns fixed data for testing.
 #######################################################################
+
+# A demo permit with one parking machine. Same pre-release rule as `amsterdam` above;
+# an older library shows the generic demo permit.
+amsterdam_demo:
+  municipality_name: Amsterdam Demo
+  provider_id: demo
 
 den_haag_demo:
   municipality_name: Den Haag Demo
