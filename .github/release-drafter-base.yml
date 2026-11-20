@@ -16,6 +16,11 @@ exclude-contributors:
   - "github-actions[bot]"
   - "codex[bot]"
   - "claude[bot]"
+# Change lines credit other people only: drop the handles of the maintainer and
+# bots listed above (keep the two lists in sync).
+replacers:
+  - search: '/ @(sir-Unknown|dependabot\[bot\]|renovate\[bot\]|github-actions\[bot\]|codex\[bot\]|claude\[bot\]) \(#/g'
+    replace: " (#"
 sort-direction: ascending
 include-paths:
   - "custom_components/"
