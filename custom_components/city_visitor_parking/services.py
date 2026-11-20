@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import asyncio
 import functools
 import logging
 import time
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import TYPE_CHECKING, Final, NoReturn, Protocol, cast
 
@@ -20,6 +22,7 @@ from pycityvisitorparking.exceptions import (
     AuthError,
     ErrorCode,
     NetworkError,
+    NotFoundError,
     PyCityVisitorParkingError,
     ValidationError,
 )
@@ -29,14 +32,23 @@ from .const import (
     ATTR_FAVORITE_ID,
     ATTR_LICENSE_PLATE,
     ATTR_NAME,
+    ATTR_PARKING_AREA_ID,
     ATTR_RESERVATION_ID,
     ATTR_START_TIME,
     CONF_AUTO_END,
     CONF_PERMIT_ID,
     DOMAIN,
+    START_RESERVATION_RETRY_DELAYS,
 )
+from .coordinator import normalize_reservations
 from .helpers import normalize_plate
-from .payloads import build_status_payload, normalize_favorites, reservation_payload
+from .models import Reservation
+from .payloads import (
+    build_reservations_payload,
+    build_status_payload,
+    normalize_favorites,
+    reservation_update_fields,
+)
 from .version import async_get_versions, build_log_block
 
 if TYPE_CHECKING:
@@ -44,8 +56,9 @@ if TYPE_CHECKING:
     from typing import Any
 
     from homeassistant.config_entries import ConfigEntry
-    from homeassistant.core import HomeAssistant, ServiceCall
+    from homeassistant.core import HomeAssistant, ServiceCall, ServiceResponse
     from homeassistant.util.json import JsonValueType
+    from pycityvisitorparking import Reservation as ProviderReservation
 
     from .models import CoordinatorData
     from .runtime_data import CityVisitorParkingRuntimeData
@@ -216,6 +229,7 @@ SERVICE_START_SCHEMA: Final[vol.Schema] = vol.Schema(
         vol.Required(ATTR_START_TIME): cv.datetime,
         vol.Required(ATTR_END_TIME): cv.datetime,
         vol.Required(ATTR_LICENSE_PLATE): cv.string,
+        vol.Optional(ATTR_PARKING_AREA_ID): cv.string,
     }
 )
 
@@ -292,6 +306,7 @@ async def async_setup_services(hass: HomeAssistant) -> None:
         SERVICE_START_RESERVATION,
         _async_handle_start_reservation,
         schema=SERVICE_START_SCHEMA,
+        supports_response=SupportsResponse.OPTIONAL,
     )
     hass.services.async_register(
         DOMAIN,
@@ -353,21 +368,28 @@ async def async_setup_services(hass: HomeAssistant) -> None:
     )
 
 
-def _renews_session(
-    handler: Callable[[ServiceCall], Coroutine[Any, Any, None]],
-) -> Callable[[ServiceCall], Coroutine[Any, Any, None]]:
-    """Re-authenticate the entry after a write service fails on the provider.
+def _write_service(
+    handler: Callable[[ServiceCall], Coroutine[Any, Any, ServiceResponse]],
+) -> Callable[[ServiceCall], Coroutine[Any, Any, ServiceResponse]]:
+    """Wrap a write service with session renewal and a post-write refresh.
 
     A provider that reports an expired session as a generic error would fail
-    every following call until the next poll renews it. Writes cannot be retried
-    safely, because a provider error does not prove the request was not applied,
+    every following call until the next poll renews it. Writes are not retried
+    here, because a provider error does not prove the request was not applied,
     so the failure is still reported and only the next attempt benefits.
+    (``start_reservation`` retries itself, after checking nothing was booked.)
+
+    After a successful write the coordinator is refreshed before the service
+    returns, so sensors follow without waiting for the next scheduled poll and
+    callers (the cards read the coordinator data over the websocket) see the
+    change. ``async_refresh`` bypasses the request debouncer, whose cooldown
+    would otherwise delay the refresh after a quick second write.
     """
 
     @functools.wraps(handler)
-    async def wrapper(call: ServiceCall) -> None:
+    async def wrapper(call: ServiceCall) -> ServiceResponse:
         try:
-            await handler(call)
+            response = await handler(call)
         except HomeAssistantError as err:
             # The handlers translate provider failures into HomeAssistantError
             # with the provider error chained as the cause.
@@ -375,64 +397,313 @@ def _renews_session(
             if isinstance(cause, PyCityVisitorParkingError):
                 await _runtime_from_call(call).coordinator.async_renew_session(cause)
             raise
+        await _runtime_from_call(call).coordinator.async_refresh()
+        return response
 
     return wrapper
 
 
-@_renews_session
-async def _async_handle_start_reservation(call: ServiceCall) -> None:
+def _resolve_parking_area_id(
+    runtime: CityVisitorParkingRuntimeData, requested: object
+) -> str | None:
+    """Return the parking area to book in, or None for a permit without parking areas.
+
+    Without a requested parking area the default parking area (the first of the
+    coordinator's parking areas, which honours the default chosen in the options) is
+    used, so the service and the card book in the same parking area.
+    """
+    data = cast("CoordinatorData | None", runtime.coordinator.data)
+    parking_areas = data.parking_areas if data is not None else ()
+    if requested is None:
+        return parking_areas[0].parking_area_id if parking_areas else None
+    if data is None or data.parking_area(cast("str", requested)) is None:
+        raise ServiceValidationError(
+            translation_domain=DOMAIN,
+            translation_key="invalid_parking_area",
+        )
+    return cast("str", requested)
+
+
+# Largest difference between a requested and a booked time that still counts as
+# the same reservation: providers round to the minute.
+_START_MATCH_TOLERANCE: Final = timedelta(minutes=1)
+
+
+def _is_definite_start_failure(err: PyCityVisitorParkingError) -> bool:
+    """Return whether an error proves the start was not booked.
+
+    Retrying cannot help then. Other errors (network, time-out, maintenance,
+    rate limits, generic provider errors) leave it unknown whether the provider
+    booked the reservation before the failure.
+    """
+    if isinstance(err, AuthError | ValidationError | NotFoundError):
+        return True
+    return getattr(err, "error_code", None) in (
+        ErrorCode.PROVIDER_REJECTED,
+        ErrorCode.NOT_SUPPORTED,
+    )
+
+
+@dataclass(frozen=True, slots=True)
+class _StartRequest:
+    """A reservation start as requested, with times in UTC."""
+
+    license_plate: str
+    start: datetime
+    end: datetime
+    parking_area_id: str | None
+
+
+def _match_started_reservation(
+    reservations: list[Reservation],
+    request: _StartRequest,
+    *,
+    known_ids: set[str],
+    now: datetime,
+) -> Reservation | None:
+    """Return the reservation a failed start may have booked anyway, if any.
+
+    Reservations known before the first attempt are skipped. A reservation
+    without a license plate or parking area still matches on its times, so an
+    unverifiable booking is never booked a second time.
+    """
+    plate = normalize_plate(request.license_plate)
+    # A start that has passed was moved to "now" by the library.
+    earliest_start = request.start - _START_MATCH_TOLERANCE
+    latest_start = max(request.start, now) + _START_MATCH_TOLERANCE
+    for reservation in reservations:
+        if reservation.reservation_id in known_ids:
+            continue
+        if reservation.license_plate and (
+            normalize_plate(reservation.license_plate) != plate
+        ):
+            continue
+        if abs(reservation.end_time - request.end) > _START_MATCH_TOLERANCE:
+            continue
+        if not earliest_start <= reservation.start_time <= latest_start:
+            continue
+        if (
+            request.parking_area_id is not None
+            and reservation.parking_area_id is not None
+            and reservation.parking_area_id != request.parking_area_id
+        ):
+            continue
+        return reservation
+    return None
+
+
+async def _raise_start_failure(
+    call: ServiceCall,
+    runtime: CityVisitorParkingRuntimeData,
+    err: PyCityVisitorParkingError,
+) -> NoReturn:
+    """Raise the error for a start that was definitely not booked."""
+    if isinstance(err, ValidationError) or (
+        getattr(err, "error_code", None) == ErrorCode.PROVIDER_REJECTED
+    ):
+        detail = _error_detail(err)
+        _LOGGER.warning(
+            "The provider %s rejected the reservation start: %s",
+            runtime.provider_config.provider_id,
+            detail or type(err).__name__,
+        )
+        raise HomeAssistantError(
+            translation_domain=DOMAIN,
+            translation_key=(
+                "reservation_start_rejected_detail"
+                if detail
+                else "reservation_start_rejected"
+            ),
+            translation_placeholders={"detail": detail} if detail else None,
+        ) from err
+    ha_cvp_version, pycvp_version = await async_get_versions(call.hass)
+    _raise_reservation_error(
+        err,
+        **_runtime_log_context(runtime),
+        ha_cvp_version=ha_cvp_version,
+        pycvp_version=pycvp_version,
+    )
+
+
+def _confirmed_reservation(
+    provider_reservation: ProviderReservation, request: _StartRequest
+) -> Reservation:
+    """Return the reservation the provider confirmed for a successful start.
+
+    Falls back to the requested times when the provider's reservation lacks
+    usable times: the provider reported the start as successful, so it must
+    never turn into an error that invites a second booking.
+    """
+    try:
+        normalized = normalize_reservations([provider_reservation])
+    except TypeError, ValueError:
+        normalized = []
+    if normalized:
+        return normalized[0]
+    reservation_id = getattr(provider_reservation, "id", None)
+    return Reservation(
+        reservation_id=str(reservation_id) if reservation_id is not None else "",
+        start_time=max(request.start, dt_util.utcnow()),
+        end_time=request.end,
+    )
+
+
+async def _async_start_with_retry(
+    call: ServiceCall,
+    runtime: CityVisitorParkingRuntimeData,
+    request: _StartRequest,
+) -> tuple[Reservation, int]:
+    """Start a reservation, retrying only when nothing was booked.
+
+    After a failure that leaves the outcome unknown, the provider's reservations
+    are checked first: a matching reservation means the start succeeded, so it
+    is never booked twice. When the check itself fails the outcome stays
+    unknown and the start is not retried. Returns the reservation and the
+    number of attempts.
+    """
+    provider_id = runtime.provider_config.provider_id
+    data = cast("CoordinatorData | None", runtime.coordinator.data)
+    known_ids = (
+        {reservation.reservation_id for reservation in data.reservations}
+        if data is not None
+        else set()
+    )
+    attempts = len(START_RESERVATION_RETRY_DELAYS) + 1
+    last_error: PyCityVisitorParkingError | None = None
+    for attempt in range(1, attempts + 1):
+        try:
+            provider_reservation = await runtime.provider.start_reservation(
+                license_plate=request.license_plate,
+                start_time=request.start,
+                end_time=request.end,
+                # Only providers with reservation targets accept the argument.
+                **(
+                    {"reservation_target_id": request.parking_area_id}
+                    if request.parking_area_id is not None
+                    else {}
+                ),
+            )
+        except PyCityVisitorParkingError as err:
+            if _is_definite_start_failure(err):
+                await _raise_start_failure(call, runtime, err)
+            last_error = err
+        else:
+            if attempt > 1:
+                _LOGGER.info(
+                    "Reservation start with provider %s succeeded on attempt %s of %s",
+                    provider_id,
+                    attempt,
+                    attempts,
+                )
+            return _confirmed_reservation(provider_reservation, request), attempt
+
+        _LOGGER.warning(
+            "Reservation start with provider %s failed (attempt %s of %s, %s); "
+            "checking whether it was booked anyway",
+            provider_id,
+            attempt,
+            attempts,
+            type(last_error).__name__,
+        )
+        try:
+            reservations = normalize_reservations(
+                await runtime.provider.list_reservations()
+            )
+        except (PyCityVisitorParkingError, TypeError, ValueError) as check_err:
+            _LOGGER.warning(
+                "Could not check the reservations of provider %s (%s); not "
+                "retrying the start to avoid booking it twice",
+                provider_id,
+                type(check_err).__name__,
+            )
+            raise HomeAssistantError(
+                translation_domain=DOMAIN,
+                translation_key="reservation_start_unknown",
+            ) from last_error
+        booked = _match_started_reservation(
+            reservations, request, known_ids=known_ids, now=dt_util.utcnow()
+        )
+        if booked is not None:
+            _LOGGER.info(
+                "Reservation %s was booked despite the error; not retrying",
+                booked.reservation_id,
+            )
+            return booked, attempt
+        if attempt < attempts:
+            await asyncio.sleep(START_RESERVATION_RETRY_DELAYS[attempt - 1])
+
+    _LOGGER.warning(
+        "Reservation start with provider %s failed after %s attempts (%s)",
+        provider_id,
+        attempts,
+        type(last_error).__name__,
+    )
+    raise HomeAssistantError(
+        translation_domain=DOMAIN,
+        translation_key="reservation_start_failed",
+        translation_placeholders={"attempts": str(attempts)},
+    ) from last_error
+
+
+@_write_service
+async def _async_handle_start_reservation(call: ServiceCall) -> ServiceResponse:
     """Handle reservation start service."""
     runtime = _runtime_from_call(call)
     start = _as_utc(cast("datetime", call.data[ATTR_START_TIME]))
     end = _as_utc(cast("datetime", call.data[ATTR_END_TIME]))
     license_plate = cast("str", call.data[ATTR_LICENSE_PLATE])
     now = dt_util.utcnow()
-    min_start = now + timedelta(minutes=1)
-    if start < min_start:
-        _LOGGER.debug(
-            "Start time %s is before minimum %s, adjusting to minimum",
-            start,
-            min_start,
-        )
-        start = min_start
-    _LOGGER.debug(
-        "Starting reservation with start=%s end=%s now=%s start_local=%s end_local=%s",
-        start,
-        end,
-        now,
-        dt_util.as_local(start),
-        dt_util.as_local(end),
-    )
-    if end <= start:
+    # A start at or before now means "start now"; the library moves it to the
+    # earliest start the provider accepts, so it is passed on unchanged. The end
+    # must still lie after the effective start.
+    if end <= max(start, now):
         raise ServiceValidationError(
             translation_domain=DOMAIN,
             translation_key="end_before_start",
         )
 
-    try:
-        await runtime.provider.start_reservation(
+    requested_parking_area_id = call.data.get(ATTR_PARKING_AREA_ID)
+    parking_area_id = _resolve_parking_area_id(runtime, requested_parking_area_id)
+    _LOGGER.debug(
+        "Starting reservation with start=%s end=%s now=%s start_local=%s "
+        "end_local=%s parking_area=%s (%s)",
+        start,
+        end,
+        now,
+        dt_util.as_local(start),
+        dt_util.as_local(end),
+        parking_area_id,
+        "requested" if requested_parking_area_id is not None else "default",
+    )
+    reservation, attempts = await _async_start_with_retry(
+        call,
+        runtime,
+        _StartRequest(
             license_plate=license_plate,
-            start_time=start,
-            end_time=end,
-        )
-    except PyCityVisitorParkingError as err:
-        ha_cvp_version, pycvp_version = await async_get_versions(call.hass)
-        _raise_reservation_error(
-            err,
-            **_runtime_log_context(runtime),
-            ha_cvp_version=ha_cvp_version,
-            pycvp_version=pycvp_version,
-        )
-    else:
-        _LOGGER.debug(
-            "Reservation start requested for device %s (start=%s end=%s)",
-            call.data[ATTR_DEVICE_ID],
-            start,
-            end,
-        )
+            start=start,
+            end=end,
+            parking_area_id=parking_area_id,
+        ),
+    )
+    # The reservation is the one the provider confirmed, so these are the times
+    # the provider booked, not the requested ones.
+    _LOGGER.debug(
+        "Reservation %s started for device %s (start=%s end=%s)",
+        reservation.reservation_id,
+        call.data[ATTR_DEVICE_ID],
+        reservation.start_time,
+        reservation.end_time,
+    )
+    return {
+        "reservation_id": reservation.reservation_id,
+        "start_time": reservation.start_time.isoformat(),
+        "end_time": reservation.end_time.isoformat(),
+        "status": "active" if reservation.start_time <= dt_util.utcnow() else "planned",
+        "attempts": attempts,
+    }
 
 
-@_renews_session
+@_write_service
 async def _async_handle_update_reservation(call: ServiceCall) -> None:
     """Handle reservation update service."""
     runtime = _runtime_from_call(call)
@@ -465,7 +736,7 @@ async def _async_handle_update_reservation(call: ServiceCall) -> None:
         )
         return
 
-    update_fields = set(_reservation_update_fields(runtime))
+    update_fields = set(reservation_update_fields(runtime.provider))
     allow_start = ATTR_START_TIME in update_fields
     allow_end = ATTR_END_TIME in update_fields
     start_dt = start_dt_raw if start_dt_raw and allow_start else None
@@ -528,7 +799,7 @@ async def _async_handle_update_reservation(call: ServiceCall) -> None:
         )
 
 
-@_renews_session
+@_write_service
 async def _async_handle_end_reservation(call: ServiceCall) -> None:
     """Handle reservation end service."""
     runtime = _runtime_from_call(call)
@@ -554,7 +825,7 @@ async def _async_handle_end_reservation(call: ServiceCall) -> None:
         )
 
 
-@_renews_session
+@_write_service
 async def _async_handle_add_favorite(call: ServiceCall) -> None:
     """Handle add favorite service."""
     runtime = _runtime_from_call(call)
@@ -582,7 +853,7 @@ async def _async_handle_add_favorite(call: ServiceCall) -> None:
         )
 
 
-@_renews_session
+@_write_service
 async def _async_handle_update_favorite(call: ServiceCall) -> None:
     """Handle update favorite service."""
     runtime = _runtime_from_call(call)
@@ -631,7 +902,7 @@ async def _async_handle_update_favorite(call: ServiceCall) -> None:
         )
 
 
-@_renews_session
+@_write_service
 async def _async_handle_remove_favorite(call: ServiceCall) -> None:
     """Handle remove favorite service."""
     runtime = _runtime_from_call(call)
@@ -662,55 +933,29 @@ async def _async_handle_list_reservations(
         translation_key="reservation_operation_failed",
         log_label="Reservations",
     )
-    reservation_update_fields = _reservation_update_fields(runtime)
-    reservations = data.reservations
-    favorites = data.favorites
-    now = dt_util.utcnow()
-    visible = [
-        reservation for reservation in reservations if reservation.end_time > now
-    ]
-    active = [
-        reservation
-        for reservation in visible
-        if reservation.start_time <= now < reservation.end_time
-    ]
-    future = [reservation for reservation in visible if reservation.start_time > now]
-    favorite_by_plate = {
-        normalize_plate(favorite.license_plate): favorite
-        for favorite in favorites
-        if favorite.license_plate
-    }
     config_entry = runtime.coordinator.config_entry
-    entry_title = config_entry.title if config_entry else "unknown"
+    options = config_entry.options if config_entry else {}
+    payload = build_reservations_payload(
+        data,
+        options,
+        dt_util.utcnow(),
+        reservation_update_fields(runtime.provider),
+        stale=stale,
+    )
     _LOGGER.debug(
         "Reservations response for %s (permit %s): %s active, %s future of %s "
         "(duration=%.3fs)",
-        entry_title,
+        config_entry.title if config_entry else "unknown",
         runtime.permit_id,
-        len(active),
-        len(future),
-        len(reservations),
+        payload["active_count"],
+        payload["future_count"],
+        len(data.reservations),
         time.perf_counter() - request_started,
     )
-    reservation_payloads: list[JsonValueType] = [
-        cast("JsonValueType", reservation_payload(reservation, favorite_by_plate))
-        for reservation in visible
-    ]
-    reservation_update_fields_json: list[JsonValueType] = [
-        str(field) for field in reservation_update_fields
-    ]
-
-    return {
-        "count": len(visible),
-        "active_count": len(active),
-        "future_count": len(future),
-        # Keep the legacy response key during the migration window so the
-        # existing card and automations do not break when only the backend updates.
-        "active_reservations": reservation_payloads,
-        "reservations": reservation_payloads,
-        "stale": stale,
-        "reservation_update_fields": reservation_update_fields_json,
-    }
+    # Keep the legacy response key during the migration window so the
+    # existing card and automations do not break when only the backend updates.
+    payload["active_reservations"] = payload["reservations"]
+    return cast("dict[str, JsonValueType]", payload)
 
 
 async def _async_handle_list_favorites(call: ServiceCall) -> dict[str, JsonValueType]:
@@ -780,7 +1025,7 @@ async def _async_handle_get_entry_info(call: ServiceCall) -> dict[str, JsonValue
         "auto_end_reservation_when_free": bool(entry.options.get(CONF_AUTO_END, False)),
         "reservation_update_fields": [
             cast("JsonValueType", str(field))
-            for field in _reservation_update_fields(runtime)
+            for field in reservation_update_fields(runtime.provider)
         ],
     }
 
@@ -977,13 +1222,3 @@ async def _async_refresh_runtime_data(
             translation_key=translation_key,
         )
     return coordinator_data, stale
-
-
-def _reservation_update_fields(
-    runtime: CityVisitorParkingRuntimeData,
-) -> list[str]:
-    """Return normalized reservation update fields for a provider."""
-    update_fields = getattr(runtime.provider, "reservation_update_fields", None)
-    if not isinstance(update_fields, (list, tuple)):
-        return []
-    return [str(field) for field in cast("list[object]", update_fields)]

@@ -78,10 +78,7 @@ rules:
     comment: |
       This integration does not use dynamic icons.
   reconfiguration-flow: done
-  repair-issues:
-    status: exempt
-    comment: |
-      There are no actionable repair issues at this time.
+  repair-issues: done
   stale-devices:
     status: exempt
     comment: |

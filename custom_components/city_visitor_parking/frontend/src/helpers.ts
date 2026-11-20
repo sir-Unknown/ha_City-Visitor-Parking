@@ -6,18 +6,26 @@ import type {
   LocalizeTarget,
   PermitEntry,
   PermitOption,
-  ZoneStatus,
+  ReservationsResponse,
+  PaidParkingStatus,
+  PaidParkingStatusResponse,
+  ParkingAreaStatus,
+  StartReservationResponse,
 } from "./types";
 import { localize } from "./translations";
 
 /** Integration domain used for selectors, websocket calls, and device matching. */
 export const DOMAIN = "city_visitor_parking";
+/** Websocket command returning the status and parking areas of one permit. */
+export const WS_GET_STATUS = "city_visitor_parking/status";
+/** Websocket command returning the reservations held by the coordinator. */
+export const WS_LIST_RESERVATIONS = "city_visitor_parking/reservations";
 export const RESERVATION_STARTED_EVENT =
   "city-visitor-parking-reservation-started";
 export const RESERVATION_ENDED_EVENT = "city-visitor-parking-reservation-ended";
 
-/** Empty zone state used before a status payload has been loaded. */
-export const EMPTY_ZONE_STATUS: ZoneStatus = {
+/** Empty parking area state used before a status payload has been loaded. */
+export const EMPTY_PAID_PARKING_STATUS: PaidParkingStatus = {
   state: null,
   kind: null,
   start: null,
@@ -99,20 +107,20 @@ export const setPendingPermitDefaults = (
   });
 };
 
-/** Copies a normalized zone status payload into card instance state fields. */
-export const applyZoneStatus = (
+/** Copies a normalized parking area status payload into card instance state fields. */
+export const applyPaidParkingStatus = (
   context: {
-    _zoneState: ZoneStatus["state"];
-    _windowKind: ZoneStatus["kind"];
+    _paidState: PaidParkingStatus["state"];
+    _windowKind: PaidParkingStatus["kind"];
     _windowStartIso: string | null;
     _windowEndIso: string | null;
     _remainingMinutes: number | null;
     _balanceUnit: string | null;
   },
-  status: ZoneStatus | null,
+  status: PaidParkingStatus | null,
 ): void => {
   Object.assign(context, {
-    _zoneState: status?.state ?? null,
+    _paidState: status?.state ?? null,
     _windowKind: status?.kind ?? null,
     _windowStartIso: status?.start ?? null,
     _windowEndIso: status?.end ?? null,
@@ -121,6 +129,149 @@ export const applyZoneStatus = (
   });
 };
 
+type ParkingAreaPaidWindowPayload = {
+  state?: unknown;
+  window_kind?: unknown;
+  window_start?: unknown;
+  window_end?: unknown;
+};
+
+const nonEmptyString = (value: unknown): string | null =>
+  typeof value === "string" && value ? value : null;
+
+/** Normalizes the state and window fields shared by status payloads and parking areas. */
+const normalizeParkingAreaPaidWindow = (
+  payload: ParkingAreaPaidWindowPayload | null | undefined,
+): Pick<PaidParkingStatus, "state" | "kind" | "start" | "end"> => {
+  const state =
+    payload?.state === "paid" || payload?.state === "free"
+      ? payload.state
+      : null;
+  const kind =
+    payload?.window_kind === "current" || payload?.window_kind === "next"
+      ? payload.window_kind
+      : null;
+  return {
+    state,
+    kind,
+    start: kind ? nonEmptyString(payload?.window_start) : null,
+    end: kind ? nonEmptyString(payload?.window_end) : null,
+  };
+};
+
+/** Normalizes the top-level (default parking area) part of a status payload. */
+export const normalizePaidParkingStatus = (
+  payload: PaidParkingStatusResponse | null | undefined,
+): PaidParkingStatus => {
+  const balance = payload?.remaining_balance;
+  return {
+    ...normalizeParkingAreaPaidWindow(payload),
+    remainingMinutes:
+      typeof balance === "number" && Number.isFinite(balance) ? balance : null,
+    balanceUnit: nonEmptyString(payload?.balance_unit),
+  };
+};
+
+/** Returns the usable parking area entries of a status payload, default parking area first. */
+export const normalizeParkingAreas = (
+  payload: PaidParkingStatusResponse | null | undefined,
+): ParkingAreaStatus[] =>
+  Array.isArray(payload?.parking_areas)
+    ? payload.parking_areas.filter((parkingArea) =>
+        Boolean(nonEmptyString(parkingArea?.parking_area_id)),
+      )
+    : [];
+
+/**
+ * Replaces the state and window of a status with those of the selected parking area.
+ * Balance fields stay permit-wide. A status without state (not loaded or
+ * failed) is returned unchanged so cached parking area windows never outlive it.
+ */
+export const applyParkingAreaToStatus = (
+  status: PaidParkingStatus,
+  parkingArea: ParkingAreaStatus | null,
+): PaidParkingStatus =>
+  parkingArea && status.state !== null
+    ? { ...status, ...normalizeParkingAreaPaidWindow(parkingArea) }
+    : status;
+
+/** Minimum number of parking areas before a permit offers a parking area choice. */
+export const MIN_SELECTABLE_PARKING_AREAS = 2;
+
+/**
+ * Resolves the parking area the new-reservation card uses for a permit: the
+ * user's pick in the card's parking area field, else the first parking area,
+ * which is the default parking area from the integration options. A pick that
+ * is not one of the permit's parking areas falls through to that default.
+ */
+export const resolveCardParkingArea = (
+  parkingAreas: readonly ParkingAreaStatus[],
+  pickedParkingAreaId: string | null | undefined,
+): ParkingAreaStatus | null =>
+  (pickedParkingAreaId
+    ? parkingAreas.find(
+        (parkingArea) => parkingArea.parking_area_id === pickedParkingAreaId,
+      )
+    : undefined) ??
+  parkingAreas[0] ??
+  null;
+
+/**
+ * Loads the reservations of one integration device.
+ *
+ * With `fresh`, the `list_reservations` service fetches from the provider, so
+ * changes made outside Home Assistant (the municipality app or website) show
+ * up. Without it, the websocket command returns the coordinator data without
+ * a provider fetch. Use that right after a write from a card: the write
+ * services refresh the coordinator before they return, so the data is current.
+ */
+export const fetchReservations = async (
+  hass: HomeAssistant,
+  device: DeviceEntry,
+  fresh: boolean,
+): Promise<ReservationsResponse> => {
+  if (!fresh && device.config_entry_id) {
+    return hass.callWS<ReservationsResponse>({
+      type: WS_LIST_RESERVATIONS,
+      config_entry_id: device.config_entry_id,
+    });
+  }
+  const result = await hass.callWS<
+    ReservationsResponse | { response: ReservationsResponse }
+  >({
+    type: "call_service",
+    domain: DOMAIN,
+    service: "list_reservations",
+    return_response: true,
+    service_data: { device_id: device.id },
+  });
+  return "response" in result ? result.response : result;
+};
+
+/** Fetches the parking areas of one permit from the status websocket; empty on failure. */
+export const fetchPermitParkingAreas = async (
+  hass: HomeAssistant,
+  entryId: string,
+): Promise<ParkingAreaStatus[]> => {
+  try {
+    return normalizeParkingAreas(
+      await hass.callWS<PaidParkingStatusResponse>({
+        type: WS_GET_STATUS,
+        config_entry_id: entryId,
+      }),
+    );
+  } catch {
+    return [];
+  }
+};
+
+/** Returns the parking area label of a listed reservation: its name, else its id. */
+export const formatReservationParkingArea = (reservation: {
+  parking_area_id?: string | null;
+  parking_area_name?: string | null;
+}): string | null =>
+  nonEmptyString(reservation.parking_area_name) ??
+  nonEmptyString(reservation.parking_area_id);
 /** Returns whether a config entry should be hidden from permit selection. */
 export const isPermitEntryDisabled = (entry: PermitEntry): boolean =>
   Boolean(entry.disabled_by) ||
@@ -220,6 +371,45 @@ export const parseDateTimeValue = (
   if (!value) return null;
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? null : date;
+};
+
+/**
+ * Returns the message for a reservation the provider confirmed: running until
+ * its end, or planned from its start to its end. Times on the same day as
+ * `now` show only the time; other days add the short weekday and date.
+ */
+export const startedReservationMessage = (
+  response: Pick<
+    StartReservationResponse,
+    "start_time" | "end_time" | "status"
+  >,
+  now: Date,
+  language: string,
+  localizeKey: (key: string) => string,
+): string => {
+  const format = (value: string): string => {
+    const date = parseDateTimeValue(value) ?? now;
+    return date.toLocaleString(
+      language,
+      formatDate(date) === formatDate(now)
+        ? { hour: "2-digit", minute: "2-digit" }
+        : {
+            weekday: "short",
+            day: "numeric",
+            month: "short",
+            hour: "2-digit",
+            minute: "2-digit",
+          },
+    );
+  };
+  return response.status === "active"
+    ? localizeKey("message.reservation_started").replace(
+        "{end}",
+        format(response.end_time),
+      )
+    : localizeKey("message.reservation_planned")
+        .replace("{start}", format(response.start_time))
+        .replace("{end}", format(response.end_time));
 };
 
 /** Safely reads the selected config entry id from a card config object. */

@@ -30,7 +30,19 @@ class ErrorCode(StrEnum):
 
 
 class PyCityVisitorParkingError(Exception):
-    """Stub base error."""
+    """Stub base error carrying the library's safe metadata."""
+
+    def __init__(
+        self,
+        message: str = "",
+        *,
+        error_code: str | None = None,
+        detail: str | None = None,
+    ) -> None:
+        """Initialize the stub error like the library does."""
+        super().__init__(message)
+        self.error_code = error_code
+        self.detail = detail
 
 
 class AuthError(PyCityVisitorParkingError):
@@ -103,7 +115,7 @@ class Provider:
 
     async def get_permit(self) -> dict[str, object]:
         """Return a default permit."""
-        return {"id": "permit", "zone_validity": []}
+        return {"id": "permit", "paid_hours": []}
 
     async def list_reservations(self) -> list[dict[str, object]]:
         """Return no reservations by default."""

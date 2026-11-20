@@ -31,6 +31,7 @@ from .const import (
     CONF_API_URL,
     CONF_AUTO_END,
     CONF_BASE_URL,
+    CONF_DEFAULT_PARKING_AREA,
     CONF_DEMO_MODE,
     CONF_FREE_DATES,
     CONF_FREE_WEEKDAYS,
@@ -74,7 +75,7 @@ class CityVisitorParkingConfigFlow(config_entries.ConfigFlow):
     """Handle a config flow for City visitor parking."""
 
     VERSION = 1
-    MINOR_VERSION = 3
+    MINOR_VERSION = 4
 
     def __init__(self) -> None:
         """Initialize the config flow."""
@@ -474,17 +475,39 @@ class CityVisitorParkingOptionsFlow(config_entries.OptionsFlow):
             if errors:
                 return self._show_form(user_input, errors)
 
-            return self.async_create_entry(
-                title="",
-                data={
-                    CONF_AUTO_END: cast("bool", user_input[CONF_AUTO_END]),
-                    CONF_FREE_DATES: free_dates,
-                    CONF_FREE_WEEKDAYS: free_weekdays,
-                    CONF_OPERATING_TIME_OVERRIDES: overrides,
-                },
+            options: dict[str, object] = {
+                CONF_AUTO_END: cast("bool", user_input[CONF_AUTO_END]),
+                CONF_FREE_DATES: free_dates,
+                CONF_FREE_WEEKDAYS: free_weekdays,
+                CONF_OPERATING_TIME_OVERRIDES: overrides,
+            }
+            # Keep the stored default parking area when the form could not offer the
+            # field (entry not loaded, or the permit has one parking area right now).
+            default_parking_area = user_input.get(
+                CONF_DEFAULT_PARKING_AREA,
+                self._config_entry.options.get(CONF_DEFAULT_PARKING_AREA),
             )
+            if isinstance(default_parking_area, str) and default_parking_area:
+                options[CONF_DEFAULT_PARKING_AREA] = default_parking_area
+            return self.async_create_entry(title="", data=options)
 
         return self._show_form(user_input, errors)
+
+    def _parking_area_choices(self) -> list[tuple[str, str]]:
+        """Return ``(parking_area_id, name)`` per parking area, or [] when unknown.
+
+        Parking areas come from the running coordinator, so they are only available
+        while the entry is loaded and has fetched data at least once.
+        """
+        if self._config_entry.state is not config_entries.ConfigEntryState.LOADED:
+            return []
+        runtime = getattr(self._config_entry, "runtime_data", None)
+        data = getattr(getattr(runtime, "coordinator", None), "data", None)
+        parking_areas = getattr(data, "parking_areas", ())
+        return [
+            (parking_area.parking_area_id, parking_area.name)
+            for parking_area in parking_areas
+        ]
 
     def _show_form(
         self, user_input: dict[str, object] | None, errors: dict[str, str]
@@ -521,6 +544,32 @@ class CityVisitorParkingOptionsFlow(config_entries.OptionsFlow):
         schema: dict[object, object] = {
             vol.Required(CONF_AUTO_END, default=defaults[CONF_AUTO_END]): cv.boolean,
         }
+
+        parking_areas = self._parking_area_choices()
+        if len(parking_areas) > 1:
+            # Only a permit with several parking areas has a default worth choosing. The
+            # stored default may be gone from the permit; fall back to the first.
+            parking_area_ids = [parking_area_id for parking_area_id, _ in parking_areas]
+            default_parking_area = self._config_entry.options.get(
+                CONF_DEFAULT_PARKING_AREA
+            )
+            if user_input is not None and isinstance(
+                user_input.get(CONF_DEFAULT_PARKING_AREA), str
+            ):
+                default_parking_area = user_input[CONF_DEFAULT_PARKING_AREA]
+            if default_parking_area not in parking_area_ids:
+                default_parking_area = parking_area_ids[0]
+            schema[
+                vol.Required(CONF_DEFAULT_PARKING_AREA, default=default_parking_area)
+            ] = selector.SelectSelector(
+                selector.SelectSelectorConfig(
+                    options=[
+                        selector.SelectOptionDict(value=parking_area_id, label=name)
+                        for parking_area_id, name in parking_areas
+                    ],
+                    mode=selector.SelectSelectorMode.DROPDOWN,
+                )
+            )
 
         day_schema = _build_day_schema(overrides, free_weekdays, user_input)
         schema[vol.Required(SECTION_OPERATING_TIMES)] = section(
@@ -675,7 +724,7 @@ def _parse_time_windows(value: object, errors: dict[str, str]) -> list[dict[str,
 
 def _day_windows_key(day: str) -> str:
     """Return the field key for a weekday's window input."""
-    return f"{WEEKDAY_LABELS[day]}_chargeable_windows"
+    return f"{WEEKDAY_LABELS[day]}_paid_hours"
 
 
 def _day_free_key(day: str) -> str:

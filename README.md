@@ -42,6 +42,7 @@ With this integration, you can:
 
 - start, update, and stop a parking session
 - quickly select a saved license plate
+- choose the parking area for permits that cover several parking areas
 - instantly see whether parking is paid or free
 - automate visitor parking using Home Assistant automations and scripts
 
@@ -101,6 +102,7 @@ The integration supports a growing number of Dutch municipalities and connects t
 | Roermond         | [parkeren.roermond.nl](https://parkeren.roermond.nl/DVSPortal/)                         |
 | Den Haag         | [parkerendenhaag.denhaag.nl](https://parkerendenhaag.denhaag.nl/)                       |
 | Roosendaal       | [mijn.2park.nl](https://mijn.2park.nl/)                                                 |
+| Rotterdam        | [bezoek.rotterdam.nl](https://bezoek.rotterdam.nl/)                                     |
 | Deventer         | [mijn.2park.nl](https://mijn.2park.nl/)                                                 |
 | Sittard-Geleen   | [parkeren.sittard-geleen.nl](https://parkeren.sittard-geleen.nl/DVSPortal/)             |
 | Doetinchem       | [parkeren.buha.nl](https://parkeren.buha.nl/DVSPortal/)                                 |
