@@ -308,6 +308,27 @@ async def test_coordinator_logs_recovery(hass: HomeAssistant) -> None:
     assert coordinator._unavailable_logged is False
 
 
+async def test_successful_update_records_time(hass: HomeAssistant) -> None:
+    """A successful update records its time, which diagnostics report."""
+    entry = _create_entry(auto_end=False)
+    entry.add_to_hass(hass)
+
+    provider = AsyncMock()
+    provider.fetch_all.return_value = ({"paid_hours": []}, [], [], [])
+
+    coordinator = CityVisitorParkingCoordinator(
+        hass,
+        provider=provider,
+        config_entry=entry,
+        permit_id="permit",
+        auto_end_state=AutoEndState(),
+    )
+
+    await coordinator.async_refresh()
+
+    assert coordinator.last_update_success_time is not None
+
+
 async def test_auto_end_handles_provider_failure(
     hass: HomeAssistant, pv_library: ModuleType
 ) -> None:

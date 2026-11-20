@@ -8,7 +8,10 @@ from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Protocol, cast
 
 from homeassistant.exceptions import ConfigEntryAuthFailed
-from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
+from homeassistant.helpers.update_coordinator import (
+    TimestampDataUpdateCoordinator,
+    UpdateFailed,
+)
 from homeassistant.util import dt as dt_util
 from pycityvisitorparking import AuthError, NetworkError, ProviderError
 from pycityvisitorparking.exceptions import (
@@ -79,7 +82,7 @@ else:
 _LOGGER = logging.getLogger(__name__)
 
 
-class CityVisitorParkingCoordinator(DataUpdateCoordinator[CoordinatorData]):
+class CityVisitorParkingCoordinator(TimestampDataUpdateCoordinator[CoordinatorData]):
     """Data update coordinator for City visitor parking."""
 
     def __init__(

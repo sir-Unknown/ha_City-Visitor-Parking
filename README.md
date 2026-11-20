@@ -50,6 +50,12 @@ This means you no longer have to manually log in to the municipal parking portal
 
 ---
 
+## Device and entity names
+
+Each permit gets one device named `{municipality} - {permit ID}`, and its entity IDs start with that name. Some municipalities use long permit IDs. For shorter entity IDs, rename the device under **Settings** → **Devices & services** → **Devices** and let Home Assistant rename the entity IDs as well. Then update automations and dashboards that use the old entity IDs.
+
+---
+
 ## Important
 
 > [!IMPORTANT]
