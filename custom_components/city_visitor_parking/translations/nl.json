@@ -128,7 +128,7 @@
   "services": {
     "start_reservation": {
       "name": "Reservering starten",
-      "description": "Start een bezoekersparkeerreservering.",
+      "description": "Start een bezoekersparkeerreservering. Na een fout waarbij onduidelijk is of het gelukt is, controleert de dienst of de reservering is geboekt en probeert het nog maximaal 2 keer. Geeft de reservering terug zoals de aanbieder die heeft bevestigd.",
       "fields": {
         "device_id": {
           "name": "Apparaat",
@@ -329,6 +329,18 @@
     },
     "reservation_operation_failed_detail": {
       "message": "De reserveringsaanvraag is mislukt: {detail}"
+    },
+    "reservation_start_rejected": {
+      "message": "De aanbieder heeft het starten van de reservering geweigerd."
+    },
+    "reservation_start_rejected_detail": {
+      "message": "De aanbieder heeft het starten van de reservering geweigerd: {detail}"
+    },
+    "reservation_start_failed": {
+      "message": "De reservering is na {attempts} pogingen niet gestart. Controleer de parkeerapp of -website van de gemeente."
+    },
+    "reservation_start_unknown": {
+      "message": "Het is onbekend of de reservering is gestart. Controleer de parkeerapp of -website van de gemeente voordat je het opnieuw probeert."
     },
     "favorite_operation_failed": {
       "message": "De favoriet-aanvraag is mislukt. Probeer het later opnieuw."

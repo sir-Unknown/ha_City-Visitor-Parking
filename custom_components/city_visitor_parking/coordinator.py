@@ -200,7 +200,7 @@ class CityVisitorParkingCoordinator(DataUpdateCoordinator[CoordinatorData]):
 
         remaining_balance = _normalize_remaining_balance(permit)
         balance_unit = get_attr(permit, "balance_unit")
-        normalized_reservations = _normalize_reservations(reservations)
+        normalized_reservations = normalize_reservations(reservations)
         normalized_favorites = _normalize_favorites(favorites)
         now = dt_util.utcnow()
         options = self._options()
@@ -579,7 +579,7 @@ def _normalize_remaining_balance(permit: Permit) -> float:
     return max(0.0, value)
 
 
-def _normalize_reservations(
+def normalize_reservations(
     reservations: Iterable[ProviderReservation],
 ) -> list[Reservation]:
     """Normalize reservation entries to Reservation objects."""

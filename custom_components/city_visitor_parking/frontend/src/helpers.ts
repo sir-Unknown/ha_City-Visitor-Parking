@@ -10,6 +10,7 @@ import type {
   PaidParkingStatus,
   PaidParkingStatusResponse,
   ParkingAreaStatus,
+  StartReservationResponse,
 } from "./types";
 import { localize } from "./translations";
 
@@ -370,6 +371,45 @@ export const parseDateTimeValue = (
   if (!value) return null;
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? null : date;
+};
+
+/**
+ * Returns the message for a reservation the provider confirmed: running until
+ * its end, or planned from its start to its end. Times on the same day as
+ * `now` show only the time; other days add the short weekday and date.
+ */
+export const startedReservationMessage = (
+  response: Pick<
+    StartReservationResponse,
+    "start_time" | "end_time" | "status"
+  >,
+  now: Date,
+  language: string,
+  localizeKey: (key: string) => string,
+): string => {
+  const format = (value: string): string => {
+    const date = parseDateTimeValue(value) ?? now;
+    return date.toLocaleString(
+      language,
+      formatDate(date) === formatDate(now)
+        ? { hour: "2-digit", minute: "2-digit" }
+        : {
+            weekday: "short",
+            day: "numeric",
+            month: "short",
+            hour: "2-digit",
+            minute: "2-digit",
+          },
+    );
+  };
+  return response.status === "active"
+    ? localizeKey("message.reservation_started").replace(
+        "{end}",
+        format(response.end_time),
+      )
+    : localizeKey("message.reservation_planned")
+        .replace("{start}", format(response.start_time))
+        .replace("{end}", format(response.end_time));
 };
 
 /** Safely reads the selected config entry id from a card config object. */

@@ -829,6 +829,25 @@ var parseDateTimeValue = (value) => {
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? null : date;
 };
+var startedReservationMessage = (response, now, language, localizeKey) => {
+  const format = (value) => {
+    const date = parseDateTimeValue(value) ?? now;
+    return date.toLocaleString(
+      language,
+      formatDate(date) === formatDate(now) ? { hour: "2-digit", minute: "2-digit" } : {
+        weekday: "short",
+        day: "numeric",
+        month: "short",
+        hour: "2-digit",
+        minute: "2-digit"
+      }
+    );
+  };
+  return response.status === "active" ? localizeKey("message.reservation_started").replace(
+    "{end}",
+    format(response.end_time)
+  ) : localizeKey("message.reservation_planned").replace("{start}", format(response.start_time)).replace("{end}", format(response.end_time));
+};
 var getConfigEntryId = (config) => config?.config_entry_id ?? null;
 var filterDomainDevices = (devices) => devices.filter(
   (device) => (device.identifiers ?? []).some(
@@ -2418,17 +2437,26 @@ var CityVisitorParkingNewReservationCard = class extends BaseLocalizedCard {
       this._addFavorite(license, name);
       this._addFavoriteChecked = false;
     }
+    let confirmed;
     try {
       const activeEntryId2 = this._getActiveEntryId();
       const parkingArea = activeEntryId2 ? this._resolveParkingArea(activeEntryId2) : null;
-      await this._hass.callService(DOMAIN, "start_reservation", {
-        device_id: this._deviceId,
-        start_time: start.toISOString(),
-        end_time: end.toISOString(),
-        license_plate: license,
-        // Permits without parking areas send no parking_area_id at all.
-        ...parkingArea ? { parking_area_id: parkingArea.parking_area_id } : {}
-      });
+      const result = await this._hass.callService(
+        DOMAIN,
+        "start_reservation",
+        {
+          device_id: this._deviceId,
+          start_time: start.toISOString(),
+          end_time: end.toISOString(),
+          license_plate: license,
+          // Permits without parking areas send no parking_area_id at all.
+          ...parkingArea ? { parking_area_id: parkingArea.parking_area_id } : {}
+        },
+        void 0,
+        true,
+        true
+      );
+      confirmed = result?.response;
     } catch (err) {
       const message = this._errorMessage(
         err,
@@ -2440,8 +2468,20 @@ var CityVisitorParkingNewReservationCard = class extends BaseLocalizedCard {
       await triggerProgressButtonFeedback(this, "#startReservation", "error");
       return;
     }
+    const now = /* @__PURE__ */ new Date();
     this._setStatus(
-      this._localize("message.reservation_requested"),
+      startedReservationMessage(
+        // Without a response (never sent by this integration) the requested
+        // times stand in.
+        confirmed ?? {
+          start_time: start.toISOString(),
+          end_time: end.toISOString(),
+          status: start <= now ? "active" : "planned"
+        },
+        now,
+        getHassLanguage(this._hass) || navigator.language || "en",
+        this._localize
+      ),
       "success",
       5e3
     );
@@ -2480,7 +2520,7 @@ var CityVisitorParkingNewReservationCard = class extends BaseLocalizedCard {
   _resolveTimes() {
     const now = /* @__PURE__ */ new Date();
     if (!this._config) return { start: null, end: null };
-    const fallbackStart = new Date(now.getTime() + 60 * 1e3);
+    const fallbackStart = now;
     const startValue = this._config.show_start_time ? this._getInputValue("startDateTime") : "";
     const start = parseDateTimeValue(startValue) ?? fallbackStart;
     const endValue = this._config.show_end_time ? this._getInputValue("endDateTime") : "";

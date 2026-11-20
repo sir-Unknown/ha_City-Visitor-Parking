@@ -7,6 +7,7 @@ import {
   filterDomainDevicesForEntry,
   getConfigEntryId,
   resolvePermitLabelsByDevice,
+  startedReservationMessage,
 } from "./helpers";
 import type { DeviceEntry, PermitEntry } from "./types";
 
@@ -131,5 +132,45 @@ describe("getConfigEntryId", () => {
     expect(getConfigEntryId({})).toBeNull();
     expect(getConfigEntryId({ config_entry_id: null })).toBeNull();
     expect(getConfigEntryId(undefined)).toBeNull();
+  });
+});
+
+describe("startedReservationMessage", () => {
+  const templates: Record<string, string> = {
+    "message.reservation_started": "started until {end}",
+    "message.reservation_planned": "planned {start} to {end}",
+  };
+  const localizeKey = (key: string) => templates[key] ?? key;
+  // Local times, so the result does not depend on the test machine's zone.
+  const now = new Date(2026, 10, 20, 21, 0);
+
+  it("shows when a running reservation ends, as a time for today", () => {
+    expect(
+      startedReservationMessage(
+        {
+          status: "active",
+          start_time: new Date(2026, 10, 20, 21, 0).toISOString(),
+          end_time: new Date(2026, 10, 20, 23, 42).toISOString(),
+        },
+        now,
+        "en-GB",
+        localizeKey,
+      ),
+    ).toBe("started until 23:42");
+  });
+
+  it("shows start and end of a planned reservation with the day", () => {
+    expect(
+      startedReservationMessage(
+        {
+          status: "planned",
+          start_time: new Date(2026, 10, 21, 10, 0).toISOString(),
+          end_time: new Date(2026, 10, 21, 11, 0).toISOString(),
+        },
+        now,
+        "en-GB",
+        localizeKey,
+      ),
+    ).toMatch(/^planned Sat.*10:00 to Sat.*11:00$/);
   });
 });

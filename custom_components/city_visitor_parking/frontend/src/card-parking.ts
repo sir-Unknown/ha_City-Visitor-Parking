@@ -9,6 +9,8 @@ import type {
   PaidParkingStatus,
   PaidParkingStatusResponse,
   ParkingAreaStatus,
+  ServiceCallResult,
+  StartReservationResponse,
 } from "./types";
 import {
   ensureTranslations,
@@ -42,6 +44,7 @@ import {
   parseDateTimeValue,
   resolveCardParkingArea,
   setPendingPermitDefaults,
+  startedReservationMessage,
 } from "./helpers";
 import {
   BASE_CARD_STYLES,
@@ -1181,21 +1184,33 @@ class CityVisitorParkingNewReservationCard extends BaseLocalizedCard<CardConfig>
       this._addFavorite(license, name);
       this._addFavoriteChecked = false;
     }
+    let confirmed: StartReservationResponse | undefined;
     try {
       const activeEntryId = this._getActiveEntryId();
       const parkingArea = activeEntryId
         ? this._resolveParkingArea(activeEntryId)
         : null;
-      await this._hass.callService(DOMAIN, "start_reservation", {
-        device_id: this._deviceId,
-        start_time: start!.toISOString(),
-        end_time: end!.toISOString(),
-        license_plate: license,
-        // Permits without parking areas send no parking_area_id at all.
-        ...(parkingArea
-          ? { parking_area_id: parkingArea.parking_area_id }
-          : {}),
-      });
+      // The service returns the reservation as the provider confirmed it.
+      const result = await this._hass.callService<
+        ServiceCallResult<StartReservationResponse>
+      >(
+        DOMAIN,
+        "start_reservation",
+        {
+          device_id: this._deviceId,
+          start_time: start!.toISOString(),
+          end_time: end!.toISOString(),
+          license_plate: license,
+          // Permits without parking areas send no parking_area_id at all.
+          ...(parkingArea
+            ? { parking_area_id: parkingArea.parking_area_id }
+            : {}),
+        },
+        undefined,
+        true,
+        true,
+      );
+      confirmed = result?.response;
     } catch (err: unknown) {
       const message = this._errorMessage(
         err,
@@ -1207,8 +1222,20 @@ class CityVisitorParkingNewReservationCard extends BaseLocalizedCard<CardConfig>
       await triggerProgressButtonFeedback(this, "#startReservation", "error");
       return;
     }
+    const now = new Date();
     this._setStatus(
-      this._localize("message.reservation_requested"),
+      startedReservationMessage(
+        // Without a response (never sent by this integration) the requested
+        // times stand in.
+        confirmed ?? {
+          start_time: start!.toISOString(),
+          end_time: end!.toISOString(),
+          status: start! <= now ? "active" : "planned",
+        },
+        now,
+        getHassLanguage(this._hass) || navigator.language || "en",
+        this._localize,
+      ),
       "success",
       5000,
     );
@@ -1250,7 +1277,9 @@ class CityVisitorParkingNewReservationCard extends BaseLocalizedCard<CardConfig>
   _resolveTimes(): { start: Date | null; end: Date | null } {
     const now = new Date();
     if (!this._config) return { start: null, end: null };
-    const fallbackStart = new Date(now.getTime() + 60 * 1000);
+    // Without a start field the reservation starts now; the library moves a
+    // start that has passed to the earliest start the provider accepts.
+    const fallbackStart = now;
     const startValue = this._config.show_start_time
       ? this._getInputValue("startDateTime")
       : "";

@@ -41,8 +41,8 @@ from custom_components.city_visitor_parking.coordinator import (
     _normalize_favorites,
     _normalize_paid_hours,
     _normalize_remaining_balance,
-    _normalize_reservations,
     _should_attempt_auto_end,
+    normalize_reservations,
 )
 from custom_components.city_visitor_parking.helpers import (
     get_attr,
@@ -401,9 +401,9 @@ def test_normalize_helpers() -> None:
     with pytest.raises(ValueError):
         _as_utc_datetime(123)
 
-    reservation = _normalize_reservations([cast("ProviderReservation", {"id": "res1"})])
+    reservation = normalize_reservations([cast("ProviderReservation", {"id": "res1"})])
     assert reservation == []
-    invalid_reservation = _normalize_reservations(
+    invalid_reservation = normalize_reservations(
         [
             cast(
                 "ProviderReservation",

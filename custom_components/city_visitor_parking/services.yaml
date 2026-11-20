@@ -1,6 +1,9 @@
 start_reservation:
   name: Start reservation
-  description: Start a visitor parking reservation for a permit.
+  description: >-
+    Start a visitor parking reservation for a permit. After an error that leaves
+    the outcome unknown, it checks whether the reservation was booked and tries
+    up to 2 more times. Returns the reservation as the provider confirmed it.
   fields:
     device_id:
       name: Device

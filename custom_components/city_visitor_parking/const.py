@@ -43,6 +43,13 @@ ERROR_CODE_PROVIDER_REJECTED: Final = "provider_rejected"
 The session worked, so this never warrants a re-login.
 """
 
+START_RESERVATION_RETRY_DELAYS: Final[tuple[float, ...]] = (2.0, 5.0)
+"""Seconds to wait before the second and third attempt to start a reservation.
+
+A start is retried only after a failure that leaves the outcome unknown and a
+check that the provider has no matching reservation, so nothing is booked twice.
+"""
+
 DEFAULT_UPDATE_INTERVAL: Final = timedelta(minutes=5)
 """Polling interval while a reservation is active or paid parking is changing soon.
 

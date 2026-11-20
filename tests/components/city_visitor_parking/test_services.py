@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from dataclasses import replace
 from datetime import UTC, datetime, time, timedelta
 from types import SimpleNamespace
 from typing import TYPE_CHECKING
@@ -85,6 +86,203 @@ if TYPE_CHECKING:
 
 EXPECTED_COUNT = 2
 EXPECTED_REMAINING_MINUTES = 90
+# Attempts of a reservation start: the first one plus two retries.
+MAX_START_ATTEMPTS = 3
+SECOND_ATTEMPT = 2
+
+
+@pytest.fixture(autouse=True)
+def _no_start_retry_delay(monkeypatch: MonkeyPatch) -> None:
+    """Retry reservation starts without waiting."""
+    monkeypatch.setattr(
+        "custom_components.city_visitor_parking.services.START_RESERVATION_RETRY_DELAYS",
+        (0.0, 0.0),
+    )
+
+
+def _provider_reservation(
+    reservation_id: str,
+    start: datetime,
+    end: datetime,
+    license_plate: str = "AB1234",
+) -> dict[str, object]:
+    """Return a reservation as the library returns it."""
+    return {
+        "id": reservation_id,
+        "license_plate": license_plate,
+        "start_time": start.isoformat(),
+        "end_time": end.isoformat(),
+    }
+
+
+async def _start_reservation(
+    hass: HomeAssistant, device_id: str, start: datetime, end: datetime
+) -> dict[str, object]:
+    """Call start_reservation and return its response."""
+    response = await hass.services.async_call(
+        DOMAIN,
+        SERVICE_START_RESERVATION,
+        {
+            ATTR_DEVICE_ID: device_id,
+            ATTR_START_TIME: start,
+            ATTR_END_TIME: end,
+            ATTR_LICENSE_PLATE: "AB-12-34",
+        },
+        blocking=True,
+        return_response=True,
+    )
+    assert response is not None
+    return dict(response)
+
+
+@pytest.mark.parametrize(
+    ("start_offset", "status"),
+    [(timedelta(seconds=-30), "active"), (timedelta(hours=2), "planned")],
+)
+async def test_start_reservation_returns_the_confirmed_reservation(
+    hass: HomeAssistant, start_offset: timedelta, status: str
+) -> None:
+    """The response holds the provider's times and whether it runs already."""
+    await async_setup_services(hass)
+    _entry, device, provider = _create_entry_with_device(hass, "permit1")
+    now = dt_util.utcnow().replace(microsecond=0)
+    start = now + start_offset
+    end = start + timedelta(hours=1)
+    provider.start_reservation.return_value = _provider_reservation(
+        "res-new", start, end
+    )
+
+    response = await _start_reservation(hass, device.id, start, end)
+
+    assert response == {
+        "reservation_id": "res-new",
+        "start_time": start.isoformat(),
+        "end_time": end.isoformat(),
+        "status": status,
+        "attempts": 1,
+    }
+
+
+async def test_start_reservation_rejection_is_not_retried(
+    hass: HomeAssistant,
+) -> None:
+    """A provider refusal proves nothing was booked: no check, no retry."""
+    await async_setup_services(hass)
+    _entry, device, provider = _create_entry_with_device(hass, "permit1")
+    provider.start_reservation.side_effect = ProviderError(
+        "refused", error_code=ErrorCode.PROVIDER_REJECTED, detail="No balance left"
+    )
+    start = dt_util.utcnow()
+
+    with pytest.raises(HomeAssistantError) as err:
+        await _start_reservation(hass, device.id, start, start + timedelta(hours=1))
+
+    assert err.value.translation_key == "reservation_start_rejected_detail"
+    assert err.value.translation_placeholders == {"detail": "No balance left"}
+    provider.start_reservation.assert_awaited_once()
+    provider.list_reservations.assert_not_awaited()
+
+
+async def test_start_reservation_booked_despite_error_is_not_retried(
+    hass: HomeAssistant,
+) -> None:
+    """A time-out after which the reservation exists counts as started."""
+    await async_setup_services(hass)
+    _entry, device, provider = _create_entry_with_device(hass, "permit1")
+    start = dt_util.utcnow().replace(microsecond=0)
+    end = start + timedelta(hours=1)
+    provider.start_reservation.side_effect = LibraryTimeoutError("time-out")
+    # The provider rounded the start down to the minute and stored the plate
+    # without dashes.
+    provider.list_reservations.return_value = [
+        _provider_reservation("res-booked", start.replace(second=0), end)
+    ]
+
+    response = await _start_reservation(hass, device.id, start, end)
+
+    assert response["reservation_id"] == "res-booked"
+    assert response["attempts"] == 1
+    provider.start_reservation.assert_awaited_once()
+
+
+async def test_start_reservation_retried_when_nothing_was_booked(
+    hass: HomeAssistant,
+) -> None:
+    """An unknown failure is retried after the check finds no reservation.
+
+    Reservations known before the start, and those for another plate or other
+    times, do not count as booked.
+    """
+    await async_setup_services(hass)
+    entry, device, provider = _create_entry_with_device(hass, "permit1")
+    start = dt_util.utcnow().replace(microsecond=0)
+    end = start + timedelta(hours=1)
+    coordinator = entry.runtime_data.coordinator
+    coordinator.data = replace(
+        coordinator.data,
+        reservations=(
+            Reservation(
+                reservation_id="res-known",
+                start_time=start,
+                end_time=end,
+                license_plate="AB1234",
+            ),
+        ),
+    )
+    provider.list_reservations.return_value = [
+        _provider_reservation("res-known", start, end),
+        _provider_reservation("res-other-plate", start, end, "XY9876"),
+        _provider_reservation("res-other-end", start, end + timedelta(hours=1)),
+    ]
+    provider.start_reservation.side_effect = [
+        NetworkError("connection reset"),
+        _provider_reservation("res-new", start, end),
+    ]
+
+    response = await _start_reservation(hass, device.id, start, end)
+
+    assert response["reservation_id"] == "res-new"
+    assert response["attempts"] == SECOND_ATTEMPT
+    assert provider.start_reservation.await_count == SECOND_ATTEMPT
+
+
+async def test_start_reservation_fails_after_three_attempts(
+    hass: HomeAssistant, caplog: LogCaptureFixture
+) -> None:
+    """Three unknown failures without a booked reservation end in a clear error."""
+    await async_setup_services(hass)
+    _entry, device, provider = _create_entry_with_device(hass, "permit1")
+    provider.start_reservation.side_effect = NetworkError("connection reset")
+    provider.list_reservations.return_value = []
+    start = dt_util.utcnow()
+
+    with pytest.raises(HomeAssistantError) as err:
+        await _start_reservation(hass, device.id, start, start + timedelta(hours=1))
+
+    assert err.value.translation_key == "reservation_start_failed"
+    assert err.value.translation_placeholders == {"attempts": "3"}
+    assert provider.start_reservation.await_count == MAX_START_ATTEMPTS
+    assert "failed after 3 attempts" in caplog.text
+    # The plate never reaches the log.
+    assert "AB-12-34" not in caplog.text
+    assert "AB1234" not in caplog.text
+
+
+async def test_start_reservation_unknown_when_the_check_fails(
+    hass: HomeAssistant,
+) -> None:
+    """Without a working check the start is never repeated."""
+    await async_setup_services(hass)
+    _entry, device, provider = _create_entry_with_device(hass, "permit1")
+    provider.start_reservation.side_effect = NetworkError("connection reset")
+    provider.list_reservations.side_effect = NetworkError("still down")
+    start = dt_util.utcnow()
+
+    with pytest.raises(HomeAssistantError) as err:
+        await _start_reservation(hass, device.id, start, start + timedelta(hours=1))
+
+    assert err.value.translation_key == "reservation_start_unknown"
+    provider.start_reservation.assert_awaited_once()
 
 
 def _override_range_for_day(now: datetime, start: time, end: time) -> TimeRange:
@@ -358,13 +556,16 @@ async def test_service_add_and_remove_favorite(hass: HomeAssistant) -> None:
     provider.remove_favorite.assert_awaited_once_with("fav1")
 
 
-async def test_service_start_reservation_adjusts_start(hass: HomeAssistant) -> None:
-    """Start reservation should enforce a minimum start time."""
+async def test_service_start_reservation_passes_past_start(
+    hass: HomeAssistant,
+) -> None:
+    """A start in the past means "start now" and is left to the library."""
     await async_setup_services(hass)
 
     entry, device, provider = _create_entry_with_device(hass, "permit1")
-    now = datetime(2025, 1, 1, 12, 0, tzinfo=UTC)
-    start = now
+    now = datetime(2025, 1, 1, 12, 0, 30, tzinfo=UTC)
+    # The card sends the current minute, which is already in the past.
+    start = now.replace(second=0)
     end = now + timedelta(minutes=30)
 
     with freeze_time(now):
@@ -380,13 +581,37 @@ async def test_service_start_reservation_adjusts_start(hass: HomeAssistant) -> N
             blocking=True,
         )
 
-    expected_start = now + timedelta(minutes=1)
     provider.start_reservation.assert_awaited_once_with(
         license_plate="AB1234",
-        start_time=expected_start,
+        start_time=start,
         end_time=end,
     )
     entry.runtime_data.coordinator.async_refresh.assert_awaited_once()
+
+
+async def test_service_start_reservation_rejects_end_in_past(
+    hass: HomeAssistant,
+) -> None:
+    """An end that is not after the effective start is rejected up front."""
+    await async_setup_services(hass)
+
+    _entry, device, provider = _create_entry_with_device(hass, "permit1")
+    now = datetime(2025, 1, 1, 12, 0, tzinfo=UTC)
+
+    with freeze_time(now), pytest.raises(ServiceValidationError):
+        await hass.services.async_call(
+            DOMAIN,
+            SERVICE_START_RESERVATION,
+            {
+                ATTR_DEVICE_ID: device.id,
+                ATTR_START_TIME: now - timedelta(minutes=30),
+                ATTR_END_TIME: now - timedelta(minutes=10),
+                ATTR_LICENSE_PLATE: "AB1234",
+            },
+            blocking=True,
+        )
+
+    provider.start_reservation.assert_not_awaited()
 
 
 async def test_service_start_reservation_error(
@@ -395,11 +620,11 @@ async def test_service_start_reservation_error(
     monkeypatch: MonkeyPatch,
     caplog: LogCaptureFixture,
 ) -> None:
-    """Start reservation errors should raise HomeAssistantError."""
+    """A start failure that is not retried logs the versions for support."""
     await async_setup_services(hass)
 
     _, device, provider = _create_entry_with_device(hass, "permit1")
-    provider.start_reservation.side_effect = pv_library.ProviderError("boom")
+    provider.start_reservation.side_effect = pv_library.AuthError("boom")
     monkeypatch.setattr(
         "custom_components.city_visitor_parking.services.async_get_versions",
         AsyncMock(return_value=("1.2.3", "4.5.6")),
@@ -1476,6 +1701,12 @@ def _create_entry_with_device(
     entry.mock_state(hass, config_entries.ConfigEntryState.LOADED)
 
     provider = AsyncMock()
+    # A started reservation as the library confirms it.
+    provider.start_reservation.return_value = _provider_reservation(
+        "res-new",
+        datetime(2030, 1, 1, 10, 0, tzinfo=UTC),
+        datetime(2030, 1, 1, 11, 0, tzinfo=UTC),
+    )
     coordinator = AsyncMock()
     coordinator.async_refresh = AsyncMock()
     coordinator.async_call_with_relogin = AsyncMock(side_effect=_call_through)

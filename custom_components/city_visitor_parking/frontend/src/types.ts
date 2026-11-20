@@ -29,6 +29,9 @@ export type HomeAssistant = {
     domain: string,
     service: string,
     data: Record<string, unknown>,
+    target?: Record<string, unknown>,
+    notifyOnError?: boolean,
+    returnResponse?: boolean,
   ) => Promise<T>;
   config?: { state?: string };
   localize?: LocalizeFunc;
@@ -80,6 +83,23 @@ export type ReservationsResponse = {
   stale: boolean;
   /** Reservation fields the provider can update natively. */
   reservation_update_fields: string[];
+};
+
+/**
+ * Response of the `start_reservation` service: the reservation as the provider
+ * confirmed it, from `services.py`. `status` is `active` when it runs already.
+ */
+export type StartReservationResponse = {
+  reservation_id: string;
+  start_time: string;
+  end_time: string;
+  status: "active" | "planned";
+  attempts: number;
+};
+
+/** Result of a Home Assistant service call made with `returnResponse`. */
+export type ServiceCallResult<T> = {
+  response?: T;
 };
 
 /** Config entry fields used for permit selection in the frontend. */
