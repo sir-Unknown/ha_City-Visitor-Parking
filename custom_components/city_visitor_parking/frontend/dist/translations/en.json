@@ -68,6 +68,8 @@
   "message.active_reservations_failed": "We could not load your active reservations",
   "message.no_device_for_permit": "We could not find a device for your selected permit.",
   "message.load_favorites_failed": "We could not load your favorites",
+  "message.invalid_parking_area": "This parking area is not part of your permit. Check the number.",
+  "message.parking_area_failed": "We could not load the paid hours of this parking area.",
   "message.removing_favorite": "Removing your favorite...",
   "message.favorite_removed": "Your favorite was removed.",
   "message.favorite_remove_failed": "We could not remove your favorite.",

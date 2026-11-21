@@ -241,6 +241,30 @@ def _availability_payload(
     }
 
 
+def parking_area_status_payload(
+    parking_area: ParkingArea,
+    options: Mapping[str, object],
+    now: datetime,
+    *,
+    stale: bool = False,
+) -> dict[str, object]:
+    """Return the state and window of one parking area (card ParkingAreaStatus)."""
+    parking_area_status = _availability_payload(
+        parking_area.paid_hours,
+        parking_area.paid_parking_status,
+        options,
+        now,
+        stale=stale,
+    )
+    del parking_area_status["effective_windows_today"]
+    del parking_area_status["is_paid_now"]
+    return {
+        "parking_area_id": parking_area.parking_area_id,
+        "name": parking_area.name,
+        **parking_area_status,
+    }
+
+
 def build_status_payload(
     data: CoordinatorData,
     options: Mapping[str, object],
@@ -263,24 +287,10 @@ def build_status_payload(
     effective_windows_today = cast(
         "list[TimeRange]", default_status.pop("effective_windows_today")
     )
-    parking_areas: list[dict[str, object]] = []
-    for parking_area in data.parking_areas:
-        parking_area_status = _availability_payload(
-            parking_area.paid_hours,
-            parking_area.paid_parking_status,
-            options,
-            now,
-            stale=stale,
-        )
-        del parking_area_status["effective_windows_today"]
-        del parking_area_status["is_paid_now"]
-        parking_areas.append(
-            {
-                "parking_area_id": parking_area.parking_area_id,
-                "name": parking_area.name,
-                **parking_area_status,
-            }
-        )
+    parking_areas = [
+        parking_area_status_payload(parking_area, options, now, stale=stale)
+        for parking_area in data.parking_areas
+    ]
 
     return {
         **default_status,

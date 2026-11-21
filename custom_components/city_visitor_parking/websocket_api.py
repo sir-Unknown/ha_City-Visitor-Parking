@@ -12,13 +12,15 @@ from homeassistant.components import websocket_api
 from homeassistant.const import ATTR_CONFIG_ENTRY_ID
 from homeassistant.core import callback
 from homeassistant.util import dt as dt_util
-from pycityvisitorparking.exceptions import PyCityVisitorParkingError
+from pycityvisitorparking.exceptions import PyCityVisitorParkingError, ValidationError
 
-from .const import DOMAIN
+from .const import ATTR_PARKING_AREA_ID, DOMAIN
+from .coordinator import normalize_parking_area
 from .payloads import (
     build_reservations_payload,
     build_status_payload,
     normalize_favorites,
+    parking_area_status_payload,
     reservation_update_fields,
 )
 
@@ -38,6 +40,7 @@ else:
 WEBSOCKET_LIST_FAVORITES: Final[str] = "city_visitor_parking/favorites"
 WEBSOCKET_GET_STATUS: Final[str] = "city_visitor_parking/status"
 WEBSOCKET_LIST_RESERVATIONS: Final[str] = "city_visitor_parking/reservations"
+WEBSOCKET_GET_PARKING_AREA: Final[str] = "city_visitor_parking/parking_area"
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -47,6 +50,7 @@ async def async_setup_websocket(hass: HomeAssistant) -> None:
     websocket_api.async_register_command(hass, _ws_list_favorites)
     websocket_api.async_register_command(hass, _ws_get_status)
     websocket_api.async_register_command(hass, _ws_list_reservations)
+    websocket_api.async_register_command(hass, _ws_get_parking_area)
 
 
 def _get_loaded_entry(
@@ -164,6 +168,77 @@ async def _ws_get_status(
         payload["state"],
         payload["window_kind"],
         time.perf_counter() - request_started,
+    )
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): WEBSOCKET_GET_PARKING_AREA,
+        vol.Required(ATTR_CONFIG_ENTRY_ID): str,
+        vol.Required(ATTR_PARKING_AREA_ID): str,
+    }
+)
+@websocket_api.async_response
+async def _ws_get_parking_area(
+    hass: HomeAssistant,
+    connection: websocket_api.ActiveConnection,
+    msg: dict[str, object],
+) -> None:
+    """Return the state and window of one parking area, also a typed free input ID.
+
+    A listed parking area comes from the coordinator data. For permits with free input
+    the provider resolves other IDs with their paid hours; an ID it rejects returns the
+    ``invalid_parking_area`` error.
+    """
+    msg_id = cast("int", msg["id"])
+    entry = _get_loaded_entry(hass, connection, msg)
+    if entry is None:
+        return
+    runtime: CityVisitorParkingRuntimeData = entry.runtime_data
+    parking_area_id = cast("str", msg[ATTR_PARKING_AREA_ID]).strip()
+    data = cast("CoordinatorData | None", runtime.coordinator.data)
+    parking_area = data.parking_area(parking_area_id) if data is not None else None
+    if parking_area is None:
+        resolve = getattr(runtime.provider, "get_reservation_target", None)
+        if (
+            data is None
+            or not data.parking_area_free_input
+            or not parking_area_id
+            or resolve is None
+        ):
+            connection.send_error(
+                msg_id, "invalid_parking_area", "Unknown parking area"
+            )
+            return
+        try:
+            target = await runtime.coordinator.async_call_with_relogin(
+                lambda: resolve(parking_area_id)
+            )
+        except ValidationError:
+            connection.send_error(
+                msg_id, "invalid_parking_area", "Unknown parking area"
+            )
+            return
+        except PyCityVisitorParkingError:
+            _LOGGER.debug(
+                "Parking area websocket fetch failed for %s (permit %s)",
+                entry.title,
+                runtime.permit_id,
+                exc_info=True,
+            )
+            connection.send_error(
+                msg_id, "parking_area_failed", "Could not fetch the parking area"
+            )
+            return
+        parking_area = normalize_parking_area(target, entry.options, dt_util.utcnow())
+        if parking_area is None:
+            connection.send_error(
+                msg_id, "invalid_parking_area", "Unknown parking area"
+            )
+            return
+    connection.send_result(
+        msg_id,
+        parking_area_status_payload(parking_area, entry.options, dt_util.utcnow()),
     )
 
 
