@@ -8,6 +8,10 @@
           "municipality_name": "Gemeente",
           "username": "Gebruikersnaam",
           "password": "Wachtwoord"
+        },
+        "data_description": {
+          "username": "De gebruikersnaam of code die je gebruikt op de bezoekersparkeren-website van je gemeente.",
+          "password": "Het wachtwoord of de pincode die je gebruikt op de bezoekersparkeren-website van je gemeente."
         }
       },
       "auth": {
@@ -16,6 +20,10 @@
         "data": {
           "username": "Gebruikersnaam",
           "password": "Wachtwoord"
+        },
+        "data_description": {
+          "username": "De gebruikersnaam of code die je gebruikt op de bezoekersparkeren-website van je gemeente.",
+          "password": "Het wachtwoord of de pincode die je gebruikt op de bezoekersparkeren-website van je gemeente."
         }
       },
       "permit": {
@@ -31,6 +39,10 @@
         "data": {
           "username": "Gebruikersnaam",
           "password": "Wachtwoord"
+        },
+        "data_description": {
+          "username": "De gebruikersnaam of code die je gebruikt op de bezoekersparkeren-website van je gemeente.",
+          "password": "Het wachtwoord of de pincode die je gebruikt op de bezoekersparkeren-website van je gemeente."
         }
       },
       "reconfigure": {
