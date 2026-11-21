@@ -1621,6 +1621,9 @@ var CityVisitorParkingNewReservationCard = class extends BaseLocalizedCard {
     this._typedParkingAreaByEntryId = /* @__PURE__ */ new Map();
     // Translation key of why a typed parking area could not be loaded.
     this._parkingAreaErrorByEntryId = /* @__PURE__ */ new Map();
+    // Typed parking area ID whose times are loading, per entry; the start button
+    // waits for it.
+    this._typedParkingAreaLookupByEntryId = /* @__PURE__ */ new Map();
     // Whether the user changed the start or end time since picking a typed parking
     // area; its loaded status then only fills empty times instead of replacing them.
     this._timesEditedSinceParkingAreaPick = false;
@@ -2003,7 +2006,7 @@ var CityVisitorParkingNewReservationCard = class extends BaseLocalizedCard {
         (r4) => r4.start < resolvedEnd && r4.end > resolvedStart
       );
     })();
-    const startDisabled = controlsDisabled || !hasDevice || !hasTarget || !hasLicense || plateAlreadyActive || this._startInFlight;
+    const startDisabled = controlsDisabled || !hasDevice || !hasTarget || !hasLicense || plateAlreadyActive || this._startInFlight || this._typedParkingAreaPending(activeEntryId);
     const todayStart = /* @__PURE__ */ new Date();
     todayStart.setHours(0, 0, 0, 0);
     const minDateTime = formatDateTimeLocal(todayStart);
@@ -2252,6 +2255,10 @@ var CityVisitorParkingNewReservationCard = class extends BaseLocalizedCard {
    */
   async _loadTypedParkingArea(entryId, parkingAreaId, applyDefaults) {
     if (!this._hass) return;
+    if (applyDefaults) {
+      this._typedParkingAreaLookupByEntryId.set(entryId, parkingAreaId);
+      this._requestRender();
+    }
     let parkingArea;
     try {
       parkingArea = await fetchParkingAreaStatus(
@@ -2260,6 +2267,7 @@ var CityVisitorParkingNewReservationCard = class extends BaseLocalizedCard {
         parkingAreaId
       );
     } catch (err) {
+      this._endTypedParkingAreaLookup(entryId, parkingAreaId);
       if (this._pickedParkingAreaId(entryId) !== parkingAreaId) return;
       this._typedParkingAreaByEntryId.delete(entryId);
       this._parkingAreaErrorByEntryId.set(
@@ -2269,6 +2277,7 @@ var CityVisitorParkingNewReservationCard = class extends BaseLocalizedCard {
       this._requestRender();
       return;
     }
+    this._endTypedParkingAreaLookup(entryId, parkingAreaId);
     if (this._pickedParkingAreaId(entryId) !== parkingAreaId) return;
     this._typedParkingAreaByEntryId.set(entryId, parkingArea);
     this._parkingAreaErrorByEntryId.delete(entryId);
@@ -2281,6 +2290,18 @@ var CityVisitorParkingNewReservationCard = class extends BaseLocalizedCard {
         this._applyStatusDefaultsToForm(!this._timesEditedSinceParkingAreaPick);
     }
     this._requestRender();
+  }
+  /** Ends a pending lookup unless a newer one for another ID replaced it. */
+  _endTypedParkingAreaLookup(entryId, parkingAreaId) {
+    if (this._typedParkingAreaLookupByEntryId.get(entryId) === parkingAreaId) {
+      this._typedParkingAreaLookupByEntryId.delete(entryId);
+    }
+  }
+  /** Whether the picked typed parking area's times are still loading. */
+  _typedParkingAreaPending(entryId) {
+    if (!entryId) return false;
+    const pending = this._typedParkingAreaLookupByEntryId.get(entryId);
+    return pending !== void 0 && pending === this._pickedParkingAreaId(entryId);
   }
   /** Localized warning for a typed parking area that could not be loaded, if any. */
   _parkingAreaError(entryId) {
@@ -2540,6 +2561,7 @@ var CityVisitorParkingNewReservationCard = class extends BaseLocalizedCard {
       return;
     }
     if (this._startInFlight) return;
+    if (this._typedParkingAreaPending(this._getActiveEntryId())) return;
     this._startInFlight = true;
     this._requestRender();
     const license = this._getInputValue("licensePlate").trim();
