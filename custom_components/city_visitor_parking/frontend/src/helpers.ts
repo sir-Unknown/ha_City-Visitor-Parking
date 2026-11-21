@@ -18,6 +18,8 @@ import { localize } from "./translations";
 export const DOMAIN = "city_visitor_parking";
 /** Websocket command returning the status and parking areas of one permit. */
 export const WS_GET_STATUS = "city_visitor_parking/status";
+/** Websocket command returning the status of one parking area, also a typed ID. */
+export const WS_GET_PARKING_AREA = "city_visitor_parking/parking_area";
 /** Websocket command returning the reservations held by the coordinator. */
 export const WS_LIST_RESERVATIONS = "city_visitor_parking/reservations";
 export const RESERVATION_STARTED_EVENT =
@@ -299,6 +301,29 @@ export const fetchPermitParkingAreaChoice = async (
     return false;
   }
 };
+
+/**
+ * Fetches the status of one parking area, also a typed free input ID that the
+ * provider resolves with its own paid hours. Rejects with the websocket error;
+ * see `isInvalidParkingAreaError`.
+ */
+export const fetchParkingAreaStatus = (
+  hass: HomeAssistant,
+  entryId: string,
+  parkingAreaId: string,
+): Promise<ParkingAreaStatus> =>
+  hass.callWS<ParkingAreaStatus>({
+    type: WS_GET_PARKING_AREA,
+    config_entry_id: entryId,
+    parking_area_id: parkingAreaId,
+  });
+
+/** Returns whether a websocket error means the permit cannot park in that parking area. */
+export const isInvalidParkingAreaError = (err: unknown): boolean =>
+  typeof err === "object" &&
+  err !== null &&
+  "code" in err &&
+  err.code === "invalid_parking_area";
 
 /** Returns the parking area label of a listed reservation: its name, else its id. */
 export const formatReservationParkingArea = (reservation: {

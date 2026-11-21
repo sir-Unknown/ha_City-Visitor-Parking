@@ -670,6 +670,7 @@ var getHassLanguage = (hass) => {
 // src/helpers.ts
 var DOMAIN = "city_visitor_parking";
 var WS_GET_STATUS = "city_visitor_parking/status";
+var WS_GET_PARKING_AREA = "city_visitor_parking/parking_area";
 var WS_LIST_RESERVATIONS = "city_visitor_parking/reservations";
 var RESERVATION_STARTED_EVENT = "city-visitor-parking-reservation-started";
 var RESERVATION_ENDED_EVENT = "city-visitor-parking-reservation-ended";
@@ -792,6 +793,12 @@ var fetchPermitParkingAreaChoice = async (hass, entryId) => {
     return false;
   }
 };
+var fetchParkingAreaStatus = (hass, entryId, parkingAreaId) => hass.callWS({
+  type: WS_GET_PARKING_AREA,
+  config_entry_id: entryId,
+  parking_area_id: parkingAreaId
+});
+var isInvalidParkingAreaError = (err) => typeof err === "object" && err !== null && "code" in err && err.code === "invalid_parking_area";
 var formatReservationParkingArea = (reservation) => nonEmptyString(reservation.parking_area_name) ?? nonEmptyString(reservation.parking_area_id);
 var isPermitEntryDisabled = (entry) => Boolean(entry.disabled_by) || entry.state != null && entry.state !== "loaded" && entry.state !== "setup_in_progress";
 var buildPermitOptions = (entries) => entries.map((entry) => ({
@@ -1608,6 +1615,8 @@ var CityVisitorParkingNewReservationCard = class extends BaseLocalizedCard {
     // Whether a permit accepts a typed parking area ID outside its list.
     this._parkingAreaFreeInputByEntryId = /* @__PURE__ */ new Map();
     this._selectedParkingAreaIdByEntryId = /* @__PURE__ */ new Map();
+    // Status of a typed free input parking area, fetched with its own paid hours.
+    this._typedParkingAreaByEntryId = /* @__PURE__ */ new Map();
     this._pendingPermitDefaultsEntryId = null;
     this._pendingPermitDefaultsForce = false;
     this._statusRefreshHandle = null;
@@ -1892,6 +1901,11 @@ var CityVisitorParkingNewReservationCard = class extends BaseLocalizedCard {
           this._getEffectivePaidParkingStatus(entryId)
         );
         this._applyPendingPermitDefaults(entryId);
+        const picked = this._pickedParkingAreaId(entryId);
+        const typed = this._typedParkingAreaByEntryId.get(entryId);
+        if (picked && typed?.parking_area_id === picked) {
+          void this._loadTypedParkingArea(entryId, picked, false);
+        }
       }
       this._paidParkingStatusTsByEntryId.set(entryId, Date.now());
       this._paidParkingStatusInFlightByEntryId.delete(entryId);
@@ -2206,16 +2220,59 @@ var CityVisitorParkingNewReservationCard = class extends BaseLocalizedCard {
       );
       this._applyStatusDefaultsToForm(true);
     }
+    if (!parkingAreas.some(
+      (parkingArea) => parkingArea.parking_area_id === parkingAreaId
+    )) {
+      void this._loadTypedParkingArea(entryId, parkingAreaId, true);
+    }
     this._requestRender();
   }
   /**
-   * Listed parking area the card uses for an entry's status: the user's pick or the
-   * default. A typed ID outside the list shows the default parking area's status.
+   * Loads the status of a typed parking area. A response for an ID the user no
+   * longer picked is dropped; an ID the provider rejects shows a warning.
+   */
+  async _loadTypedParkingArea(entryId, parkingAreaId, applyDefaults) {
+    if (!this._hass) return;
+    let parkingArea;
+    try {
+      parkingArea = await fetchParkingAreaStatus(
+        this._hass,
+        entryId,
+        parkingAreaId
+      );
+    } catch (err) {
+      if (this._pickedParkingAreaId(entryId) !== parkingAreaId) return;
+      this._typedParkingAreaByEntryId.delete(entryId);
+      this._setStatus(
+        this._localize(
+          isInvalidParkingAreaError(err) ? "message.invalid_parking_area" : "message.parking_area_failed"
+        ),
+        "warning"
+      );
+      return;
+    }
+    if (this._pickedParkingAreaId(entryId) !== parkingAreaId) return;
+    this._typedParkingAreaByEntryId.set(entryId, parkingArea);
+    if (entryId === this._getActiveEntryId()) {
+      applyPaidParkingStatus(
+        this,
+        this._getEffectivePaidParkingStatus(entryId)
+      );
+      if (applyDefaults) this._applyStatusDefaultsToForm(true);
+    }
+    this._requestRender();
+  }
+  /**
+   * Parking area the card uses for an entry's status: the user's pick (listed, or a
+   * typed ID once its status is loaded) or the default.
    */
   _resolveParkingArea(entryId) {
+    const parkingAreas = this._parkingAreasByEntryId.get(entryId) ?? [];
+    const picked = this._pickedParkingAreaId(entryId);
+    const typed = this._typedParkingAreaByEntryId.get(entryId);
     return resolveCardParkingArea(
-      this._parkingAreasByEntryId.get(entryId) ?? [],
-      this._pickedParkingAreaId(entryId)
+      typed && typed.parking_area_id === picked ? [...parkingAreas, typed] : parkingAreas,
+      picked
     );
   }
   /** Parking area ID the card books in for an entry, including a typed free input ID. */

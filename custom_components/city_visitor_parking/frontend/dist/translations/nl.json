@@ -68,6 +68,8 @@
   "message.active_reservations_failed": "We kunnen je actieve reserveringen niet laden",
   "message.no_device_for_permit": "We kunnen geen apparaat vinden voor je gekozen vergunning.",
   "message.load_favorites_failed": "We kunnen je favorieten niet laden.",
+  "message.invalid_parking_area": "Dit parkeergebied hoort niet bij je vergunning. Controleer het nummer.",
+  "message.parking_area_failed": "We kunnen de betaalde uren van dit parkeergebied niet laden.",
   "message.removing_favorite": "Je favoriet wordt verwijderd...",
   "message.favorite_removed": "Je favoriet is verwijderd.",
   "message.favorite_remove_failed": "We kunnen je favoriet niet verwijderen.",
