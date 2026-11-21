@@ -180,6 +180,9 @@ class CityVisitorParkingNewReservationCard extends BaseLocalizedCard<CardConfig>
   _typedParkingAreaByEntryId = new Map<string, ParkingAreaStatus>();
   // Translation key of why a typed parking area could not be loaded.
   _parkingAreaErrorByEntryId = new Map<string, string>();
+  // Whether the user changed the start or end time since picking a typed parking
+  // area; its loaded status then only fills empty times instead of replacing them.
+  _timesEditedSinceParkingAreaPick = false;
   _pendingPermitDefaultsEntryId: string | null = null;
   _pendingPermitDefaultsForce = false;
   _statusRefreshHandle: number | null = null;
@@ -858,6 +861,9 @@ class CityVisitorParkingNewReservationCard extends BaseLocalizedCard<CardConfig>
       this._scheduleFavoriteActionsUpdate();
       return;
     }
+    if (field?.id === "startDateTime" || field?.id === "endDateTime") {
+      this._timesEditedSinceParkingAreaPick = true;
+    }
     if (field?.id === "startDateTime") {
       this._syncEndDateWithStart();
     }
@@ -872,6 +878,9 @@ class CityVisitorParkingNewReservationCard extends BaseLocalizedCard<CardConfig>
       this._addFavoriteChecked = (target as CheckedElement).checked;
       this._scheduleFavoriteActionsUpdate();
       return;
+    }
+    if (field?.id === "startDateTime" || field?.id === "endDateTime") {
+      this._timesEditedSinceParkingAreaPick = true;
     }
     if (field?.id === "startDateTime") {
       this._syncEndDateWithStart();
@@ -911,6 +920,7 @@ class CityVisitorParkingNewReservationCard extends BaseLocalizedCard<CardConfig>
     const previousParkingArea = this._resolveParkingArea(entryId);
     this._selectedParkingAreaIdByEntryId.set(entryId, parkingAreaId);
     this._parkingAreaErrorByEntryId.delete(entryId);
+    this._timesEditedSinceParkingAreaPick = false;
     if (this._resolveParkingArea(entryId) !== previousParkingArea) {
       applyPaidParkingStatus(
         this,
@@ -967,7 +977,10 @@ class CityVisitorParkingNewReservationCard extends BaseLocalizedCard<CardConfig>
         this,
         this._getEffectivePaidParkingStatus(entryId),
       );
-      if (applyDefaults) this._applyStatusDefaultsToForm(true);
+      // Times the user changed while the lookup was pending (or since a failed
+      // lookup) are kept; only empty or past times are filled in.
+      if (applyDefaults)
+        this._applyStatusDefaultsToForm(!this._timesEditedSinceParkingAreaPick);
     }
     this._requestRender();
   }

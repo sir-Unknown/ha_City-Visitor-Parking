@@ -394,8 +394,16 @@ class CityVisitorParkingCoordinator(TimestampDataUpdateCoordinator[CoordinatorDa
         for reservation in data.active_reservations:
             # Parking areas have different paid hours, so judge each reservation by its
             # own parking area; fall back to the permit's default parking area when it
-            # is unknown.
+            # is unknown. A free input permit's unlisted (typed) parking area has its
+            # own, unknown paid hours: its reservation is not ended, because the
+            # default parking area may be free while that one is still paid.
             parking_area = data.parking_area(reservation.parking_area_id)
+            if (
+                parking_area is None
+                and reservation.parking_area_id is not None
+                and data.parking_area_free_input
+            ):
+                continue
             availability = (
                 parking_area.paid_parking_status
                 if parking_area is not None
