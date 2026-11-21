@@ -241,6 +241,7 @@ export const renderParkingAreaSelect = (params: {
   disabled: boolean;
   preview?: boolean;
   customValue?: boolean;
+  error?: string | null;
   onSelected: (event: Event) => void;
 }): TemplateResult => {
   if (params.preview) {
@@ -278,6 +279,9 @@ export const renderParkingAreaSelect = (params: {
         ?disabled=${params.disabled}
         @value-changed=${params.onSelected}
       ></ha-selector>
+      ${params.error
+        ? html`<ha-alert alert-type="warning">${params.error}</ha-alert>`
+        : nothing}
     </div>
   `;
 };

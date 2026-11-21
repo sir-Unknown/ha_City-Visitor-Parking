@@ -1113,6 +1113,7 @@ var renderParkingAreaSelect = (params) => {
         ?disabled=${params.disabled}
         @value-changed=${params.onSelected}
       ></ha-selector>
+      ${params.error ? b2`<ha-alert alert-type="warning">${params.error}</ha-alert>` : A}
     </div>
   `;
 };
@@ -1617,6 +1618,8 @@ var CityVisitorParkingNewReservationCard = class extends BaseLocalizedCard {
     this._selectedParkingAreaIdByEntryId = /* @__PURE__ */ new Map();
     // Status of a typed free input parking area, fetched with its own paid hours.
     this._typedParkingAreaByEntryId = /* @__PURE__ */ new Map();
+    // Translation key of why a typed parking area could not be loaded.
+    this._parkingAreaErrorByEntryId = /* @__PURE__ */ new Map();
     this._pendingPermitDefaultsEntryId = null;
     this._pendingPermitDefaultsForce = false;
     this._statusRefreshHandle = null;
@@ -2023,6 +2026,7 @@ var CityVisitorParkingNewReservationCard = class extends BaseLocalizedCard {
       disabled: controlsDisabled || selectedPermitDisabled,
       preview: controlsDisabled,
       customValue: parkingAreaFreeInput2,
+      error: activeEntryId ? this._parkingAreaError(activeEntryId) : null,
       onSelected: this._onParkingAreaSelectChange
     }) : A}
           ${renderFavoriteSelect({
@@ -2213,6 +2217,7 @@ var CityVisitorParkingNewReservationCard = class extends BaseLocalizedCard {
     if (this._resolveParkingAreaId(entryId) === parkingAreaId) return;
     const previousParkingArea = this._resolveParkingArea(entryId);
     this._selectedParkingAreaIdByEntryId.set(entryId, parkingAreaId);
+    this._parkingAreaErrorByEntryId.delete(entryId);
     if (this._resolveParkingArea(entryId) !== previousParkingArea) {
       applyPaidParkingStatus(
         this,
@@ -2229,7 +2234,8 @@ var CityVisitorParkingNewReservationCard = class extends BaseLocalizedCard {
   }
   /**
    * Loads the status of a typed parking area. A response for an ID the user no
-   * longer picked is dropped; an ID the provider rejects shows a warning.
+   * longer picked is dropped; an ID the provider rejects shows a warning below the
+   * parking area field.
    */
   async _loadTypedParkingArea(entryId, parkingAreaId, applyDefaults) {
     if (!this._hass) return;
@@ -2243,16 +2249,16 @@ var CityVisitorParkingNewReservationCard = class extends BaseLocalizedCard {
     } catch (err) {
       if (this._pickedParkingAreaId(entryId) !== parkingAreaId) return;
       this._typedParkingAreaByEntryId.delete(entryId);
-      this._setStatus(
-        this._localize(
-          isInvalidParkingAreaError(err) ? "message.invalid_parking_area" : "message.parking_area_failed"
-        ),
-        "warning"
+      this._parkingAreaErrorByEntryId.set(
+        entryId,
+        isInvalidParkingAreaError(err) ? "message.invalid_parking_area" : "message.parking_area_failed"
       );
+      this._requestRender();
       return;
     }
     if (this._pickedParkingAreaId(entryId) !== parkingAreaId) return;
     this._typedParkingAreaByEntryId.set(entryId, parkingArea);
+    this._parkingAreaErrorByEntryId.delete(entryId);
     if (entryId === this._getActiveEntryId()) {
       applyPaidParkingStatus(
         this,
@@ -2261,6 +2267,11 @@ var CityVisitorParkingNewReservationCard = class extends BaseLocalizedCard {
       if (applyDefaults) this._applyStatusDefaultsToForm(true);
     }
     this._requestRender();
+  }
+  /** Localized warning for a typed parking area that could not be loaded, if any. */
+  _parkingAreaError(entryId) {
+    const key = this._parkingAreaErrorByEntryId.get(entryId);
+    return key ? this._localize(key) : null;
   }
   /**
    * Parking area the card uses for an entry's status: the user's pick (listed, or a

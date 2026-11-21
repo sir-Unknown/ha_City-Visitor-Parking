@@ -176,6 +176,8 @@ class CityVisitorParkingNewReservationCard extends BaseLocalizedCard<CardConfig>
   _selectedParkingAreaIdByEntryId = new Map<string, string>();
   // Status of a typed free input parking area, fetched with its own paid hours.
   _typedParkingAreaByEntryId = new Map<string, ParkingAreaStatus>();
+  // Translation key of why a typed parking area could not be loaded.
+  _parkingAreaErrorByEntryId = new Map<string, string>();
   _pendingPermitDefaultsEntryId: string | null = null;
   _pendingPermitDefaultsForce = false;
   _statusRefreshHandle: number | null = null;
@@ -669,6 +671,9 @@ class CityVisitorParkingNewReservationCard extends BaseLocalizedCard<CardConfig>
                 disabled: controlsDisabled || selectedPermitDisabled,
                 preview: controlsDisabled,
                 customValue: parkingAreaFreeInput,
+                error: activeEntryId
+                  ? this._parkingAreaError(activeEntryId)
+                  : null,
                 onSelected: this._onParkingAreaSelectChange,
               })
             : nothing}
@@ -893,6 +898,7 @@ class CityVisitorParkingNewReservationCard extends BaseLocalizedCard<CardConfig>
     if (this._resolveParkingAreaId(entryId) === parkingAreaId) return;
     const previousParkingArea = this._resolveParkingArea(entryId);
     this._selectedParkingAreaIdByEntryId.set(entryId, parkingAreaId);
+    this._parkingAreaErrorByEntryId.delete(entryId);
     if (this._resolveParkingArea(entryId) !== previousParkingArea) {
       applyPaidParkingStatus(
         this,
@@ -913,7 +919,8 @@ class CityVisitorParkingNewReservationCard extends BaseLocalizedCard<CardConfig>
 
   /**
    * Loads the status of a typed parking area. A response for an ID the user no
-   * longer picked is dropped; an ID the provider rejects shows a warning.
+   * longer picked is dropped; an ID the provider rejects shows a warning below the
+   * parking area field.
    */
   async _loadTypedParkingArea(
     entryId: string,
@@ -931,18 +938,18 @@ class CityVisitorParkingNewReservationCard extends BaseLocalizedCard<CardConfig>
     } catch (err: unknown) {
       if (this._pickedParkingAreaId(entryId) !== parkingAreaId) return;
       this._typedParkingAreaByEntryId.delete(entryId);
-      this._setStatus(
-        this._localize(
-          isInvalidParkingAreaError(err)
-            ? "message.invalid_parking_area"
-            : "message.parking_area_failed",
-        ),
-        "warning",
+      this._parkingAreaErrorByEntryId.set(
+        entryId,
+        isInvalidParkingAreaError(err)
+          ? "message.invalid_parking_area"
+          : "message.parking_area_failed",
       );
+      this._requestRender();
       return;
     }
     if (this._pickedParkingAreaId(entryId) !== parkingAreaId) return;
     this._typedParkingAreaByEntryId.set(entryId, parkingArea);
+    this._parkingAreaErrorByEntryId.delete(entryId);
     if (entryId === this._getActiveEntryId()) {
       applyPaidParkingStatus(
         this,
@@ -951,6 +958,12 @@ class CityVisitorParkingNewReservationCard extends BaseLocalizedCard<CardConfig>
       if (applyDefaults) this._applyStatusDefaultsToForm(true);
     }
     this._requestRender();
+  }
+
+  /** Localized warning for a typed parking area that could not be loaded, if any. */
+  _parkingAreaError(entryId: string): string | null {
+    const key = this._parkingAreaErrorByEntryId.get(entryId);
+    return key ? this._localize(key) : null;
   }
 
   /**
