@@ -174,7 +174,7 @@
         },
         "license_plate": {
           "name": "License plate",
-          "description": "New license plate for the reservation."
+          "description": "New license plate for the reservation. A different license plate replaces the reservation: a new reservation is started, then this one is ended. Times you leave empty are taken from this reservation."
         }
       }
     },
@@ -295,7 +295,7 @@
       "message": "Provide at least one field to update."
     },
     "update_requires_full_details": {
-      "message": "The fallback update requires start time, end time, and license plate."
+      "message": "This reservation is not in the latest data from the provider, so its start time, end time, and license plate cannot be copied to the new reservation. Check the reservation ID, or provide the start time, end time, and license plate yourself."
     },
     "update_requires_license_plate": {
       "message": "Updating a favorite without a license plate is not supported."
@@ -341,6 +341,12 @@
     },
     "reservation_start_unknown": {
       "message": "It is unknown whether the reservation was started. Check the municipality's parking app or website before you try again."
+    },
+    "reservation_replace_end_failed": {
+      "message": "The reservation with the new license plate was started, but the old reservation could not be ended. End it yourself."
+    },
+    "reservation_replace_start_failed": {
+      "message": "The old reservation was ended, but the new reservation was not confirmed. Check the municipality's parking app or website before you start it again."
     },
     "favorite_operation_failed": {
       "message": "The favorite request failed. Try again later."

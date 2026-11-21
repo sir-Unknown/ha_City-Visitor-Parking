@@ -68,7 +68,7 @@ update_reservation:
         datetime: {}
     license_plate:
       name: License plate
-      description: New license plate for the reservation.
+      description: New license plate for the reservation. A different license plate replaces the reservation; a new reservation is started, then this one is ended. Times you leave empty are taken from this reservation.
       required: false
       selector:
         text: {}
