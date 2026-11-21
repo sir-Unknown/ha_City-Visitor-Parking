@@ -84,7 +84,7 @@ De integratie ondersteunt een groeiend aantal Nederlandse gemeenten en maakt ver
 | Letter | Gemeente         | Portaal                                                                                 |
 | ------ | ---------------- | --------------------------------------------------------------------------------------- |
 | **A**  | Amstelveen       | [mijn.2park.nl](https://mijn.2park.nl/)                                                 |
-|        | Amsterdam        | [parkeervergunningen.amsterdam.nl](https://parkeervergunningen.amsterdam.nl/)           |
+|        | Amsterdam        | [parkeervergunningen.amsterdam.nl](https://parkeervergunningen.amsterdam.nl/login-ssp)  |
 |        | Apeldoorn        | [parkeren.apeldoorn.nl](https://parkeren.apeldoorn.nl/DVSPortal/)                       |
 |        | Assen            | [mijn.2park.nl](https://mijn.2park.nl/)                                                 |
 | **B**  | Bergen op Zoom   | [mijn.2park.nl](https://mijn.2park.nl/)                                                 |
@@ -142,7 +142,7 @@ De integratie ondersteunt een groeiend aantal Nederlandse gemeenten en maakt ver
 |        | Zutphen          | [parkeren.zutphen.nl](https://parkeren.zutphen.nl/DVSPortal/)                           |
 |        | Zwolle           | [parkeerloket.zwolle.nl](https://parkeerloket.zwolle.nl/DVSPortal/)                     |
 
-**Amsterdam:** vul bij gebruikersnaam je _meldcode_ in en bij wachtwoord je _pincode_. Je vindt ze op de pagina van je vergunning in [Mijn Parkeren](https://parkeervergunningen.amsterdam.nl/) nadat je bent ingelogd met DigiD of eHerkenning.
+**Amsterdam:** vul bij gebruikersnaam je _meldcode_ in en bij wachtwoord je _pincode_, de codes waarmee je inlogt op [Mijn Parkeren](https://parkeervergunningen.amsterdam.nl/login-ssp). Je vindt ze op de pagina van je vergunning in Mijn Parkeren nadat je bent ingelogd met DigiD of eHerkenning.
 
 ---
 

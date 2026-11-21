@@ -13,7 +13,7 @@ amsterdam:
   provider_id: amsterdam
   base_url: "https://api.parkeervergunningen.egisparkingservices.nl"
   api_url: "api"
-  gui_url: "https://parkeervergunningen.amsterdam.nl/"
+  gui_url: "https://parkeervergunningen.amsterdam.nl/login-ssp"
 
 # amsterdam_demo:
 #   municipality_name: Amsterdam Demo
