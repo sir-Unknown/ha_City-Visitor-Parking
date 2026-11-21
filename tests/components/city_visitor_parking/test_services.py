@@ -1135,13 +1135,15 @@ async def test_service_invalid_entry_state(hass: HomeAssistant) -> None:
 async def test_fallback_update_reservation_error(
     hass: HomeAssistant, pv_library: ModuleType
 ) -> None:
-    """A replacement whose old reservation cannot be ended reports that clearly."""
-    await async_setup_services(hass)
-    _, device, provider = _create_entry_with_device(hass, "permit1")
-    provider.end_reservation.side_effect = pv_library.ProviderError("boom")
+    """A replacement whose old reservation cannot be ended reports that clearly.
 
+    The coordinator is refreshed first, so the new reservation is shown.
+    """
+    await async_setup_services(hass)
+    entry, device, provider = _create_entry_with_device(hass, "permit1")
     start = datetime.now(UTC)
-    end = start + timedelta(hours=1)
+    _with_current_reservation(entry, start, start + timedelta(hours=1))
+    provider.end_reservation.side_effect = pv_library.ProviderError("boom")
 
     with pytest.raises(HomeAssistantError) as exc_info:
         await hass.services.async_call(
@@ -1150,15 +1152,74 @@ async def test_fallback_update_reservation_error(
             {
                 ATTR_DEVICE_ID: device.id,
                 ATTR_RESERVATION_ID: "res1",
-                ATTR_START_TIME: start,
-                ATTR_END_TIME: end,
-                ATTR_LICENSE_PLATE: "AB1234",
+                ATTR_LICENSE_PLATE: "XY-99-ZZ",
             },
             blocking=True,
         )
 
     assert exc_info.value.translation_key == "reservation_replace_end_failed"
     provider.start_reservation.assert_awaited_once()
+    entry.runtime_data.coordinator.async_refresh.assert_awaited_once()
+
+
+async def test_update_reservation_unknown_id_ends_before_starting(
+    hass: HomeAssistant, pv_library: ModuleType
+) -> None:
+    """A reservation missing from the data is ended first, so nothing is booked."""
+    await async_setup_services(hass)
+    _, device, provider = _create_entry_with_device(hass, "permit1")
+    provider.end_reservation.side_effect = pv_library.ProviderError("not found")
+    start = datetime.now(UTC)
+
+    with pytest.raises(HomeAssistantError):
+        await hass.services.async_call(
+            DOMAIN,
+            SERVICE_UPDATE_RESERVATION,
+            {
+                ATTR_DEVICE_ID: device.id,
+                ATTR_RESERVATION_ID: "typo",
+                ATTR_START_TIME: start,
+                ATTR_END_TIME: start + timedelta(hours=1),
+                ATTR_LICENSE_PLATE: "XY-99-ZZ",
+            },
+            blocking=True,
+        )
+
+    provider.start_reservation.assert_not_awaited()
+
+
+async def test_update_reservation_failed_start_after_end_reports_it(
+    hass: HomeAssistant,
+) -> None:
+    """A start that fails after the old reservation ended says the old one is gone.
+
+    The coordinator is refreshed first, so the ended reservation disappears.
+    """
+    await async_setup_services(hass)
+    entry, device, provider = _create_entry_with_device(hass, "permit1")
+    provider.reservation_update_fields = [ATTR_END_TIME]
+    provider.update_reservation.side_effect = NotImplementedError
+    start = datetime.now(UTC)
+    current = _with_current_reservation(entry, start, start + timedelta(hours=1))
+    provider.start_reservation.side_effect = ProviderError(
+        "Time slot is overbooked.", error_code=ErrorCode.PROVIDER_REJECTED
+    )
+
+    with pytest.raises(HomeAssistantError) as exc_info:
+        await hass.services.async_call(
+            DOMAIN,
+            SERVICE_UPDATE_RESERVATION,
+            {
+                ATTR_DEVICE_ID: device.id,
+                ATTR_RESERVATION_ID: "res1",
+                ATTR_END_TIME: current.end_time + timedelta(hours=1),
+            },
+            blocking=True,
+        )
+
+    assert exc_info.value.translation_key == "reservation_replace_start_failed"
+    provider.end_reservation.assert_awaited_once()
+    entry.runtime_data.coordinator.async_refresh.assert_awaited_once()
 
 
 async def test_fallback_update_favorite_validation_error(

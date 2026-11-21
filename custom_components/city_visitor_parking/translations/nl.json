@@ -345,6 +345,9 @@
     "reservation_replace_end_failed": {
       "message": "De reservering met het nieuwe kenteken is gestart, maar de oude reservering kon niet worden beëindigd. Beëindig die zelf."
     },
+    "reservation_replace_start_failed": {
+      "message": "De oude reservering is beëindigd, maar de nieuwe reservering is niet bevestigd. Controleer de parkeerapp of -website van de gemeente voordat je die opnieuw start."
+    },
     "favorite_operation_failed": {
       "message": "De favoriet-aanvraag is mislukt. Probeer het later opnieuw."
     },
