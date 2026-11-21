@@ -1112,9 +1112,13 @@ async def _fallback_update_reservation(
     Missing times, the license plate, and the parking area come from the
     current reservation. With a different license plate the new reservation is
     started before the current one is ended, so a refused start leaves the
-    current reservation in place. With the same license plate the current one
-    is ended first, because a provider may refuse two overlapping reservations
-    for one vehicle.
+    current reservation in place. The current one is ended first when it has
+    the same license plate, because a provider may refuse two overlapping
+    reservations for one vehicle, and when it is not in the coordinator data,
+    so an unknown reservation ID fails before anything is booked.
+
+    When only one of the two steps succeeds, the coordinator is refreshed before
+    the error is raised, so the cards and sensors show what is booked.
     """
     runtime = _runtime_from_call(call)
     current = _current_reservation(runtime, reservation_id)
@@ -1143,16 +1147,27 @@ async def _fallback_update_reservation(
             else _resolve_parking_area_id(runtime, None)
         ),
     )
-    same_vehicle = _has_plate(current, license_plate)
+    # Ending first is the only safe order when the current reservation is unknown:
+    # starting first would book before a mistyped ID is rejected.
+    end_first = current is None or _has_plate(current, license_plate)
     _LOGGER.debug(
         "Replacing reservation %s with provider %s (%s)",
         reservation_id,
         runtime.provider_config.provider_id,
-        "end first" if same_vehicle else "start first",
+        "end first" if end_first else "start first",
     )
-    if same_vehicle:
+    if end_first:
         await _async_end_replaced_reservation(call, runtime, reservation_id)
-        reservation, _ = await _async_start_with_retry(call, runtime, request)
+        try:
+            reservation, _ = await _async_start_with_retry(call, runtime, request)
+        except HomeAssistantError as err:
+            await runtime.coordinator.async_refresh()
+            # Keep the provider error as the cause, so the service wrapper still
+            # renews an expired session.
+            raise HomeAssistantError(
+                translation_domain=DOMAIN,
+                translation_key="reservation_replace_start_failed",
+            ) from (err.__cause__ or err)
         return _reservation_response(reservation)
 
     reservation, _ = await _async_start_with_retry(call, runtime, request)
@@ -1166,6 +1181,7 @@ async def _fallback_update_reservation(
             runtime.provider_config.provider_id,
             type(err).__name__,
         )
+        await runtime.coordinator.async_refresh()
         raise HomeAssistantError(
             translation_domain=DOMAIN,
             translation_key="reservation_replace_end_failed",

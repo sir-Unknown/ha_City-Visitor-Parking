@@ -345,6 +345,9 @@
     "reservation_replace_end_failed": {
       "message": "The reservation with the new license plate was started, but the old reservation could not be ended. End it yourself."
     },
+    "reservation_replace_start_failed": {
+      "message": "The old reservation was ended, but the new reservation was not confirmed. Check the municipality's parking app or website before you start it again."
+    },
     "favorite_operation_failed": {
       "message": "The favorite request failed. Try again later."
     },
