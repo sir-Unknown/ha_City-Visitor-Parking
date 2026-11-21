@@ -301,4 +301,6 @@ def build_status_payload(
         "balance_unit": data.permit_balance_unit,
         "permit_id": data.permit_id,
         "parking_areas": parking_areas,
+        # Whether a parking area ID outside ``parking_areas`` may be entered.
+        "parking_area_free_input": data.parking_area_free_input,
     }

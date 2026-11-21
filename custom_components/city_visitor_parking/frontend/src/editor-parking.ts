@@ -7,13 +7,11 @@ import type {
   ParkingCardEditorConfig,
   SelectOption,
   FormSchema,
-  ParkingAreaStatus,
 } from "./types";
 import {
   DOMAIN,
-  MIN_SELECTABLE_PARKING_AREAS,
   fetchPermitEntries,
-  fetchPermitParkingAreas,
+  fetchPermitParkingAreaChoice,
   isPermitEntryDisabled,
 } from "./helpers";
 import { ensureTranslations, localize, getGlobalHass } from "./translations";
@@ -107,8 +105,8 @@ const buildCardEditorSchema = (
 
 /** Lovelace editor element for configuring the new-reservation card. */
 export class CityVisitorParkingCardEditor extends BaseCardEditor<ParkingCardEditorConfig> {
-  // Parking areas per permit from the status websocket; empty when a fetch failed.
-  private _parkingAreasByEntryId = new Map<string, ParkingAreaStatus[]>();
+  // Whether each permit offers a parking area choice; false when a fetch failed.
+  private _parkingAreaChoiceByEntryId = new Map<string, boolean>();
   private _parkingAreasLoading = new Set<string>();
   // Enabled permits, loaded only while no permit is configured.
   private _permitIds: string[] | null = null;
@@ -160,9 +158,7 @@ export class CityVisitorParkingCardEditor extends BaseCardEditor<ParkingCardEdit
     const entryId = this._config?.config_entry_id;
     const permitIds = entryId ? [entryId] : (this._permitIds ?? []);
     return permitIds.some(
-      (id) =>
-        (this._parkingAreasByEntryId.get(id)?.length ?? 0) >=
-        MIN_SELECTABLE_PARKING_AREAS,
+      (id) => this._parkingAreaChoiceByEntryId.get(id) === true,
     );
   }
 
@@ -199,14 +195,14 @@ export class CityVisitorParkingCardEditor extends BaseCardEditor<ParkingCardEdit
 
   private _loadParkingAreas(hass: HomeAssistant, entryId: string): void {
     if (
-      this._parkingAreasByEntryId.has(entryId) ||
+      this._parkingAreaChoiceByEntryId.has(entryId) ||
       this._parkingAreasLoading.has(entryId)
     ) {
       return;
     }
     this._parkingAreasLoading.add(entryId);
-    void fetchPermitParkingAreas(hass, entryId).then((parkingAreas) => {
-      this._parkingAreasByEntryId.set(entryId, parkingAreas);
+    void fetchPermitParkingAreaChoice(hass, entryId).then((hasChoice) => {
+      this._parkingAreaChoiceByEntryId.set(entryId, hasChoice);
       this._parkingAreasLoading.delete(entryId);
       this.requestUpdate();
     });

@@ -229,7 +229,10 @@ export const renderPermitSelect = (params: {
   `;
 };
 
-/** Renders the parking area selector for permits with multiple parking areas, or a preview. */
+/**
+ * Renders the parking area selector, or a preview. With `customValue` the user may
+ * also type a parking area ID that is not in the list.
+ */
 export const renderParkingAreaSelect = (params: {
   hass: HomeAssistant | null | undefined;
   label: string;
@@ -237,6 +240,7 @@ export const renderParkingAreaSelect = (params: {
   value: string;
   disabled: boolean;
   preview?: boolean;
+  customValue?: boolean;
   onSelected: (event: Event) => void;
 }): TemplateResult => {
   if (params.preview) {
@@ -247,7 +251,7 @@ export const renderParkingAreaSelect = (params: {
           .label=${params.label}
           .value=${params.parkingAreas.find(
             (parkingArea) => parkingArea.parking_area_id === params.value,
-          )?.name ?? ""}
+          )?.name ?? params.value}
           ?disabled=${true}
         ></ha-input>
       </div>
@@ -265,6 +269,7 @@ export const renderParkingAreaSelect = (params: {
               label: parkingArea.name || parkingArea.parking_area_id,
             })),
             mode: "dropdown",
+            custom_value: params.customValue === true,
           },
         }}
         .label=${params.label}
