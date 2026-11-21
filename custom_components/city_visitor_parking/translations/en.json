@@ -8,6 +8,10 @@
           "municipality_name": "Municipality",
           "username": "Username",
           "password": "Password"
+        },
+        "data_description": {
+          "username": "The user name or code you use on your municipality's visitor parking website.",
+          "password": "The password or PIN code you use on your municipality's visitor parking website."
         }
       },
       "auth": {
@@ -16,6 +20,10 @@
         "data": {
           "username": "Username",
           "password": "Password"
+        },
+        "data_description": {
+          "username": "The user name or code you use on your municipality's visitor parking website.",
+          "password": "The password or PIN code you use on your municipality's visitor parking website."
         }
       },
       "permit": {
@@ -31,6 +39,10 @@
         "data": {
           "username": "Username",
           "password": "Password"
+        },
+        "data_description": {
+          "username": "The user name or code you use on your municipality's visitor parking website.",
+          "password": "The password or PIN code you use on your municipality's visitor parking website."
         }
       },
       "reconfigure": {
