@@ -215,6 +215,12 @@ export type PaidParkingStatusResponse = {
    * the provider or permit exposes no parking areas.
    */
   parking_areas: ParkingAreaStatus[];
+
+  /**
+   * Whether a parking area ID outside `parking_areas` may be entered, such as a
+   * number read from a parking machine. Only `true` while `parking_areas` is not empty.
+   */
+  parking_area_free_input: boolean;
 };
 
 /** HTMLElement variant used for simple input-like value access. */

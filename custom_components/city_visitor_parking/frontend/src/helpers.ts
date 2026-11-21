@@ -18,6 +18,8 @@ import { localize } from "./translations";
 export const DOMAIN = "city_visitor_parking";
 /** Websocket command returning the status and parking areas of one permit. */
 export const WS_GET_STATUS = "city_visitor_parking/status";
+/** Websocket command returning the status of one parking area, also a typed ID. */
+export const WS_GET_PARKING_AREA = "city_visitor_parking/parking_area";
 /** Websocket command returning the reservations held by the coordinator. */
 export const WS_LIST_RESERVATIONS = "city_visitor_parking/reservations";
 export const RESERVATION_STARTED_EVENT =
@@ -198,6 +200,24 @@ export const applyParkingAreaToStatus = (
 /** Minimum number of parking areas before a permit offers a parking area choice. */
 export const MIN_SELECTABLE_PARKING_AREAS = 2;
 
+/** Returns whether a status payload allows entering an unlisted parking area ID. */
+export const parkingAreaFreeInput = (
+  payload: PaidParkingStatusResponse | null | undefined,
+): boolean =>
+  payload?.parking_area_free_input === true &&
+  normalizeParkingAreas(payload).length > 0;
+
+/**
+ * Returns whether a permit offers a parking area choice: several parking areas, or
+ * a default parking area plus free input of another ID.
+ */
+export const offersParkingAreaChoice = (
+  parkingAreas: readonly ParkingAreaStatus[],
+  freeInput: boolean,
+): boolean =>
+  parkingAreas.length >= MIN_SELECTABLE_PARKING_AREAS ||
+  (freeInput && parkingAreas.length > 0);
+
 /**
  * Resolves the parking area the new-reservation card uses for a permit: the
  * user's pick in the card's parking area field, else the first parking area,
@@ -215,6 +235,21 @@ export const resolveCardParkingArea = (
     : undefined) ??
   parkingAreas[0] ??
   null;
+
+/**
+ * Resolves the parking area ID the new-reservation card books in. Like
+ * `resolveCardParkingArea`, but with free input a pick outside the list is kept;
+ * the provider validates it.
+ */
+export const resolveCardParkingAreaId = (
+  parkingAreas: readonly ParkingAreaStatus[],
+  pickedParkingAreaId: string | null | undefined,
+  freeInput: boolean,
+): string | null => {
+  const picked = nonEmptyString(pickedParkingAreaId?.trim());
+  if (picked && freeInput && parkingAreas.length > 0) return picked;
+  return resolveCardParkingArea(parkingAreas, picked)?.parking_area_id ?? null;
+};
 
 /**
  * Loads the reservations of one integration device.
@@ -248,22 +283,47 @@ export const fetchReservations = async (
   return "response" in result ? result.response : result;
 };
 
-/** Fetches the parking areas of one permit from the status websocket; empty on failure. */
-export const fetchPermitParkingAreas = async (
+/** Returns whether a permit offers a parking area choice, from the status websocket; false on failure. */
+export const fetchPermitParkingAreaChoice = async (
   hass: HomeAssistant,
   entryId: string,
-): Promise<ParkingAreaStatus[]> => {
+): Promise<boolean> => {
   try {
-    return normalizeParkingAreas(
-      await hass.callWS<PaidParkingStatusResponse>({
-        type: WS_GET_STATUS,
-        config_entry_id: entryId,
-      }),
+    const payload = await hass.callWS<PaidParkingStatusResponse>({
+      type: WS_GET_STATUS,
+      config_entry_id: entryId,
+    });
+    return offersParkingAreaChoice(
+      normalizeParkingAreas(payload),
+      parkingAreaFreeInput(payload),
     );
   } catch {
-    return [];
+    return false;
   }
 };
+
+/**
+ * Fetches the status of one parking area, also a typed free input ID that the
+ * provider resolves with its own paid hours. Rejects with the websocket error;
+ * see `isInvalidParkingAreaError`.
+ */
+export const fetchParkingAreaStatus = (
+  hass: HomeAssistant,
+  entryId: string,
+  parkingAreaId: string,
+): Promise<ParkingAreaStatus> =>
+  hass.callWS<ParkingAreaStatus>({
+    type: WS_GET_PARKING_AREA,
+    config_entry_id: entryId,
+    parking_area_id: parkingAreaId,
+  });
+
+/** Returns whether a websocket error means the permit cannot park in that parking area. */
+export const isInvalidParkingAreaError = (err: unknown): boolean =>
+  typeof err === "object" &&
+  err !== null &&
+  "code" in err &&
+  err.code === "invalid_parking_area";
 
 /** Returns the parking area label of a listed reservation: its name, else its id. */
 export const formatReservationParkingArea = (reservation: {

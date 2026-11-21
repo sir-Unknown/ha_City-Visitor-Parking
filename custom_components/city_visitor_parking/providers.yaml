@@ -5,6 +5,19 @@ amstelveen:
   gui_url: "https://mijn.2park.nl/"
   api_url: "/gsmpark-app-www/json"
 
+# Only available in a pycityvisitorparking pre-release that contains the Amsterdam provider
+# (sir-Unknown/pyCityVisitorParking#130). Never add this entry to main until main pins a
+# stable library that contains it.
+amsterdam:
+  municipality_name: Amsterdam
+  provider_id: amsterdam
+  base_url: "https://api.parkeervergunningen.egisparkingservices.nl"
+  api_url: "api"
+
+# amsterdam_demo:
+#   municipality_name: Amsterdam Demo
+#   provider_id: demo
+
 apeldoorn:
   municipality_name: Apeldoorn
   provider_id: dvsportal
@@ -435,6 +448,12 @@ zwolle:
 # Requires `city_visitor_parking:\n  demo: true` in configuration.yaml.
 # No real credentials needed — returns fixed data for testing.
 #######################################################################
+
+# A demo permit with one parking machine. Same pre-release rule as `amsterdam` above;
+# an older library shows the generic demo permit.
+amsterdam_demo:
+  municipality_name: Amsterdam Demo
+  provider_id: demo
 
 den_haag_demo:
   municipality_name: Den Haag Demo
