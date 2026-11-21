@@ -6,7 +6,7 @@ import asyncio
 import functools
 import logging
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
 from typing import TYPE_CHECKING, Final, NoReturn, Protocol, cast
 
@@ -313,6 +313,7 @@ async def async_setup_services(hass: HomeAssistant) -> None:
         SERVICE_UPDATE_RESERVATION,
         _async_handle_update_reservation,
         schema=SERVICE_UPDATE_SCHEMA,
+        supports_response=SupportsResponse.OPTIONAL,
     )
     hass.services.async_register(
         DOMAIN,
@@ -694,23 +695,85 @@ async def _async_handle_start_reservation(call: ServiceCall) -> ServiceResponse:
         reservation.start_time,
         reservation.end_time,
     )
+    return {**_reservation_response(reservation), "attempts": attempts}
+
+
+def _reservation_response(reservation: Reservation) -> dict[str, JsonValueType]:
+    """Return the service response for a started or changed reservation."""
     return {
         "reservation_id": reservation.reservation_id,
         "start_time": reservation.start_time.isoformat(),
         "end_time": reservation.end_time.isoformat(),
         "status": "active" if reservation.start_time <= dt_util.utcnow() else "planned",
-        "attempts": attempts,
     }
 
 
+def _current_reservation(
+    runtime: CityVisitorParkingRuntimeData, reservation_id: str
+) -> Reservation | None:
+    """Return the reservation from the coordinator data, or None when unknown."""
+    data = cast("CoordinatorData | None", runtime.coordinator.data)
+    if data is None:
+        return None
+    for reservation in data.reservations:
+        if reservation.reservation_id == reservation_id:
+            return reservation
+    return None
+
+
+def _has_plate(reservation: Reservation | None, license_plate: str) -> bool:
+    """Return whether a known reservation is for this license plate."""
+    return (
+        reservation is not None
+        and reservation.license_plate is not None
+        and normalize_plate(reservation.license_plate) == normalize_plate(license_plate)
+    )
+
+
+def _updated_reservation_response(
+    provider_reservation: ProviderReservation,
+    current: Reservation | None,
+    reservation_id: str,
+    start: datetime | None,
+    end: datetime | None,
+) -> dict[str, JsonValueType]:
+    """Return the service response for a reservation updated in place."""
+    try:
+        updated = normalize_reservations([provider_reservation])
+    except TypeError, ValueError:
+        updated = []
+    if updated:
+        return _reservation_response(updated[0])
+    # The provider confirmed the update without a usable reservation.
+    if current is not None:
+        return _reservation_response(
+            replace(
+                current,
+                start_time=start or current.start_time,
+                end_time=end or current.end_time,
+            )
+        )
+    return {"reservation_id": reservation_id}
+
+
 @_write_service
-async def _async_handle_update_reservation(call: ServiceCall) -> None:
-    """Handle reservation update service."""
+async def _async_handle_update_reservation(call: ServiceCall) -> ServiceResponse:
+    """Handle reservation update service.
+
+    Returns the reservation as changed. A different license plate replaces the
+    reservation, so the returned ``reservation_id`` is then a new one.
+    """
     runtime = _runtime_from_call(call)
+    reservation_id: str = call.data[ATTR_RESERVATION_ID]
+    current = _current_reservation(runtime, reservation_id)
     start_raw = call.data.get(ATTR_START_TIME)
     end_raw = call.data.get(ATTR_END_TIME)
     license_plate_raw = call.data.get(ATTR_LICENSE_PLATE)
     license_plate = license_plate_raw if isinstance(license_plate_raw, str) else None
+    # The current license plate is no change: the times are then updated in place
+    # instead of replacing the reservation.
+    if license_plate is not None and _has_plate(current, license_plate):
+        license_plate = None
     if start_raw is None and end_raw is None and license_plate is None:
         raise ServiceValidationError(
             translation_domain=DOMAIN,
@@ -725,16 +788,14 @@ async def _async_handle_update_reservation(call: ServiceCall) -> None:
             translation_key="end_before_start",
         )
 
-    reservation_id: str = call.data[ATTR_RESERVATION_ID]
     if license_plate is not None:
-        await _fallback_update_reservation(
-            runtime,
+        return await _fallback_update_reservation(
+            call,
             reservation_id,
             start_dt_raw,
             end_dt_raw,
             license_plate,
         )
-        return
 
     update_fields = set(reservation_update_fields(runtime.provider))
     allow_start = ATTR_START_TIME in update_fields
@@ -758,7 +819,7 @@ async def _async_handle_update_reservation(call: ServiceCall) -> None:
         )
 
     try:
-        await runtime.provider.update_reservation(
+        provider_reservation = await runtime.provider.update_reservation(
             reservation_id=reservation_id,
             start_time=start_dt,
             end_time=end_dt,
@@ -772,12 +833,12 @@ async def _async_handle_update_reservation(call: ServiceCall) -> None:
                 ha_cvp_version=ha_cvp_version,
                 pycvp_version=pycvp_version,
             )
-        await _fallback_update_reservation(
-            runtime,
+        return await _fallback_update_reservation(
+            call,
             reservation_id,
             start_dt,
             end_dt,
-            license_plate,
+            None,
         )
     except PyCityVisitorParkingError as err:
         ha_cvp_version, pycvp_version = await async_get_versions(call.hass)
@@ -787,16 +848,17 @@ async def _async_handle_update_reservation(call: ServiceCall) -> None:
             ha_cvp_version=ha_cvp_version,
             pycvp_version=pycvp_version,
         )
-    else:
-        _LOGGER.debug(
-            "Reservation update requested for device %s reservation %s "
-            "(start_changed=%s end_changed=%s license_changed=%s)",
-            call.data[ATTR_DEVICE_ID],
-            call.data[ATTR_RESERVATION_ID],
-            start_dt is not None,
-            end_dt is not None,
-            license_plate is not None,
-        )
+    _LOGGER.debug(
+        "Reservation update requested for device %s reservation %s "
+        "(start_changed=%s end_changed=%s)",
+        call.data[ATTR_DEVICE_ID],
+        reservation_id,
+        start_dt is not None,
+        end_dt is not None,
+    )
+    return _updated_reservation_response(
+        provider_reservation, current, reservation_id, start_dt, end_dt
+    )
 
 
 @_write_service
@@ -1031,56 +1093,92 @@ async def _async_handle_get_entry_info(call: ServiceCall) -> dict[str, JsonValue
 
 
 async def _fallback_update_reservation(
-    runtime: CityVisitorParkingRuntimeData,
+    call: ServiceCall,
     reservation_id: str,
     start_time: datetime | None,
     end_time: datetime | None,
     license_plate: str | None,
-) -> None:
-    """Fallback update by canceling and recreating the reservation."""
+) -> dict[str, JsonValueType]:
+    """Replace a reservation with a new one that holds the changes.
+
+    Missing times, the license plate, and the parking area come from the
+    current reservation. With a different license plate the new reservation is
+    started before the current one is ended, so a refused start leaves the
+    current reservation in place. With the same license plate the current one
+    is ended first, because a provider may refuse two overlapping reservations
+    for one vehicle.
+    """
+    runtime = _runtime_from_call(call)
+    current = _current_reservation(runtime, reservation_id)
+    if current is not None:
+        start_time = start_time or current.start_time
+        end_time = end_time or current.end_time
+        license_plate = license_plate or current.license_plate
     if start_time is None or end_time is None or license_plate is None:
         raise ServiceValidationError(
             translation_domain=DOMAIN,
             translation_key="update_requires_full_details",
         )
-
+    # A start that has passed is moved to "now" by the library.
+    if end_time <= max(start_time, dt_util.utcnow()):
+        raise ServiceValidationError(
+            translation_domain=DOMAIN,
+            translation_key="end_before_start",
+        )
+    request = _StartRequest(
+        license_plate=license_plate,
+        start=start_time,
+        end=end_time,
+        parking_area_id=(
+            current.parking_area_id
+            if current is not None
+            else _resolve_parking_area_id(runtime, None)
+        ),
+    )
+    same_vehicle = _has_plate(current, license_plate)
     _LOGGER.debug(
-        "Fallback update: cancel and recreate reservation %s "
-        "for device %s (start=%s end=%s plate=%s)",
+        "Replacing reservation %s with provider %s (%s)",
         reservation_id,
         runtime.provider_config.provider_id,
-        start_time,
-        end_time,
-        license_plate,
+        "end first" if same_vehicle else "start first",
     )
+    if same_vehicle:
+        await _async_end_replaced_reservation(call, runtime, reservation_id)
+        reservation, _ = await _async_start_with_retry(call, runtime, request)
+        return _reservation_response(reservation)
+
+    reservation, _ = await _async_start_with_retry(call, runtime, request)
     try:
-        await runtime.provider.end_reservation(
-            reservation_id,
-            dt_util.utcnow(),
-        )
-        await runtime.provider.start_reservation(
-            license_plate=license_plate,
-            start_time=start_time,
-            end_time=end_time,
-        )
+        await runtime.provider.end_reservation(reservation_id, dt_util.utcnow())
     except PyCityVisitorParkingError as err:
-        _LOGGER.debug(
-            "Fallback reservation update failed for %s: %s: %s",
+        _LOGGER.warning(
+            "Reservation %s replaces %s, which provider %s did not end (%s)",
+            reservation.reservation_id,
             reservation_id,
+            runtime.provider_config.provider_id,
             type(err).__name__,
-            err,
         )
-        ha_cvp_version, pycvp_version = await async_get_versions(
-            runtime.coordinator.hass
-        )
+        raise HomeAssistantError(
+            translation_domain=DOMAIN,
+            translation_key="reservation_replace_end_failed",
+        ) from err
+    return _reservation_response(reservation)
+
+
+async def _async_end_replaced_reservation(
+    call: ServiceCall, runtime: CityVisitorParkingRuntimeData, reservation_id: str
+) -> None:
+    """End the reservation that is being replaced."""
+    try:
+        await runtime.provider.end_reservation(reservation_id, dt_util.utcnow())
+    except PyCityVisitorParkingError as err:
+        ha_cvp_version, pycvp_version = await async_get_versions(call.hass)
         _raise_reservation_error(
             err,
             **_runtime_log_context(runtime),
             ha_cvp_version=ha_cvp_version,
             pycvp_version=pycvp_version,
         )
-    else:
-        _LOGGER.debug("Fallback reservation update succeeded for %s", reservation_id)
 
 
 async def _fallback_update_favorite(

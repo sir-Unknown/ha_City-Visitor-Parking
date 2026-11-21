@@ -174,7 +174,7 @@
         },
         "license_plate": {
           "name": "Kenteken",
-          "description": "Nieuw kenteken voor de reservering."
+          "description": "Nieuw kenteken voor de reservering. Een ander kenteken vervangt de reservering: er start een nieuwe reservering, daarna wordt deze beëindigd. Tijden die je leeg laat, worden van deze reservering overgenomen."
         }
       }
     },
@@ -295,7 +295,7 @@
       "message": "Geef minstens één veld op om bij te werken."
     },
     "update_requires_full_details": {
-      "message": "De fallback-bijwerking vereist starttijd, eindtijd en kenteken."
+      "message": "Deze reservering staat niet in de laatste gegevens van de provider, dus de starttijd, eindtijd en het kenteken kunnen niet naar de nieuwe reservering worden overgenomen. Controleer de reservering-ID, of geef de starttijd, eindtijd en het kenteken zelf op."
     },
     "update_requires_license_plate": {
       "message": "Bijwerken zonder kenteken wordt niet ondersteund."
@@ -341,6 +341,9 @@
     },
     "reservation_start_unknown": {
       "message": "Het is onbekend of de reservering is gestart. Controleer de parkeerapp of -website van de gemeente voordat je het opnieuw probeert."
+    },
+    "reservation_replace_end_failed": {
+      "message": "De reservering met het nieuwe kenteken is gestart, maar de oude reservering kon niet worden beëindigd. Beëindig die zelf."
     },
     "favorite_operation_failed": {
       "message": "De favoriet-aanvraag is mislukt. Probeer het later opnieuw."
