@@ -13,7 +13,12 @@ from homeassistant.helpers.update_coordinator import (
     UpdateFailed,
 )
 from homeassistant.util import dt as dt_util
-from pycityvisitorparking import AuthError, NetworkError, ProviderError
+from pycityvisitorparking import (
+    RESERVATION_TARGET_SELECTION_FREE_INPUT,
+    AuthError,
+    NetworkError,
+    ProviderError,
+)
 from pycityvisitorparking.exceptions import (
     NotFoundError,
     PyCityVisitorParkingError,
@@ -235,6 +240,10 @@ class CityVisitorParkingCoordinator(TimestampDataUpdateCoordinator[CoordinatorDa
             paid_parking_status=paid_parking_status,
             active_reservations=tuple(active_reservations),
             parking_areas=tuple(parking_areas),
+            # The library accepts other target IDs only while the permit lists targets.
+            parking_area_free_input=bool(parking_areas)
+            and getattr(self._provider, "reservation_target_selection", None)
+            == RESERVATION_TARGET_SELECTION_FREE_INPUT,
         )
 
         next_interval = self._compute_next_interval(data, now)

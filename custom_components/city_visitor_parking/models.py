@@ -83,6 +83,9 @@ class CoordinatorData:
     # default and matches ``paid_hours``. Empty when the provider has no parking area
     # selection.
     parking_areas: tuple[ParkingArea, ...] = ()
+    # Whether a parking area ID outside ``parking_areas`` may be requested, such as a
+    # number read from a parking machine. Only set when ``parking_areas`` is not empty.
+    parking_area_free_input: bool = False
 
     def parking_area(self, parking_area_id: str | None) -> ParkingArea | None:
         """Return the parking area with ``parking_area_id``, or None when unknown."""

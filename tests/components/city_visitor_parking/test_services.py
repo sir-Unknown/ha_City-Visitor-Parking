@@ -1680,6 +1680,37 @@ async def test_service_start_reservation_rejects_unknown_parking_area(
     provider.start_reservation.assert_not_awaited()
 
 
+async def test_service_start_reservation_passes_a_free_input_parking_area(
+    hass: HomeAssistant,
+) -> None:
+    """With free input an unlisted parking area ID reaches the provider, trimmed."""
+    await async_setup_services(hass)
+    entry, device, provider = _create_entry_with_device(hass, "permit1")
+    entry.runtime_data.coordinator.data = replace(
+        _coordinator_data("permit1", (_parking_area("10"),)),
+        parking_area_free_input=True,
+    )
+    now = datetime(2025, 1, 1, 12, 0, tzinfo=UTC)
+
+    with freeze_time(now):
+        await hass.services.async_call(
+            DOMAIN,
+            SERVICE_START_RESERVATION,
+            {
+                ATTR_DEVICE_ID: device.id,
+                ATTR_START_TIME: now + timedelta(hours=1),
+                ATTR_END_TIME: now + timedelta(hours=2),
+                ATTR_LICENSE_PLATE: "AB1234",
+                ATTR_PARKING_AREA_ID: " 2222 ",
+            },
+            blocking=True,
+        )
+
+    assert (
+        provider.start_reservation.await_args.kwargs["reservation_target_id"] == "2222"
+    )
+
+
 def _create_entry_with_device(
     hass: HomeAssistant, permit_id: str, options: dict[str, object] | None = None
 ) -> tuple[MockConfigEntry, dr.DeviceEntry, AsyncMock]:
