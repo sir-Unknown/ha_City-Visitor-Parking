@@ -1,4 +1,4 @@
-// ../../../../../../../workspaces/ha_City-Visitor-Parking/custom_components/city_visitor_parking/frontend/node_modules/@lit/reactive-element/css-tag.js
+// node_modules/@lit/reactive-element/css-tag.js
 var t = globalThis;
 var e = t.ShadowRoot && (void 0 === t.ShadyCSS || t.ShadyCSS.nativeShadow) && "adoptedStyleSheets" in Document.prototype && "replace" in CSSStyleSheet.prototype;
 var s = /* @__PURE__ */ Symbol();
@@ -43,7 +43,7 @@ var c = e ? (t4) => t4 : (t4) => t4 instanceof CSSStyleSheet ? ((t5) => {
   return r(e5);
 })(t4) : t4;
 
-// ../../../../../../../workspaces/ha_City-Visitor-Parking/custom_components/city_visitor_parking/frontend/node_modules/@lit/reactive-element/reactive-element.js
+// node_modules/@lit/reactive-element/reactive-element.js
 var { is: i2, defineProperty: e2, getOwnPropertyDescriptor: h, getOwnPropertyNames: r2, getOwnPropertySymbols: o2, getPrototypeOf: n2 } = Object;
 var a = globalThis;
 var c2 = a.trustedTypes;
@@ -265,7 +265,7 @@ var y = class extends HTMLElement {
 };
 y.elementStyles = [], y.shadowRootOptions = { mode: "open" }, y[d("elementProperties")] = /* @__PURE__ */ new Map(), y[d("finalized")] = /* @__PURE__ */ new Map(), p?.({ ReactiveElement: y }), (a.reactiveElementVersions ?? (a.reactiveElementVersions = [])).push("2.1.2");
 
-// ../../../../../../../workspaces/ha_City-Visitor-Parking/custom_components/city_visitor_parking/frontend/node_modules/lit-html/lit-html.js
+// node_modules/lit-html/lit-html.js
 var t2 = globalThis;
 var i3 = (t4) => t4;
 var s2 = t2.trustedTypes;
@@ -520,7 +520,7 @@ var D = (t4, i7, s4) => {
   return h3._$AI(t4), h3;
 };
 
-// ../../../../../../../workspaces/ha_City-Visitor-Parking/custom_components/city_visitor_parking/frontend/node_modules/lit-element/lit-element.js
+// node_modules/lit-element/lit-element.js
 var s3 = globalThis;
 var i4 = class extends y {
   constructor() {
@@ -550,7 +550,7 @@ var o4 = s3.litElementPolyfillSupport;
 o4?.({ LitElement: i4 });
 (s3.litElementVersions ?? (s3.litElementVersions = [])).push("4.2.2");
 
-// ../../../../../../../workspaces/ha_City-Visitor-Parking/custom_components/city_visitor_parking/frontend/node_modules/lit-html/directive.js
+// node_modules/lit-html/directive.js
 var e4 = (t4) => (...e5) => ({ _$litDirective$: t4, values: e5 });
 var i5 = class {
   constructor(t4) {
@@ -569,12 +569,12 @@ var i5 = class {
   }
 };
 
-// ../../../../../../../workspaces/ha_City-Visitor-Parking/custom_components/city_visitor_parking/frontend/node_modules/lit-html/directive-helpers.js
+// node_modules/lit-html/directive-helpers.js
 var { I: t3 } = j;
 var m2 = {};
 var p3 = (o5, t4 = m2) => o5._$AH = t4;
 
-// ../../../../../../../workspaces/ha_City-Visitor-Parking/custom_components/city_visitor_parking/frontend/node_modules/lit-html/directives/keyed.js
+// node_modules/lit-html/directives/keyed.js
 var i6 = e4(class extends i5 {
   constructor() {
     super(...arguments), this.key = A;
@@ -1564,6 +1564,7 @@ var getCardConfigForm = createConfigFormGetter(
 // src/card-parking.ts
 var CARD_TYPE = "city-visitor-parking-card";
 var WS_LIST_FAVORITES = "city_visitor_parking/favorites";
+var PARKING_AREA_FAILED_KEY = "message.parking_area_failed";
 var STATUS_THROTTLE_MS = 6e4;
 var STATUS_REFRESH_MS = 3e5;
 var INPUT_VALUE_IDS = /* @__PURE__ */ new Set([
@@ -1906,8 +1907,9 @@ var CityVisitorParkingNewReservationCard = class extends BaseLocalizedCard {
         this._applyPendingPermitDefaults(entryId);
         const picked = this._pickedParkingAreaId(entryId);
         const typed = this._typedParkingAreaByEntryId.get(entryId);
-        if (picked && typed?.parking_area_id === picked) {
-          void this._loadTypedParkingArea(entryId, picked, false);
+        const retryFailed = this._parkingAreaErrorByEntryId.get(entryId) === PARKING_AREA_FAILED_KEY;
+        if (picked && (typed?.parking_area_id === picked || retryFailed)) {
+          void this._loadTypedParkingArea(entryId, picked, retryFailed);
         }
       }
       this._paidParkingStatusTsByEntryId.set(entryId, Date.now());
@@ -2214,7 +2216,8 @@ var CityVisitorParkingNewReservationCard = class extends BaseLocalizedCard {
       (parkingArea) => parkingArea.parking_area_id === parkingAreaId
     ))
       return;
-    if (this._resolveParkingAreaId(entryId) === parkingAreaId) return;
+    if (this._resolveParkingAreaId(entryId) === parkingAreaId && !this._parkingAreaErrorByEntryId.has(entryId))
+      return;
     const previousParkingArea = this._resolveParkingArea(entryId);
     this._selectedParkingAreaIdByEntryId.set(entryId, parkingAreaId);
     this._parkingAreaErrorByEntryId.delete(entryId);
@@ -2251,7 +2254,7 @@ var CityVisitorParkingNewReservationCard = class extends BaseLocalizedCard {
       this._typedParkingAreaByEntryId.delete(entryId);
       this._parkingAreaErrorByEntryId.set(
         entryId,
-        isInvalidParkingAreaError(err) ? "message.invalid_parking_area" : "message.parking_area_failed"
+        isInvalidParkingAreaError(err) ? "message.invalid_parking_area" : PARKING_AREA_FAILED_KEY
       );
       this._requestRender();
       return;
