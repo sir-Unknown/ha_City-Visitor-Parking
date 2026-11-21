@@ -65,6 +65,8 @@ import { getCardConfigForm } from "./editor-parking";
 
 const CARD_TYPE = "city-visitor-parking-card";
 const WS_LIST_FAVORITES = "city_visitor_parking/favorites";
+// Translation key of the warning for a typed parking area whose lookup failed transiently.
+const PARKING_AREA_FAILED_KEY = "message.parking_area_failed";
 // Minimum interval between status fetches triggered by hass updates.
 const STATUS_THROTTLE_MS = 60000;
 // Background polling interval for parking area status (and on page visibility restore).
@@ -503,8 +505,13 @@ class CityVisitorParkingNewReservationCard extends BaseLocalizedCard<CardConfig>
         // Keep the window of a typed parking area current too.
         const picked = this._pickedParkingAreaId(entryId);
         const typed = this._typedParkingAreaByEntryId.get(entryId);
-        if (picked && typed?.parking_area_id === picked) {
-          void this._loadTypedParkingArea(entryId, picked, false);
+        // A failed lookup has no cached status; retry it only when it failed
+        // transiently (a rejected ID would be rejected again).
+        const retryFailed =
+          this._parkingAreaErrorByEntryId.get(entryId) ===
+          PARKING_AREA_FAILED_KEY;
+        if (picked && (typed?.parking_area_id === picked || retryFailed)) {
+          void this._loadTypedParkingArea(entryId, picked, retryFailed);
         }
       }
       this._paidParkingStatusTsByEntryId.set(entryId, Date.now());
@@ -895,7 +902,12 @@ class CityVisitorParkingNewReservationCard extends BaseLocalizedCard<CardConfig>
       )
     )
       return;
-    if (this._resolveParkingAreaId(entryId) === parkingAreaId) return;
+    // Selecting the ID again retries a failed lookup.
+    if (
+      this._resolveParkingAreaId(entryId) === parkingAreaId &&
+      !this._parkingAreaErrorByEntryId.has(entryId)
+    )
+      return;
     const previousParkingArea = this._resolveParkingArea(entryId);
     this._selectedParkingAreaIdByEntryId.set(entryId, parkingAreaId);
     this._parkingAreaErrorByEntryId.delete(entryId);
@@ -942,7 +954,7 @@ class CityVisitorParkingNewReservationCard extends BaseLocalizedCard<CardConfig>
         entryId,
         isInvalidParkingAreaError(err)
           ? "message.invalid_parking_area"
-          : "message.parking_area_failed",
+          : PARKING_AREA_FAILED_KEY,
       );
       this._requestRender();
       return;
