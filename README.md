@@ -84,6 +84,7 @@ The integration supports a growing number of Dutch municipalities and connects t
 | Letter | Municipality     | Portal                                                                                  |
 | ------ | ---------------- | --------------------------------------------------------------------------------------- |
 | **A**  | Amstelveen       | [mijn.2park.nl](https://mijn.2park.nl/)                                                 |
+|        | Amsterdam        | [parkeervergunningen.amsterdam.nl](https://parkeervergunningen.amsterdam.nl/)           |
 |        | Apeldoorn        | [parkeren.apeldoorn.nl](https://parkeren.apeldoorn.nl/DVSPortal/)                       |
 |        | Assen            | [mijn.2park.nl](https://mijn.2park.nl/)                                                 |
 | **B**  | Bergen op Zoom   | [mijn.2park.nl](https://mijn.2park.nl/)                                                 |
@@ -141,6 +142,8 @@ The integration supports a growing number of Dutch municipalities and connects t
 |        | Zutphen          | [parkeren.zutphen.nl](https://parkeren.zutphen.nl/DVSPortal/)                           |
 |        | Zwolle           | [parkeerloket.zwolle.nl](https://parkeerloket.zwolle.nl/DVSPortal/)                     |
 
+**Amsterdam:** sign in with the _meldcode_ as username and the _pincode_ as password. Both are on your permit page in [Mijn Parkeren](https://parkeervergunningen.amsterdam.nl/) after you log in with DigiD or eHerkenning.
+
 ---
 
 ## Is your municipality missing?
@@ -166,9 +169,13 @@ More information:
 ### English
 
 - [Home](https://github.com/sir-Unknown/ha_City-Visitor-Parking/wiki/Home)
+
 <!-- ha-marketplace:exclude-start -->
+
 - [Installation](https://github.com/sir-Unknown/ha_City-Visitor-Parking/wiki/Installation)
+
 <!-- ha-marketplace:exclude-end -->
+
 - [Configuration](https://github.com/sir-Unknown/ha_City-Visitor-Parking/wiki/Configuration)
 - [Lovelace Cards](https://github.com/sir-Unknown/ha_City-Visitor-Parking/wiki/Lovelace-Cards)
 - [Services](https://github.com/sir-Unknown/ha_City-Visitor-Parking/wiki/Services)
@@ -180,9 +187,13 @@ More information:
 ### Nederlands
 
 - [Home](https://github.com/sir-Unknown/ha_City-Visitor-Parking/wiki/Home)
+
 <!-- ha-marketplace:exclude-start -->
+
 - [Installation](https://github.com/sir-Unknown/ha_City-Visitor-Parking/wiki/Installatie)
+
 <!-- ha-marketplace:exclude-end -->
+
 - [Configuration](https://github.com/sir-Unknown/ha_City-Visitor-Parking/wiki/Configuratie)
 - [Services](https://github.com/sir-Unknown/ha_City-Visitor-Parking/wiki/Diensten)
 - [Troubleshooting](https://github.com/sir-Unknown/ha_City-Visitor-Parking/wiki/Probleemoplossing)
