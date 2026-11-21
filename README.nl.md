@@ -81,70 +81,65 @@ Meer schermafbeeldingen: [wiki/en/Lovelace-Cards](https://github.com/sir-Unknown
 
 De integratie ondersteunt een groeiend aantal Nederlandse gemeenten en maakt verbinding met hun bezoekersparkeersystemen.
 
-<details>
-<summary><strong>Toon ondersteunde gemeenten</strong></summary>
-
-| Gemeente         | Portaal                                                                                 |
-| ---------------- | --------------------------------------------------------------------------------------- |
-| Amstelveen       | [mijn.2park.nl](https://mijn.2park.nl/)                                                 |
-| Nijmegen         | [parkeerproducten.nijmegen.nl](https://parkeerproducten.nijmegen.nl/DVSPortal/)         |
-| Apeldoorn        | [parkeren.apeldoorn.nl](https://parkeren.apeldoorn.nl/DVSPortal/)                       |
-| Nissewaard       | [parkeren.nissewaard.nl](https://parkeren.nissewaard.nl/DVSPortal/)                     |
-| Assen            | [mijn.2park.nl](https://mijn.2park.nl/)                                                 |
-| Oldenzaal        | [parkeren.oldenzaal.nl](https://parkeren.oldenzaal.nl/DVSPortal/)                       |
-| Bergen op Zoom   | [mijn.2park.nl](https://mijn.2park.nl/)                                                 |
-| Oosterhout       | [mijn.2park.nl](https://mijn.2park.nl/)                                                 |
-| Bloemendaal      | [parkeren.bloemendaal.nl](https://parkeren.bloemendaal.nl/DVSPortal/)                   |
-| Oss              | [mijn.2park.nl](https://mijn.2park.nl/)                                                 |
-| Breda            | [mijn.2park.nl](https://mijn.2park.nl/)                                                 |
-| Rijswijk         | [parkeren.rijswijk.nl](https://parkeren.rijswijk.nl/DVSPortal/)                         |
-| Delft            | [vergunningen.parkerendelft.com](https://vergunningen.parkerendelft.com/DVSPortal/)     |
-| Roermond         | [parkeren.roermond.nl](https://parkeren.roermond.nl/DVSPortal/)                         |
-| Den Haag         | [parkerendenhaag.denhaag.nl](https://parkerendenhaag.denhaag.nl/)                       |
-| Roosendaal       | [mijn.2park.nl](https://mijn.2park.nl/)                                                 |
-| Rotterdam        | [bezoek.rotterdam.nl](https://bezoek.rotterdam.nl/)                                     |
-| Deventer         | [mijn.2park.nl](https://mijn.2park.nl/)                                                 |
-| Sittard-Geleen   | [parkeren.sittard-geleen.nl](https://parkeren.sittard-geleen.nl/DVSPortal/)             |
-| Doetinchem       | [parkeren.buha.nl](https://parkeren.buha.nl/DVSPortal/)                                 |
-| Sluis            | [mijn.2park.nl](https://mijn.2park.nl/)                                                 |
-| Dordrecht        | [mijn.2park.nl](https://mijn.2park.nl/)                                                 |
-| Smallingerland   | [parkeren.smallingerland.nl](https://parkeren.smallingerland.nl/DVSPortal/)             |
-| Eindhoven        | [mijn.2park.nl](https://mijn.2park.nl/)                                                 |
-| Súdwest-Fryslân  | [parkeren.sudwestfryslan.nl](https://parkeren.sudwestfryslan.nl/DVSPortal/)             |
-| Emmen            | [mijn.2park.nl](https://mijn.2park.nl/)                                                 |
-| Terneuzen        | [mijn.2park.nl](https://mijn.2park.nl/)                                                 |
-| Etten-Leur       | [mijn.2park.nl](https://mijn.2park.nl/)                                                 |
-| Tiel             | [mijn.2park.nl](https://mijn.2park.nl/)                                                 |
-| Gorinchem        | [mijn.2park.nl](https://mijn.2park.nl/)                                                 |
-| Veenendaal       | [mijn.2park.nl](https://mijn.2park.nl/)                                                 |
-| Groningen        | [aanvraagparkeren.groningen.nl](https://aanvraagparkeren.groningen.nl/DVSPortal/)       |
-| Veere            | [parkeren.veere.nl](https://parkeren.veere.nl/DVSPortal/)                               |
-| Haarlem          | [parkeren.haarlem.nl](https://parkeren.haarlem.nl/DVSPortal/)                           |
-| Venlo            | [parkeren.venlo.nl](https://parkeren.venlo.nl/DVSPortal/)                               |
-| Hardenberg       | [mijn.2park.nl](https://mijn.2park.nl/)                                                 |
-| Vlaardingen      | [mijn.2park.nl](https://mijn.2park.nl/)                                                 |
-| Harderwijk       | [mijn.2park.nl](https://mijn.2park.nl/)                                                 |
-| Vlissingen       | [parkeren.vlissingen.nl](https://parkeren.vlissingen.nl/DVSPortal/)                     |
-| Harlingen        | [parkeervergunningen.harlingen.nl](https://parkeervergunningen.harlingen.nl/DVSPortal/) |
-| Hoorn            | [parkeren.hoorn.nl](https://parkeren.hoorn.nl/DVSPortal/)                               |
-| Waadhoeke        | [parkeren.waadhoeke.nl](https://parkeren.waadhoeke.nl/DVSPortal/)                       |
-| Heemstede        | [parkeren.heemstede.nl](https://parkeren.heemstede.nl/DVSPortal/)                       |
-| Waalwijk         | [parkeren.waalwijk.nl](https://parkeren.waalwijk.nl/DVSPortal/)                         |
-| Heerenveen       | [parkeren.heerenveen.nl](https://parkeren.heerenveen.nl/DVSPortal/)                     |
-| Weert            | [parkeerloket.weert.nl](https://parkeerloket.weert.nl/DVSPortal/)                       |
-| Heerlen          | [parkeren.heerlen.nl](https://parkeren.heerlen.nl/DVSPortal/)                           |
-| Zaanstad         | [parkeren.zaanstad.nl](https://parkeren.zaanstad.nl/DVSPortal/)                         |
-| Hengelo          | [parkeren.hengelo.nl](https://parkeren.hengelo.nl/DVSPortal/)                           |
-| Zevenaar         | [parkeren.zevenaar.nl](https://parkeren.zevenaar.nl/DVSPortal/)                         |
-| 's-Hertogenbosch | [parkeren.s-hertogenbosch.nl](https://parkeren.s-hertogenbosch.nl/DVSPortal/)           |
-| Zutphen          | [parkeren.zutphen.nl](https://parkeren.zutphen.nl/DVSPortal/)                           |
-| Katwijk          | [parkeren.katwijk.nl](https://parkeren.katwijk.nl/DVSPortal/)                           |
-| Zwolle           | [parkeerloket.zwolle.nl](https://parkeerloket.zwolle.nl/DVSPortal/)                     |
-| Leiden           | [parkeren.leiden.nl](https://parkeren.leiden.nl/DVSPortal/)                             |
-| Maastricht       | [mijn.2park.nl](https://mijn.2park.nl/)                                                 |
-| Middelburg       | [parkeren.middelburg.nl](https://parkeren.middelburg.nl/DVSPortal/)                     |
-
-</details>
+| Letter | Gemeente         | Portaal                                                                                 |
+| ------ | ---------------- | --------------------------------------------------------------------------------------- |
+| **A**  | Amstelveen       | [mijn.2park.nl](https://mijn.2park.nl/)                                                 |
+|        | Apeldoorn        | [parkeren.apeldoorn.nl](https://parkeren.apeldoorn.nl/DVSPortal/)                       |
+|        | Assen            | [mijn.2park.nl](https://mijn.2park.nl/)                                                 |
+| **B**  | Bergen op Zoom   | [mijn.2park.nl](https://mijn.2park.nl/)                                                 |
+|        | Bloemendaal      | [parkeren.bloemendaal.nl](https://parkeren.bloemendaal.nl/DVSPortal/)                   |
+|        | Breda            | [mijn.2park.nl](https://mijn.2park.nl/)                                                 |
+| **D**  | Delft            | [vergunningen.parkerendelft.com](https://vergunningen.parkerendelft.com/DVSPortal/)     |
+|        | Den Haag         | [parkerendenhaag.denhaag.nl](https://parkerendenhaag.denhaag.nl/)                       |
+|        | Deventer         | [mijn.2park.nl](https://mijn.2park.nl/)                                                 |
+|        | Doetinchem       | [parkeren.buha.nl](https://parkeren.buha.nl/DVSPortal/)                                 |
+|        | Dordrecht        | [mijn.2park.nl](https://mijn.2park.nl/)                                                 |
+| **E**  | Eindhoven        | [mijn.2park.nl](https://mijn.2park.nl/)                                                 |
+|        | Emmen            | [mijn.2park.nl](https://mijn.2park.nl/)                                                 |
+|        | Etten-Leur       | [mijn.2park.nl](https://mijn.2park.nl/)                                                 |
+| **G**  | Gorinchem        | [mijn.2park.nl](https://mijn.2park.nl/)                                                 |
+|        | Groningen        | [aanvraagparkeren.groningen.nl](https://aanvraagparkeren.groningen.nl/DVSPortal/)       |
+| **H**  | Haarlem          | [parkeren.haarlem.nl](https://parkeren.haarlem.nl/DVSPortal/)                           |
+|        | Hardenberg       | [mijn.2park.nl](https://mijn.2park.nl/)                                                 |
+|        | Harderwijk       | [mijn.2park.nl](https://mijn.2park.nl/)                                                 |
+|        | Harlingen        | [parkeervergunningen.harlingen.nl](https://parkeervergunningen.harlingen.nl/DVSPortal/) |
+|        | Heemstede        | [parkeren.heemstede.nl](https://parkeren.heemstede.nl/DVSPortal/)                       |
+|        | Heerenveen       | [parkeren.heerenveen.nl](https://parkeren.heerenveen.nl/DVSPortal/)                     |
+|        | Heerlen          | [parkeren.heerlen.nl](https://parkeren.heerlen.nl/DVSPortal/)                           |
+|        | Hengelo          | [parkeren.hengelo.nl](https://parkeren.hengelo.nl/DVSPortal/)                           |
+|        | 's-Hertogenbosch | [parkeren.s-hertogenbosch.nl](https://parkeren.s-hertogenbosch.nl/DVSPortal/)           |
+|        | Hoorn            | [parkeren.hoorn.nl](https://parkeren.hoorn.nl/DVSPortal/)                               |
+| **K**  | Katwijk          | [parkeren.katwijk.nl](https://parkeren.katwijk.nl/DVSPortal/)                           |
+| **L**  | Leiden           | [parkeren.leiden.nl](https://parkeren.leiden.nl/DVSPortal/)                             |
+| **M**  | Maastricht       | [mijn.2park.nl](https://mijn.2park.nl/)                                                 |
+|        | Middelburg       | [parkeren.middelburg.nl](https://parkeren.middelburg.nl/DVSPortal/)                     |
+| **N**  | Nijmegen         | [parkeerproducten.nijmegen.nl](https://parkeerproducten.nijmegen.nl/DVSPortal/)         |
+|        | Nissewaard       | [parkeren.nissewaard.nl](https://parkeren.nissewaard.nl/DVSPortal/)                     |
+| **O**  | Oldenzaal        | [parkeren.oldenzaal.nl](https://parkeren.oldenzaal.nl/DVSPortal/)                       |
+|        | Oosterhout       | [mijn.2park.nl](https://mijn.2park.nl/)                                                 |
+|        | Oss              | [mijn.2park.nl](https://mijn.2park.nl/)                                                 |
+| **R**  | Rijswijk         | [parkeren.rijswijk.nl](https://parkeren.rijswijk.nl/DVSPortal/)                         |
+|        | Roermond         | [parkeren.roermond.nl](https://parkeren.roermond.nl/DVSPortal/)                         |
+|        | Roosendaal       | [mijn.2park.nl](https://mijn.2park.nl/)                                                 |
+|        | Rotterdam        | [bezoek.rotterdam.nl](https://bezoek.rotterdam.nl/)                                     |
+| **S**  | Sittard-Geleen   | [parkeren.sittard-geleen.nl](https://parkeren.sittard-geleen.nl/DVSPortal/)             |
+|        | Sluis            | [mijn.2park.nl](https://mijn.2park.nl/)                                                 |
+|        | Smallingerland   | [parkeren.smallingerland.nl](https://parkeren.smallingerland.nl/DVSPortal/)             |
+|        | Súdwest-Fryslân  | [parkeren.sudwestfryslan.nl](https://parkeren.sudwestfryslan.nl/DVSPortal/)             |
+| **T**  | Terneuzen        | [mijn.2park.nl](https://mijn.2park.nl/)                                                 |
+|        | Tiel             | [mijn.2park.nl](https://mijn.2park.nl/)                                                 |
+| **V**  | Veenendaal       | [mijn.2park.nl](https://mijn.2park.nl/)                                                 |
+|        | Veere            | [parkeren.veere.nl](https://parkeren.veere.nl/DVSPortal/)                               |
+|        | Venlo            | [parkeren.venlo.nl](https://parkeren.venlo.nl/DVSPortal/)                               |
+|        | Vlaardingen      | [mijn.2park.nl](https://mijn.2park.nl/)                                                 |
+|        | Vlissingen       | [parkeren.vlissingen.nl](https://parkeren.vlissingen.nl/DVSPortal/)                     |
+| **W**  | Waadhoeke        | [parkeren.waadhoeke.nl](https://parkeren.waadhoeke.nl/DVSPortal/)                       |
+|        | Waalwijk         | [parkeren.waalwijk.nl](https://parkeren.waalwijk.nl/DVSPortal/)                         |
+|        | Weert            | [parkeerloket.weert.nl](https://parkeerloket.weert.nl/DVSPortal/)                       |
+| **Z**  | Zaanstad         | [parkeren.zaanstad.nl](https://parkeren.zaanstad.nl/DVSPortal/)                         |
+|        | Zevenaar         | [parkeren.zevenaar.nl](https://parkeren.zevenaar.nl/DVSPortal/)                         |
+|        | Zutphen          | [parkeren.zutphen.nl](https://parkeren.zutphen.nl/DVSPortal/)                           |
+|        | Zwolle           | [parkeerloket.zwolle.nl](https://parkeerloket.zwolle.nl/DVSPortal/)                     |
 
 ---
 
