@@ -148,7 +148,7 @@
         },
         "parking_area_id": {
           "name": "Parkeergebied",
-          "description": "Het parkeergebied waarin geparkeerd wordt, voor vergunningen met meerdere parkeergebieden. Laat leeg om het standaard parkeergebied te gebruiken."
+          "description": "Het parkeergebied waarin geparkeerd wordt, voor vergunningen met meerdere parkeergebieden. Sommige gemeenten accepteren ook het nummer op een parkeerautomaat. Laat leeg om het standaard parkeergebied te gebruiken."
         }
       }
     },

@@ -11,7 +11,7 @@ from freezegun import freeze_time
 from homeassistant import config_entries
 from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
 from homeassistant.util import dt as dt_util
-from pycityvisitorparking.exceptions import PyCityVisitorParkingError
+from pycityvisitorparking.exceptions import PyCityVisitorParkingError, ValidationError
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.city_visitor_parking.const import (
@@ -28,6 +28,7 @@ from custom_components.city_visitor_parking.models import (
     CoordinatorData,
     Favorite,
     PaidParkingStatus,
+    ParkingArea,
     ProviderConfig,
     Reservation,
     TimeRange,
@@ -36,6 +37,7 @@ from custom_components.city_visitor_parking.runtime_data import (
     CityVisitorParkingRuntimeData,
 )
 from custom_components.city_visitor_parking.websocket_api import (
+    _ws_get_parking_area,
     _ws_get_status,
     _ws_list_favorites,
     _ws_list_reservations,
@@ -358,6 +360,90 @@ async def test_ws_list_reservations_without_data(hass: HomeAssistant) -> None:
     )
 
     assert _first_error(raw_connection)["code"] == "reservations_failed"
+
+
+def _free_input_data(*, free_input: bool) -> CoordinatorData:
+    """Return coordinator data listing default parking area 19850."""
+    free = PaidParkingStatus(is_paid_now=False, next_change_time=None, windows_today=())
+    return CoordinatorData(
+        permit_id="permit",
+        permit_remaining_balance=0,
+        permit_balance_unit=None,
+        paid_hours=(),
+        reservations=(),
+        favorites=(),
+        paid_parking_status=free,
+        active_reservations=(),
+        parking_areas=(
+            ParkingArea(
+                parking_area_id="19850",
+                name="19850",
+                paid_hours=(),
+                paid_parking_status=free,
+            ),
+        ),
+        parking_area_free_input=free_input,
+    )
+
+
+async def test_ws_get_parking_area_resolves_a_typed_id(hass: HomeAssistant) -> None:
+    """With free input a typed ID is resolved by the provider, with its own window."""
+    entry = _create_entry()
+    entry.add_to_hass(hass)
+    entry.mock_state(hass, config_entries.ConfigEntryState.LOADED)
+    now = datetime(2025, 1, 6, 10, 0, tzinfo=UTC)
+    provider = AsyncMock()
+    provider.get_reservation_target.return_value = {
+        "id": "2222",
+        "name": "2222",
+        "paid_hours": [
+            {
+                "start_time": (now - timedelta(hours=1)).isoformat(),
+                "end_time": (now + timedelta(hours=2)).isoformat(),
+            }
+        ],
+    }
+    entry.runtime_data = _runtime(provider, _free_input_data(free_input=True))
+
+    raw_connection = _FakeConnection()
+    with freeze_time(now):
+        _ws_get_parking_area(
+            hass,
+            cast("ActiveConnection", raw_connection),
+            {"id": 1, "config_entry_id": entry.entry_id, "parking_area_id": " 2222 "},
+        )
+        await hass.async_block_till_done()
+
+    provider.get_reservation_target.assert_awaited_once_with("2222")
+    response = _first_result(raw_connection)
+    assert response["parking_area_id"] == "2222"
+    assert response["state"] == STATE_PAID
+    assert response["window_end"] == (now + timedelta(hours=2)).isoformat()
+
+
+async def test_ws_get_parking_area_rejects_unknown_ids(hass: HomeAssistant) -> None:
+    """A rejected typed ID, or any unlisted ID without free input, is invalid."""
+    entry = _create_entry()
+    entry.add_to_hass(hass)
+    entry.mock_state(hass, config_entries.ConfigEntryState.LOADED)
+    provider = AsyncMock()
+    provider.get_reservation_target.side_effect = ValidationError
+    raw_connection = _FakeConnection()
+
+    for free_input in (True, False):
+        entry.runtime_data = _runtime(provider, _free_input_data(free_input=free_input))
+        _ws_get_parking_area(
+            hass,
+            cast("ActiveConnection", raw_connection),
+            {"id": 1, "config_entry_id": entry.entry_id, "parking_area_id": "9999"},
+        )
+        await hass.async_block_till_done()
+
+    assert [error["code"] for error in raw_connection.errors] == [
+        "invalid_parking_area",
+        "invalid_parking_area",
+    ]
+    provider.get_reservation_target.assert_awaited_once()
 
 
 def test_ws_as_utc_iso_none() -> None:

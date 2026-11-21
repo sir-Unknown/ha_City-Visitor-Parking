@@ -410,18 +410,26 @@ def _resolve_parking_area_id(
 
     Without a requested parking area the default parking area (the first of the
     coordinator's parking areas, which honours the default chosen in the options) is
-    used, so the service and the card book in the same parking area.
+    used, so the service and the card book in the same parking area. Providers with
+    free input also accept an unlisted ID; the provider validates it.
     """
     data = cast("CoordinatorData | None", runtime.coordinator.data)
     parking_areas = data.parking_areas if data is not None else ()
     if requested is None:
         return parking_areas[0].parking_area_id if parking_areas else None
-    if data is None or data.parking_area(cast("str", requested)) is None:
+    requested_id = cast("str", requested).strip()
+    if (
+        data is None
+        or not requested_id
+        or (
+            data.parking_area(requested_id) is None and not data.parking_area_free_input
+        )
+    ):
         raise ServiceValidationError(
             translation_domain=DOMAIN,
             translation_key="invalid_parking_area",
         )
-    return cast("str", requested)
+    return requested_id
 
 
 # Largest difference between a requested and a booked time that still counts as

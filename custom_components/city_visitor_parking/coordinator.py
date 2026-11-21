@@ -13,7 +13,12 @@ from homeassistant.helpers.update_coordinator import (
     UpdateFailed,
 )
 from homeassistant.util import dt as dt_util
-from pycityvisitorparking import AuthError, NetworkError, ProviderError
+from pycityvisitorparking import (
+    RESERVATION_TARGET_SELECTION_FREE_INPUT,
+    AuthError,
+    NetworkError,
+    ProviderError,
+)
 from pycityvisitorparking.exceptions import (
     NotFoundError,
     PyCityVisitorParkingError,
@@ -235,6 +240,10 @@ class CityVisitorParkingCoordinator(TimestampDataUpdateCoordinator[CoordinatorDa
             paid_parking_status=paid_parking_status,
             active_reservations=tuple(active_reservations),
             parking_areas=tuple(parking_areas),
+            # The library accepts other target IDs only while the permit lists targets.
+            parking_area_free_input=bool(parking_areas)
+            and getattr(self._provider, "reservation_target_selection", None)
+            == RESERVATION_TARGET_SELECTION_FREE_INPUT,
         )
 
         next_interval = self._compute_next_interval(data, now)
@@ -532,24 +541,29 @@ def _normalize_parking_areas(
     """
     if not isinstance(targets, list):
         return []
-    parking_areas: list[ParkingArea] = []
-    for raw_parking_area in cast("list[object]", targets):
-        parking_area_id = get_attr(raw_parking_area, "id")
-        if parking_area_id is None:
-            continue
-        name = get_attr(raw_parking_area, "name")
-        paid_hours = _normalize_paid_hours(raw_parking_area)
-        parking_areas.append(
-            ParkingArea(
-                parking_area_id=str(parking_area_id),
-                name=str(name) if name else str(parking_area_id),
-                paid_hours=tuple(paid_hours),
-                paid_parking_status=_compute_paid_parking_status(
-                    paid_hours, options, now
-                ),
-            )
-        )
-    return parking_areas
+    return [
+        parking_area
+        for raw_parking_area in cast("list[object]", targets)
+        if (parking_area := normalize_parking_area(raw_parking_area, options, now))
+        is not None
+    ]
+
+
+def normalize_parking_area(
+    target: object, options: Mapping[str, object], now: datetime
+) -> ParkingArea | None:
+    """Normalize one library reservation target to a parking area; None without ID."""
+    parking_area_id = get_attr(target, "id")
+    if parking_area_id is None:
+        return None
+    name = get_attr(target, "name")
+    paid_hours = _normalize_paid_hours(target)
+    return ParkingArea(
+        parking_area_id=str(parking_area_id),
+        name=str(name) if name else str(parking_area_id),
+        paid_hours=tuple(paid_hours),
+        paid_parking_status=_compute_paid_parking_status(paid_hours, options, now),
+    )
 
 
 def _order_default_parking_area_first(

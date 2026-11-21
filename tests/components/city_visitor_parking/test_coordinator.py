@@ -158,6 +158,42 @@ async def test_permit_windows_follow_the_default_parking_area(
     assert data.paid_parking_status.is_paid_now is (expected_order[0] == "10")
 
 
+@pytest.mark.parametrize(
+    ("selection", "with_targets", "expected"),
+    [
+        ("free_input", True, True),
+        ("free_input", False, False),
+        ("list", True, False),
+    ],
+)
+async def test_free_input_needs_the_capability_and_listed_parking_areas(
+    hass: HomeAssistant, selection: str, *, with_targets: bool, expected: bool
+) -> None:
+    """Unlisted parking area IDs are allowed only for free input with targets."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={"permit_id": "permit", CONF_PROVIDER_ID: "p", CONF_MUNICIPALITY: "M"},
+    )
+    entry.add_to_hass(hass)
+    now = datetime(2025, 1, 6, 10, 0, tzinfo=UTC)
+    provider = AsyncMock()
+    provider.reservation_target_selection = selection
+    permit, targets = _parking_area_targets(now)
+    provider.fetch_all.return_value = (permit, [], [], targets if with_targets else [])
+    coordinator = CityVisitorParkingCoordinator(
+        hass,
+        provider=provider,
+        config_entry=entry,
+        permit_id="permit",
+        auto_end_state=AutoEndState(),
+    )
+
+    with freeze_time(now):
+        await coordinator.async_refresh()
+
+    assert coordinator.data.parking_area_free_input is expected
+
+
 async def test_auto_end_judges_each_reservation_by_its_own_parking_area(
     hass: HomeAssistant,
 ) -> None:
