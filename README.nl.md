@@ -169,13 +169,9 @@ Meer informatie:
 ### Nederlands
 
 - [Home](https://github.com/sir-Unknown/ha_City-Visitor-Parking/wiki/Home)
-
 <!-- ha-marketplace:exclude-start -->
-
 - [Installatie](https://github.com/sir-Unknown/ha_City-Visitor-Parking/wiki/Installatie)
-
 <!-- ha-marketplace:exclude-end -->
-
 - [Configuratie](https://github.com/sir-Unknown/ha_City-Visitor-Parking/wiki/Configuratie)
 - [Diensten](https://github.com/sir-Unknown/ha_City-Visitor-Parking/wiki/Diensten)
 - [Probleemoplossing](https://github.com/sir-Unknown/ha_City-Visitor-Parking/wiki/Probleemoplossing)
@@ -184,13 +180,9 @@ Meer informatie:
 ### English
 
 - [Home](https://github.com/sir-Unknown/ha_City-Visitor-Parking/wiki/Home)
-
 <!-- ha-marketplace:exclude-start -->
-
 - [Installation](https://github.com/sir-Unknown/ha_City-Visitor-Parking/wiki/Installation)
-
 <!-- ha-marketplace:exclude-end -->
-
 - [Configuration](https://github.com/sir-Unknown/ha_City-Visitor-Parking/wiki/Configuration)
 - [Lovelace Cards](https://github.com/sir-Unknown/ha_City-Visitor-Parking/wiki/Lovelace-Cards)
 - [Services](https://github.com/sir-Unknown/ha_City-Visitor-Parking/wiki/Services)
