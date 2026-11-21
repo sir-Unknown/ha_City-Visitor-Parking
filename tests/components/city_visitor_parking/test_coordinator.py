@@ -233,6 +233,51 @@ async def test_auto_end_judges_each_reservation_by_its_own_parking_area(
     assert ended == ["in-630"]
 
 
+async def test_auto_end_leaves_a_reservation_in_an_unlisted_parking_area(
+    hass: HomeAssistant,
+) -> None:
+    """A typed free input parking area has unknown paid hours: it is not ended.
+
+    The default parking area is free now; judging the unlisted one by it would end
+    a reservation that may still be paid.
+    """
+    entry = _create_entry(auto_end=True)
+    entry.add_to_hass(hass)
+    now = datetime(2025, 1, 6, 10, 0, tzinfo=UTC)
+
+    def reservation(reservation_id: str, parking_area_id: str) -> dict[str, str]:
+        return {
+            "id": reservation_id,
+            "start_time": (now - timedelta(hours=1)).isoformat(),
+            "end_time": (now + timedelta(hours=1)).isoformat(),
+            "reservation_target_id": parking_area_id,
+        }
+
+    provider = AsyncMock()
+    provider.reservation_target_selection = "free_input"
+    permit, targets = _parking_area_targets(now)
+    # Only parking area 630 is listed, and it is free at 10:00.
+    provider.fetch_all.return_value = (
+        permit,
+        [reservation("in-630", "630"), reservation("in-2222", "2222")],
+        [],
+        [targets[1]],
+    )
+    coordinator = CityVisitorParkingCoordinator(
+        hass,
+        provider=provider,
+        config_entry=entry,
+        permit_id="permit",
+        auto_end_state=AutoEndState(),
+    )
+
+    with freeze_time(now):
+        await coordinator.async_refresh()
+
+    ended = [call.args[0] for call in provider.end_reservation.await_args_list]
+    assert ended == ["in-630"]
+
+
 async def test_auth_failure_triggers_reauth(
     hass: HomeAssistant,
     pv_library: ModuleType,

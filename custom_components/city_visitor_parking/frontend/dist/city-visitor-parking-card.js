@@ -1621,6 +1621,9 @@ var CityVisitorParkingNewReservationCard = class extends BaseLocalizedCard {
     this._typedParkingAreaByEntryId = /* @__PURE__ */ new Map();
     // Translation key of why a typed parking area could not be loaded.
     this._parkingAreaErrorByEntryId = /* @__PURE__ */ new Map();
+    // Whether the user changed the start or end time since picking a typed parking
+    // area; its loaded status then only fills empty times instead of replacing them.
+    this._timesEditedSinceParkingAreaPick = false;
     this._pendingPermitDefaultsEntryId = null;
     this._pendingPermitDefaultsForce = false;
     this._statusRefreshHandle = null;
@@ -2182,6 +2185,9 @@ var CityVisitorParkingNewReservationCard = class extends BaseLocalizedCard {
       this._scheduleFavoriteActionsUpdate();
       return;
     }
+    if (field?.id === "startDateTime" || field?.id === "endDateTime") {
+      this._timesEditedSinceParkingAreaPick = true;
+    }
     if (field?.id === "startDateTime") {
       this._syncEndDateWithStart();
     }
@@ -2195,6 +2201,9 @@ var CityVisitorParkingNewReservationCard = class extends BaseLocalizedCard {
       this._addFavoriteChecked = target.checked;
       this._scheduleFavoriteActionsUpdate();
       return;
+    }
+    if (field?.id === "startDateTime" || field?.id === "endDateTime") {
+      this._timesEditedSinceParkingAreaPick = true;
     }
     if (field?.id === "startDateTime") {
       this._syncEndDateWithStart();
@@ -2221,6 +2230,7 @@ var CityVisitorParkingNewReservationCard = class extends BaseLocalizedCard {
     const previousParkingArea = this._resolveParkingArea(entryId);
     this._selectedParkingAreaIdByEntryId.set(entryId, parkingAreaId);
     this._parkingAreaErrorByEntryId.delete(entryId);
+    this._timesEditedSinceParkingAreaPick = false;
     if (this._resolveParkingArea(entryId) !== previousParkingArea) {
       applyPaidParkingStatus(
         this,
@@ -2267,7 +2277,8 @@ var CityVisitorParkingNewReservationCard = class extends BaseLocalizedCard {
         this,
         this._getEffectivePaidParkingStatus(entryId)
       );
-      if (applyDefaults) this._applyStatusDefaultsToForm(true);
+      if (applyDefaults)
+        this._applyStatusDefaultsToForm(!this._timesEditedSinceParkingAreaPick);
     }
     this._requestRender();
   }
