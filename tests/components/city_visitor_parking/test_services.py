@@ -68,7 +68,6 @@ from custom_components.city_visitor_parking.services import (
     _error_base_key,
     _error_detail,
     _fallback_update_favorite,
-    _fallback_update_reservation,
     _favorite_error_key,
     _is_not_supported,
     _raise_favorite_error,
@@ -395,6 +394,131 @@ async def test_update_reservation_fallback(hass: HomeAssistant) -> None:
 
     provider.end_reservation.assert_awaited_once()
     provider.start_reservation.assert_awaited_once()
+
+
+def _with_current_reservation(
+    entry: MockConfigEntry, start: datetime, end: datetime
+) -> Reservation:
+    """Put a known reservation with a parking area in the coordinator data."""
+    current = Reservation(
+        reservation_id="res1",
+        start_time=start,
+        end_time=end,
+        license_plate="AB1234",
+        parking_area_id="630",
+    )
+    entry.runtime_data.coordinator.data = replace(
+        _coordinator_data("permit1", (_parking_area("10"), _parking_area("630"))),
+        reservations=(current,),
+    )
+    return current
+
+
+async def test_update_reservation_new_plate_replaces_start_first(
+    hass: HomeAssistant,
+) -> None:
+    """A new plate starts the replacement in the same area, then ends the old one.
+
+    Times that are not given come from the current reservation.
+    """
+    await async_setup_services(hass)
+    entry, device, provider = _create_entry_with_device(hass, "permit1")
+    start = datetime.now(UTC) - timedelta(minutes=10)
+    current = _with_current_reservation(entry, start, start + timedelta(hours=1))
+    calls: list[str] = []
+    started = provider.start_reservation.return_value
+
+    def record_start(**_: object) -> object:
+        calls.append("start")
+        return started
+
+    def record_end(*_: object) -> None:
+        calls.append("end")
+
+    provider.start_reservation.side_effect = record_start
+    provider.end_reservation.side_effect = record_end
+    new_end = current.end_time + timedelta(hours=1)
+
+    response = await hass.services.async_call(
+        DOMAIN,
+        SERVICE_UPDATE_RESERVATION,
+        {
+            ATTR_DEVICE_ID: device.id,
+            ATTR_RESERVATION_ID: "res1",
+            ATTR_END_TIME: new_end,
+            ATTR_LICENSE_PLATE: "XY-99-ZZ",
+        },
+        blocking=True,
+        return_response=True,
+    )
+
+    assert calls == ["start", "end"]
+    provider.start_reservation.assert_awaited_once_with(
+        license_plate="XY-99-ZZ",
+        start_time=current.start_time,
+        end_time=new_end,
+        reservation_target_id="630",
+    )
+    assert provider.end_reservation.await_args.args[0] == "res1"
+    assert response is not None
+    assert response["reservation_id"] == "res-new"
+
+
+async def test_update_reservation_refused_replacement_keeps_the_reservation(
+    hass: HomeAssistant,
+) -> None:
+    """A refused start for a new plate leaves the current reservation alone."""
+    await async_setup_services(hass)
+    entry, device, provider = _create_entry_with_device(hass, "permit1")
+    start = datetime.now(UTC) + timedelta(hours=1)
+    _with_current_reservation(entry, start, start + timedelta(hours=1))
+    provider.start_reservation.side_effect = ProviderError(
+        "Time slot is overbooked.", error_code=ErrorCode.PROVIDER_REJECTED
+    )
+
+    with pytest.raises(HomeAssistantError):
+        await hass.services.async_call(
+            DOMAIN,
+            SERVICE_UPDATE_RESERVATION,
+            {
+                ATTR_DEVICE_ID: device.id,
+                ATTR_RESERVATION_ID: "res1",
+                ATTR_LICENSE_PLATE: "XY-99-ZZ",
+            },
+            blocking=True,
+        )
+
+    provider.end_reservation.assert_not_awaited()
+
+
+async def test_update_reservation_with_the_current_plate_updates_in_place(
+    hass: HomeAssistant,
+) -> None:
+    """Repeating the current plate with a new end time is no replacement."""
+    await async_setup_services(hass)
+    entry, device, provider = _create_entry_with_device(hass, "permit1")
+    provider.reservation_update_fields = [ATTR_END_TIME]
+    start = datetime.now(UTC)
+    current = _with_current_reservation(entry, start, start + timedelta(hours=1))
+    new_end = current.end_time + timedelta(hours=1)
+
+    await hass.services.async_call(
+        DOMAIN,
+        SERVICE_UPDATE_RESERVATION,
+        {
+            ATTR_DEVICE_ID: device.id,
+            ATTR_RESERVATION_ID: "res1",
+            ATTR_END_TIME: new_end,
+            ATTR_LICENSE_PLATE: "ab-12-34",
+        },
+        blocking=True,
+    )
+
+    provider.update_reservation.assert_awaited_once_with(
+        reservation_id="res1", start_time=None, end_time=new_end
+    )
+    provider.start_reservation.assert_not_awaited()
+    provider.end_reservation.assert_not_awaited()
 
 
 async def test_update_reservation_success(hass: HomeAssistant) -> None:
@@ -1009,27 +1133,32 @@ async def test_service_invalid_entry_state(hass: HomeAssistant) -> None:
 
 
 async def test_fallback_update_reservation_error(
-    hass: HomeAssistant, pv_library: ModuleType, monkeypatch: MonkeyPatch
+    hass: HomeAssistant, pv_library: ModuleType
 ) -> None:
-    """Fallback update reservation errors should raise HomeAssistantError."""
-    entry, _device, provider = _create_entry_with_device(hass, "permit1")
+    """A replacement whose old reservation cannot be ended reports that clearly."""
+    await async_setup_services(hass)
+    _, device, provider = _create_entry_with_device(hass, "permit1")
     provider.end_reservation.side_effect = pv_library.ProviderError("boom")
-    monkeypatch.setattr(
-        "custom_components.city_visitor_parking.services.async_get_versions",
-        AsyncMock(return_value=("1.2.3", "4.5.6")),
-    )
 
     start = datetime.now(UTC)
     end = start + timedelta(hours=1)
 
-    with pytest.raises(HomeAssistantError):
-        await _fallback_update_reservation(
-            entry.runtime_data,
-            "res1",
-            start,
-            end,
-            "AB1234",
+    with pytest.raises(HomeAssistantError) as exc_info:
+        await hass.services.async_call(
+            DOMAIN,
+            SERVICE_UPDATE_RESERVATION,
+            {
+                ATTR_DEVICE_ID: device.id,
+                ATTR_RESERVATION_ID: "res1",
+                ATTR_START_TIME: start,
+                ATTR_END_TIME: end,
+                ATTR_LICENSE_PLATE: "AB1234",
+            },
+            blocking=True,
         )
+
+    assert exc_info.value.translation_key == "reservation_replace_end_failed"
+    provider.start_reservation.assert_awaited_once()
 
 
 async def test_fallback_update_favorite_validation_error(
