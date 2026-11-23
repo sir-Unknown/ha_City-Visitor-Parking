@@ -77,7 +77,7 @@ async def test_config_flow_accepts_custom_municipality_label(
 ) -> None:
     """A typed municipality label should resolve to the matching provider."""
     provider = AsyncMock()
-    provider.get_permit.return_value = {"id": "PERMIT1", "name": "Permit One"}
+    provider.list_permits.return_value = [{"id": "PERMIT1", "name": "Permit One"}]
     client = AsyncMock()
     client.get_provider.return_value = provider
     monkeypatch.setattr(
@@ -106,7 +106,7 @@ async def test_config_flow_accepts_slugified_municipality_input(
 ) -> None:
     """A slugified municipality value should still resolve for compatibility."""
     provider = AsyncMock()
-    provider.get_permit.return_value = {"id": "PERMIT1", "name": "Permit One"}
+    provider.list_permits.return_value = [{"id": "PERMIT1", "name": "Permit One"}]
     client = AsyncMock()
     client.get_provider.return_value = provider
     monkeypatch.setattr(
@@ -155,7 +155,7 @@ async def test_config_flow_success(
 ) -> None:
     """Successful flow creates the entry from the initial step."""
     provider = AsyncMock()
-    provider.get_permit.return_value = {"id": "PERMIT1", "name": "Permit One"}
+    provider.list_permits.return_value = [{"id": "PERMIT1", "name": "Permit One"}]
     client = AsyncMock()
     client.get_provider.return_value = provider
     monkeypatch.setattr(
@@ -179,6 +179,89 @@ async def test_config_flow_success(
     assert result["title"] == "Apeldoorn - PERMIT1"
     assert result["data"][CONF_PERMIT_ID] == "PERMIT1"
     assert result["data"][CONF_GUI_URL] == "https://parkeren.apeldoorn.nl/DVSPortal/"
+
+
+async def test_config_flow_asks_which_of_several_permits_to_add(
+    hass: HomeAssistant, monkeypatch: MonkeyPatch
+) -> None:
+    """An account with several permits offers the ones not configured yet."""
+    _create_entry().add_to_hass(hass)  # PERMIT1 is already configured.
+    provider = AsyncMock()
+    provider.list_permits.return_value = [
+        {"id": "PERMIT1", "name": "Own"},
+        {"id": "PERMIT2", "name": "Shared"},
+        {"id": "PERMIT3", "name": None},
+    ]
+    client = AsyncMock()
+    client.get_provider.return_value = provider
+    monkeypatch.setattr(
+        "custom_components.city_visitor_parking.config_flow.async_create_client",
+        AsyncMock(return_value=client),
+    )
+
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": "user"}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {
+            CONF_MUNICIPALITY: KNOWN_MUNICIPALITY,
+            CONF_USERNAME: "user",
+            CONF_PASSWORD: "pass",
+        },
+    )
+
+    assert result["type"] == "form"
+    assert result["step_id"] == "permit"
+    permit_selector = result["data_schema"].schema[vol.Required(CONF_PERMIT_ID)]
+    assert _extract_option_values(permit_selector) == ["PERMIT2", "PERMIT3"]
+    assert _extract_option_labels(permit_selector) == ["Shared (PERMIT2)", "PERMIT3"]
+    # The account login does not pick a permit while adding one.
+    assert provider.login.await_args.kwargs["permit_id"] is None
+
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_PERMIT_ID: "PERMIT2"}
+    )
+
+    assert result["type"] == "create_entry"
+    assert result["title"] == "Apeldoorn - PERMIT2"
+    assert result["data"][CONF_PERMIT_ID] == "PERMIT2"
+    assert result["result"].unique_id == "dvsportal:PERMIT2:apeldoorn"
+
+
+async def test_config_flow_aborts_when_every_permit_is_configured(
+    hass: HomeAssistant, monkeypatch: MonkeyPatch
+) -> None:
+    """Nothing is left to add when each permit of the account has an entry."""
+    _create_entry().add_to_hass(hass)
+    MockConfigEntry(
+        domain=DOMAIN,
+        data={CONF_PERMIT_ID: "PERMIT2"},
+        unique_id="dvsportal:PERMIT2:apeldoorn",
+    ).add_to_hass(hass)
+    provider = AsyncMock()
+    provider.list_permits.return_value = [{"id": "PERMIT1"}, {"id": "PERMIT2"}]
+    client = AsyncMock()
+    client.get_provider.return_value = provider
+    monkeypatch.setattr(
+        "custom_components.city_visitor_parking.config_flow.async_create_client",
+        AsyncMock(return_value=client),
+    )
+
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": "user"}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {
+            CONF_MUNICIPALITY: KNOWN_MUNICIPALITY,
+            CONF_USERNAME: "user",
+            CONF_PASSWORD: "pass",
+        },
+    )
+
+    assert result["type"] == "abort"
+    assert result["reason"] == "all_permits_configured"
 
 
 async def test_config_flow_invalid_auth(
@@ -285,7 +368,7 @@ async def test_reauth_flow_success(
 ) -> None:
     """Reauthentication should update credentials."""
     provider = AsyncMock()
-    provider.get_permit.return_value = {"id": "PERMIT1", "name": "Permit One"}
+    provider.list_permits.return_value = [{"id": "PERMIT1", "name": "Permit One"}]
     client = AsyncMock()
     client.get_provider.return_value = provider
     monkeypatch.setattr(
@@ -307,6 +390,8 @@ async def test_reauth_flow_success(
     )
     assert result["type"] == "abort"
     assert result["reason"] == "reauth_successful"
+    # Reauth logs in on the entry's permit, as the entry itself does.
+    assert provider.login.await_args.kwargs["permit_id"] == "PERMIT1"
 
 
 async def test_reconfigure_flow_success(hass: HomeAssistant) -> None:
@@ -430,9 +515,9 @@ async def test_validate_credentials_requires_provider(hass: HomeAssistant) -> No
     flow.hass = hass
     errors: dict[str, str] = {}
 
-    permit_id = await flow._async_validate_credentials("user", "pass", errors)
+    permits = await flow._async_validate_credentials("user", "pass", errors)
 
-    assert permit_id is None
+    assert permits == []
     assert errors["base"] == "unknown"
 
 
@@ -462,9 +547,9 @@ async def test_validate_credentials_unexpected_error(
     with caplog.at_level(
         logging.DEBUG, logger="custom_components.city_visitor_parking.config_flow"
     ):
-        permit_id = await flow._async_validate_credentials("user", "pass", errors)
+        permits = await flow._async_validate_credentials("user", "pass", errors)
 
-    assert permit_id is None
+    assert permits == []
     assert errors["base"] == "unknown"
     assert "hacvp" in caplog.text
     assert "1.2.3" in caplog.text
@@ -484,7 +569,7 @@ async def test_validate_credentials_no_permits(
     )
 
     provider = AsyncMock()
-    provider.get_permit.return_value = {}
+    provider.list_permits.return_value = []
     client = AsyncMock()
     client.get_provider.return_value = provider
     monkeypatch.setattr(
@@ -493,9 +578,9 @@ async def test_validate_credentials_no_permits(
     )
 
     errors: dict[str, str] = {}
-    permit_id = await flow._async_validate_credentials("user", "pass", errors)
+    permits = await flow._async_validate_credentials("user", "pass", errors)
 
-    assert permit_id is None
+    assert permits == []
     assert errors["base"] == "no_permits"
 
 

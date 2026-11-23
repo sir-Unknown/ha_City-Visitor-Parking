@@ -27,6 +27,7 @@ class ErrorCode(StrEnum):
     NOT_FOUND = "not_found"
     NOT_SUPPORTED = "not_supported"
     PROVIDER_REJECTED = "provider_rejected"
+    PERMIT_NOT_FOUND = "permit_not_found"
 
 
 class PyCityVisitorParkingError(Exception):
@@ -116,6 +117,10 @@ class Provider:
     async def get_permit(self) -> dict[str, object]:
         """Return a default permit."""
         return {"id": "permit", "paid_hours": []}
+
+    async def list_permits(self) -> list[dict[str, object]]:
+        """Return the single default permit."""
+        return [await self.get_permit()]
 
     async def list_reservations(self) -> list[dict[str, object]]:
         """Return no reservations by default."""

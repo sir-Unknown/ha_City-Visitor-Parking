@@ -28,7 +28,7 @@
       },
       "permit": {
         "title": "Kies vergunning",
-        "description": "Selecteer de vergunning die je in Home Assistant wilt beheren.",
+        "description": "Dit account heeft meerdere vergunningen. Kies de vergunning die je wilt toevoegen. Wil je ook een andere vergunning gebruiken, voeg de integratie dan opnieuw toe en kies die vergunning.",
         "data": {
           "permit_id": "Vergunning"
         }
@@ -55,6 +55,8 @@
       }
     },
     "abort": {
+      "all_permits_configured": "Alle vergunningen van dit account zijn al geconfigureerd.",
+      "already_configured": "Deze vergunning is al geconfigureerd.",
       "reauth_successful": "Inloggegevens bijgewerkt",
       "reconfigure_successful": "Configuratie bijgewerkt",
       "wrong_account": "Het geselecteerde account komt niet overeen met deze entry"
@@ -401,6 +403,10 @@
     "paid_parking_renamed": {
       "title": "Waarden van betaald parkeren hernoemd",
       "description": "De sensor **Betaald parkeren** geeft nu `paid` in plaats van `chargeable`, en het attribuut `is_chargeable_now` heet nu `is_paid_now`. De actie `get_status` geeft nu `paid_hours` in plaats van `zone_validity` en `is_paid_now` in plaats van `is_chargeable_now`.\n\nPas automatiseringen, scripts en templates aan die de oude waarden gebruiken. Daarna kun je deze melding negeren."
+    },
+    "permit_not_found": {
+      "title": "Vergunning van {name} is niet meer beschikbaar",
+      "description": "Het bezoekersparkeren-account heeft geen actieve vergunning meer voor **{name}**, bijvoorbeeld omdat de vergunning is afgelopen of de machtiging is ingetrokken. De entiteiten blijven onbeschikbaar; de integratie schakelt nooit over op een andere vergunning van het account.\n\nAls de vergunning weer actief wordt, verdwijnt deze melding vanzelf. Verwijder anders deze entry en voeg de integratie opnieuw toe om een vergunning te kiezen die nog actief is."
     }
   },
   "entity": {

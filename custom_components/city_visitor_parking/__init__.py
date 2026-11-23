@@ -48,7 +48,7 @@ from .const import (
     PLATFORMS,
     WEEKDAY_KEYS,
 )
-from .coordinator import CityVisitorParkingCoordinator
+from .coordinator import CityVisitorParkingCoordinator, permit_not_found_issue_id
 from .helpers import normalize_override_windows
 from .models import AutoEndState, OperatingTimeOverrides, ProviderConfig
 from .runtime_data import CityVisitorParkingRuntimeData
@@ -405,6 +405,13 @@ async def async_unload_entry(
 ) -> bool:
     """Unload a City visitor parking config entry."""
     return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+
+
+async def async_remove_entry(
+    hass: HomeAssistant, entry: CityVisitorParkingConfigEntry
+) -> None:
+    """Remove the entry's repair issue when the entry is deleted."""
+    ir.async_delete_issue(hass, DOMAIN, permit_not_found_issue_id(entry.entry_id))
 
 
 async def _async_register_frontend(hass: HomeAssistant, _component: str) -> None:

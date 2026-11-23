@@ -8,6 +8,7 @@ from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Protocol, cast
 
 from homeassistant.exceptions import ConfigEntryAuthFailed
+from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.update_coordinator import (
     TimestampDataUpdateCoordinator,
     UpdateFailed,
@@ -27,6 +28,8 @@ from .const import (
     CONF_AUTO_END,
     CONF_DEFAULT_PARKING_AREA,
     DEFAULT_UPDATE_INTERVAL,
+    DOMAIN,
+    ERROR_CODE_PERMIT_NOT_FOUND,
     ERROR_CODE_PROVIDER_REJECTED,
     IDLE_UPDATE_INTERVAL,
     RELOGIN_COOLDOWN,
@@ -80,6 +83,11 @@ else:
     ProviderReservation = object
 
 _LOGGER = logging.getLogger(__name__)
+
+
+def permit_not_found_issue_id(entry_id: str) -> str:
+    """Return the repair issue id for an entry whose permit is no longer available."""
+    return f"permit_not_found_{entry_id}"
 
 
 class CityVisitorParkingCoordinator(TimestampDataUpdateCoordinator[CoordinatorData]):
@@ -140,6 +148,7 @@ class CityVisitorParkingCoordinator(TimestampDataUpdateCoordinator[CoordinatorDa
             if self._unavailable_logged:
                 _LOGGER.info("Visitor parking data is available again")
                 self._unavailable_logged = False
+            self._async_delete_permit_issue()
         except AuthError as err:
             self._log_unavailable_once()
             _LOGGER.debug(
@@ -179,6 +188,11 @@ class CityVisitorParkingCoordinator(TimestampDataUpdateCoordinator[CoordinatorDa
                     pycvp_version=pycvp_version,
                 ),
             )
+            if err.error_code == ERROR_CODE_PERMIT_NOT_FOUND:
+                # The library never switches to another permit; tell the user
+                # instead of leaving the entities unavailable without a reason.
+                self._async_create_permit_issue()
+                raise UpdateFailed("Permit is no longer available") from err
             raise UpdateFailed("API communication error") from err
         except Exception as err:  # Allowed in background tasks
             self._log_unavailable_once()
@@ -433,6 +447,27 @@ class CityVisitorParkingCoordinator(TimestampDataUpdateCoordinator[CoordinatorDa
             return
         _LOGGER.info("Visitor parking data is unavailable")
         self._unavailable_logged = True
+
+    def _async_create_permit_issue(self) -> None:
+        """Raise a repair issue: the entry's permit is gone from the account."""
+        ir.async_create_issue(
+            self.hass,
+            DOMAIN,
+            permit_not_found_issue_id(self._entry.entry_id),
+            is_fixable=False,
+            severity=ir.IssueSeverity.ERROR,
+            translation_key="permit_not_found",
+            translation_placeholders={"name": self._entry_title},
+        )
+
+    def _async_delete_permit_issue(self) -> None:
+        """Remove the unavailable-permit issue once the permit loads again.
+
+        Unconditional: the issue may come from an earlier setup attempt.
+        """
+        ir.async_delete_issue(
+            self.hass, DOMAIN, permit_not_found_issue_id(self._entry.entry_id)
+        )
 
     def _compute_next_interval(self, data: CoordinatorData, now: datetime) -> timedelta:
         """Return the polling interval to use after the current update.

@@ -12,6 +12,7 @@ import pytest
 from freezegun import freeze_time
 from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
 from homeassistant.exceptions import ConfigEntryAuthFailed
+from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.update_coordinator import UpdateFailed
 from homeassistant.util import dt as dt_util
 from pytest_homeassistant_custom_component.common import MockConfigEntry
@@ -284,6 +285,76 @@ async def test_unexpected_failure_raises_updatefailed(hass: HomeAssistant) -> No
     await coordinator.async_refresh()
     assert isinstance(coordinator.last_exception, UpdateFailed)
     assert coordinator._unavailable_logged is True
+
+
+async def test_unavailable_permit_raises_a_repair_issue_until_it_returns(
+    hass: HomeAssistant, pv_library: ModuleType
+) -> None:
+    """A permit gone from the account is reported as a repair, not only as an error."""
+    entry = _create_entry(auto_end=False)
+    entry.add_to_hass(hass)
+    issue_id = coord_module.permit_not_found_issue_id(entry.entry_id)
+    issues = ir.async_get(hass)
+
+    provider = AsyncMock()
+    provider.fetch_all.side_effect = pv_library.ProviderError(
+        "gone", error_code="permit_not_found"
+    )
+    coordinator = CityVisitorParkingCoordinator(
+        hass,
+        provider=provider,
+        config_entry=entry,
+        permit_id="permit",
+        auto_end_state=AutoEndState(),
+    )
+
+    await coordinator.async_refresh()
+
+    assert isinstance(coordinator.last_exception, UpdateFailed)
+    issue = issues.async_get_issue(DOMAIN, issue_id)
+    assert issue is not None
+    assert issue.translation_key == "permit_not_found"
+    assert issue.translation_placeholders == {"name": entry.title}
+
+    # A later setup attempt that loads the permit again clears the earlier issue.
+    provider.fetch_all.side_effect = None
+    provider.fetch_all.return_value = ({"paid_hours": []}, [], [], [])
+    recovered = CityVisitorParkingCoordinator(
+        hass,
+        provider=provider,
+        config_entry=entry,
+        permit_id="permit",
+        auto_end_state=AutoEndState(),
+    )
+    await recovered.async_refresh()
+
+    assert recovered.last_update_success
+    assert issues.async_get_issue(DOMAIN, issue_id) is None
+
+
+async def test_other_provider_errors_raise_no_permit_issue(
+    hass: HomeAssistant, pv_library: ModuleType
+) -> None:
+    """Only the permit_not_found code means the entry's permit is gone."""
+    entry = _create_entry(auto_end=False)
+    entry.add_to_hass(hass)
+
+    provider = AsyncMock()
+    provider.fetch_all.side_effect = pv_library.ProviderError(
+        "missing", error_code="not_found"
+    )
+    coordinator = CityVisitorParkingCoordinator(
+        hass,
+        provider=provider,
+        config_entry=entry,
+        permit_id="permit",
+        auto_end_state=AutoEndState(),
+    )
+
+    await coordinator.async_refresh()
+
+    assert isinstance(coordinator.last_exception, UpdateFailed)
+    assert not ir.async_get(hass).issues
 
 
 async def test_coordinator_logs_recovery(hass: HomeAssistant) -> None:
