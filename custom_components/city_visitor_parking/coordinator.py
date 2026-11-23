@@ -118,6 +118,8 @@ class CityVisitorParkingCoordinator(TimestampDataUpdateCoordinator[CoordinatorDa
         self._entry: ConfigEntry = config_entry
         self._last_relogin: datetime | None = None
         self._relogin_rejections: int = 0
+        # Whether the provider's permit is the entry's permit; None until known.
+        self.permit_matches_entry: bool | None = None
 
     async def _async_update_data(self) -> CoordinatorData:
         """Fetch data from the API and normalize it."""
@@ -215,6 +217,7 @@ class CityVisitorParkingCoordinator(TimestampDataUpdateCoordinator[CoordinatorDa
             )
             raise UpdateFailed("Unexpected error") from err
 
+        self._check_provider_permit(permit)
         remaining_balance = _normalize_remaining_balance(permit)
         balance_unit = get_attr(permit, "balance_unit")
         normalized_reservations = normalize_reservations(reservations)
@@ -447,6 +450,30 @@ class CityVisitorParkingCoordinator(TimestampDataUpdateCoordinator[CoordinatorDa
             return
         _LOGGER.info("Visitor parking data is unavailable")
         self._unavailable_logged = True
+
+    def _check_provider_permit(self, permit: object) -> None:
+        """Record whether the provider returned the entry's permit.
+
+        The entry asks for its own permit at login. A provider that ignores the
+        request silently serves another permit of the account (issue #261), so a
+        mismatch is logged when it starts and when it ends, not on every poll.
+        """
+        provider_permit_id = get_attr(permit, "id")
+        matches = (
+            None
+            if provider_permit_id is None
+            else str(provider_permit_id) == self._permit_id
+        )
+        if matches is False and self.permit_matches_entry is not False:
+            _LOGGER.debug(
+                "Provider returned permit %s for %s, which uses permit %s",
+                provider_permit_id,
+                self._entry_title,
+                self._permit_id,
+            )
+        elif matches is True and self.permit_matches_entry is False:
+            _LOGGER.debug("Provider returns the permit of %s again", self._entry_title)
+        self.permit_matches_entry = matches
 
     def _async_create_permit_issue(self) -> None:
         """Raise a repair issue: the entry's permit is gone from the account."""

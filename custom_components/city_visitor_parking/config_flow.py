@@ -342,6 +342,12 @@ class CityVisitorParkingConfigFlow(config_entries.ConfigFlow):
             for permit_id, label in permits
             if _build_unique_id(self._provider_config, permit_id) not in configured
         }
+        # Counts only: names and ids stay out of the log.
+        _LOGGER.debug(
+            "Account has %s permits; %s not configured yet",
+            len(permits),
+            len(self._permit_options),
+        )
         if not self._permit_options:
             return self.async_abort(reason="all_permits_configured")
         return await self.async_step_permit()
@@ -490,6 +496,12 @@ class CityVisitorParkingConfigFlow(config_entries.ConfigFlow):
             # The name tells permits apart; the id is what the entry title shows.
             label = f"{name} ({permit_id_value})" if name else str(permit_id_value)
             options.append((str(permit_id_value), label))
+        _LOGGER.debug(
+            "Login validated for %s: %s permits returned, %s usable",
+            self._provider_config.municipality_name,
+            len(permits),
+            len(options),
+        )
         if not options:
             errors["base"] = "no_permits"
         return options

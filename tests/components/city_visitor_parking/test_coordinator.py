@@ -357,6 +357,44 @@ async def test_other_provider_errors_raise_no_permit_issue(
     assert not ir.async_get(hass).issues
 
 
+async def test_provider_serving_another_permit_is_recorded_and_logged_once(
+    hass: HomeAssistant, caplog: LogCaptureFixture
+) -> None:
+    """A provider that ignores the entry's permit is visible in logs and diagnostics."""
+    entry = _create_entry(auto_end=False)
+    entry.add_to_hass(hass)
+
+    provider = AsyncMock()
+    provider.fetch_all.return_value = ({"id": "other", "paid_hours": []}, [], [], [])
+    coordinator = CityVisitorParkingCoordinator(
+        hass,
+        provider=provider,
+        config_entry=entry,
+        permit_id="permit",
+        auto_end_state=AutoEndState(),
+    )
+
+    with caplog.at_level(
+        logging.DEBUG, logger="custom_components.city_visitor_parking.coordinator"
+    ):
+        await coordinator.async_refresh()
+        await coordinator.async_refresh()
+        assert coordinator.permit_matches_entry is False
+        # Logged when the mismatch starts, not on every poll.
+        assert caplog.text.count("Provider returned permit other") == 1
+
+        provider.fetch_all.return_value = (
+            {"id": "permit", "paid_hours": []},
+            [],
+            [],
+            [],
+        )
+        await coordinator.async_refresh()
+
+    assert coordinator.permit_matches_entry is True
+    assert "returns the permit of" in caplog.text
+
+
 async def test_coordinator_logs_recovery(hass: HomeAssistant) -> None:
     """Coordinator should log availability recovery."""
     entry = _create_entry(auto_end=False)
