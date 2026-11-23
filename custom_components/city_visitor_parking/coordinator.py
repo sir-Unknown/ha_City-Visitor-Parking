@@ -90,6 +90,22 @@ def permit_not_found_issue_id(entry_id: str) -> str:
     return f"permit_not_found_{entry_id}"
 
 
+def async_create_permit_issue(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Raise a repair issue: the entry's permit is gone from the account.
+
+    Used by setup (a provider may reject the permit at login) and by refreshes.
+    """
+    ir.async_create_issue(
+        hass,
+        DOMAIN,
+        permit_not_found_issue_id(entry.entry_id),
+        is_fixable=False,
+        severity=ir.IssueSeverity.ERROR,
+        translation_key="permit_not_found",
+        translation_placeholders={"name": entry.title},
+    )
+
+
 class CityVisitorParkingCoordinator(TimestampDataUpdateCoordinator[CoordinatorData]):
     """Data update coordinator for City visitor parking."""
 
@@ -193,7 +209,7 @@ class CityVisitorParkingCoordinator(TimestampDataUpdateCoordinator[CoordinatorDa
             if err.error_code == ERROR_CODE_PERMIT_NOT_FOUND:
                 # The library never switches to another permit; tell the user
                 # instead of leaving the entities unavailable without a reason.
-                self._async_create_permit_issue()
+                async_create_permit_issue(self.hass, self._entry)
                 raise UpdateFailed("Permit is no longer available") from err
             raise UpdateFailed("API communication error") from err
         except Exception as err:  # Allowed in background tasks
@@ -474,18 +490,6 @@ class CityVisitorParkingCoordinator(TimestampDataUpdateCoordinator[CoordinatorDa
         elif matches is True and self.permit_matches_entry is False:
             _LOGGER.debug("Provider returns the permit of %s again", self._entry_title)
         self.permit_matches_entry = matches
-
-    def _async_create_permit_issue(self) -> None:
-        """Raise a repair issue: the entry's permit is gone from the account."""
-        ir.async_create_issue(
-            self.hass,
-            DOMAIN,
-            permit_not_found_issue_id(self._entry.entry_id),
-            is_fixable=False,
-            severity=ir.IssueSeverity.ERROR,
-            translation_key="permit_not_found",
-            translation_placeholders={"name": self._entry_title},
-        )
 
     def _async_delete_permit_issue(self) -> None:
         """Remove the unavailable-permit issue once the permit loads again.

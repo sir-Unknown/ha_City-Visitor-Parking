@@ -45,10 +45,15 @@ from .const import (
     CONF_PERMIT_ID,
     CONF_PROVIDER_ID,
     DOMAIN,
+    ERROR_CODE_PERMIT_NOT_FOUND,
     PLATFORMS,
     WEEKDAY_KEYS,
 )
-from .coordinator import CityVisitorParkingCoordinator, permit_not_found_issue_id
+from .coordinator import (
+    CityVisitorParkingCoordinator,
+    async_create_permit_issue,
+    permit_not_found_issue_id,
+)
 from .helpers import normalize_override_windows
 from .models import AutoEndState, OperatingTimeOverrides, ProviderConfig
 from .runtime_data import CityVisitorParkingRuntimeData
@@ -306,6 +311,12 @@ async def async_setup_entry(
     except (NetworkError, ServiceUnavailableError) as err:
         raise ConfigEntryNotReady from err
     except PyCityVisitorParkingError as err:
+        if err.error_code == ERROR_CODE_PERMIT_NOT_FOUND:
+            # A provider may reject the entry's permit at login already. Handle it
+            # like a refresh that finds the permit gone: a repair, and retries, so
+            # the entry recovers when the permit is active again.
+            async_create_permit_issue(hass, entry)
+            raise ConfigEntryNotReady from err
         raise ConfigEntryError from err
 
     auto_end_state = AutoEndState()
