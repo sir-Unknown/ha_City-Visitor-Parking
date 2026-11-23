@@ -46,6 +46,8 @@ async def async_get_config_entry_diagnostics(
         "options": _async_redact_data(dict(entry.options), TO_REDACT),
         "runtime": {
             "permit_id": entry.runtime_data.permit_id,
+            # False: the provider served another permit than the entry's (#261).
+            "permit_matches_entry": coordinator.permit_matches_entry,
             "update_interval": coordinator.update_interval.total_seconds()
             if coordinator.update_interval
             else None,

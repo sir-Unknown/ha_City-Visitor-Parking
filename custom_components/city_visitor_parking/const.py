@@ -42,6 +42,13 @@ ERROR_CODE_PROVIDER_REJECTED: Final = "provider_rejected"
 The session worked, so this never warrants a re-login.
 """
 
+ERROR_CODE_PERMIT_NOT_FOUND: Final = "permit_not_found"
+"""Library error code: the account no longer holds the entry's permit.
+
+The library never falls back to another permit, so the entry stays unavailable
+until the permit is usable again.
+"""
+
 START_RESERVATION_RETRY_DELAYS: Final[tuple[float, ...]] = (2.0, 5.0)
 """Seconds to wait before the second and third attempt to start a reservation.
 

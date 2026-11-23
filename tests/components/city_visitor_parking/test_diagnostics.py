@@ -94,6 +94,7 @@ async def test_diagnostics_redacts_sensitive_data(hass: HomeAssistant) -> None:
         update_interval=timedelta(minutes=5),
         last_update_success=True,
         last_update_success_time=datetime(2025, 1, 1, 9, 0, tzinfo=UTC),
+        permit_matches_entry=False,
     )
     coordinator_typed: CityVisitorParkingCoordinator = cast(
         "CityVisitorParkingCoordinator", coordinator
@@ -122,6 +123,7 @@ async def test_diagnostics_redacts_sensitive_data(hass: HomeAssistant) -> None:
     assert entry_data[CONF_USERNAME] == REDACTED
     assert entry_data[CONF_PASSWORD] == REDACTED
     assert runtime["permit_id"] == "permit"
+    assert runtime["permit_matches_entry"] is False
     assert runtime["paid_hours_blocks"] == 1
     assert runtime["last_update_success_time"] == "2025-01-01T09:00:00+00:00"
     assert runtime["favorites"] == 1

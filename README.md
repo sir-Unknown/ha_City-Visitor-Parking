@@ -54,6 +54,8 @@ This means you no longer have to manually log in to the municipal parking portal
 
 Each permit gets one device named `{municipality} - {permit ID}`, and its entity IDs start with that name. Some municipalities use long permit IDs. For shorter entity IDs, rename the device under **Settings** → **Devices & services** → **Devices** and let Home Assistant rename the entity IDs as well. Then update automations and dashboards that use the old entity IDs.
 
+If your account has several permits, for example your own permit and one you were authorized on, setup asks which permit to add. Add the integration once per permit to use more than one. Each entry stays on its own permit; when that permit is no longer active, Home Assistant shows a repair instead of switching to another permit.
+
 ---
 
 ## Important
