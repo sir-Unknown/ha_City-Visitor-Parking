@@ -755,6 +755,17 @@ class CityVisitorParkingActiveCard extends BaseLocalizedCard<CardConfig> {
         this._errorMessage(err, "message.reservation_update_failed"),
         "warning",
       );
+      // A changed start of a reservation that has started meanwhile is refused
+      // and its field is now disabled; forget it, so a later end time change
+      // does not send the refused start again.
+      if (
+        !nativeStart &&
+        allowStart &&
+        !canEditReservationStart(false, reservation.start_time)
+      ) {
+        delete this._reservationInputValues.get(reservationId)?.start;
+        this._requestRender();
+      }
       this._endReservationAction(reservationId);
       return;
     }

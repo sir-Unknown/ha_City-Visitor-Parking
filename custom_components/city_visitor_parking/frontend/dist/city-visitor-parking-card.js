@@ -3510,6 +3510,10 @@ var CityVisitorParkingActiveCard = class extends BaseLocalizedCard {
         this._errorMessage(err, "message.reservation_update_failed"),
         "warning"
       );
+      if (!nativeStart && allowStart && !canEditReservationStart(false, reservation.start_time)) {
+        delete this._reservationInputValues.get(reservationId)?.start;
+        this._requestRender();
+      }
       this._endReservationAction(reservationId);
       return;
     }
