@@ -337,7 +337,7 @@ Entities are defined in `custom_components/city_visitor_parking/sensor.py`; the 
 ### Sensor rules
 
 - Count sensors (active reservations, future reservations, favorites) MUST be integers with `SensorStateClass.MEASUREMENT` so Home Assistant records statistics and draws graphs.
-- The remaining balance sensor follows the permit balance unit (duration in hours, `times`, or a currency). Its device class and unit are set dynamically in `_update_from_coordinator`. Do not give it `MEASUREMENT` together with the `MONETARY` device class; Home Assistant only allows `TOTAL` for monetary sensors.
+- A permit can have several balances, at most one per kind: time (unit `MINUTE` or no unit), money (`EURO`) and times (`TIMES`). Each kind has its own sensor (`remaining_time_balance` in hours, `remaining_money_balance` in euros, `remaining_uses`), added when the permit first reports that kind and unavailable while it does not. The monetary sensor uses `TOTAL`, never `MEASUREMENT`; Home Assistant only allows `TOTAL` for monetary sensors. The single legacy sensor (unique ID suffix `remaining_time`) is moved to the sensor of the permit's primary balance at setup.
 - Timestamp sensors use `SensorDeviceClass.TIMESTAMP` and have no `state_class`.
 - Availability is derived from paid-only validity plus the user's weekday overrides. The state is `paid` or `free`.
 - A new sensor MUST update `sensor.py`, both translation files, the entity tests, and the wiki entities/sensors page. Attribute names are part of the user-visible contract, so do not rename them silently.

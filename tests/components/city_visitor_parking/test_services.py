@@ -42,6 +42,7 @@ from custom_components.city_visitor_parking.const import (
 )
 from custom_components.city_visitor_parking.models import (
     AutoEndState,
+    Balance,
     CoordinatorData,
     Favorite,
     PaidParkingStatus,
@@ -1577,8 +1578,7 @@ async def test_service_list_reservations_response(
     )
     data = CoordinatorData(
         permit_id="permit1",
-        permit_remaining_balance=0,
-        permit_balance_unit=None,
+        balances=(),
         paid_hours=(),
         reservations=(active_reservation, future_reservation, past_reservation),
         favorites=(Favorite(favorite_id="fav1", license_plate="AB1234", name="Ada"),),
@@ -1645,8 +1645,7 @@ async def test_service_list_reservations_stale(hass: HomeAssistant) -> None:
     now = datetime(2025, 1, 1, 12, 0, tzinfo=UTC)
     data = CoordinatorData(
         permit_id="permit1",
-        permit_remaining_balance=0,
-        permit_balance_unit=None,
+        balances=(),
         paid_hours=(),
         reservations=(
             Reservation(
@@ -1703,8 +1702,7 @@ async def test_service_get_status_response(hass: HomeAssistant) -> None:
     effective_range = _override_range_for_day(now, time(11, 0), time(12, 0))
     entry.runtime_data.coordinator.data = CoordinatorData(
         permit_id="permit1",
-        permit_remaining_balance=90,
-        permit_balance_unit=None,
+        balances=(Balance(kind="time", amount=90, unit=None),),
         paid_hours=(provider_range,),
         reservations=(),
         favorites=(),
@@ -1731,7 +1729,9 @@ async def test_service_get_status_response(hass: HomeAssistant) -> None:
     assert response["is_paid_now"] is False
     assert response["window_kind"] == "next"
     assert response["permit_id"] == "permit1"
-    assert response["remaining_balance"] == EXPECTED_REMAINING_MINUTES
+    assert response["balances"] == [
+        {"amount": EXPECTED_REMAINING_MINUTES, "unit": None, "kind": "time"}
+    ]
     assert response["stale"] is False
     assert response["provider_windows_today"] == [
         {
@@ -1760,8 +1760,7 @@ async def test_service_get_status_stale(hass: HomeAssistant) -> None:
     )
     entry.runtime_data.coordinator.data = CoordinatorData(
         permit_id="permit1",
-        permit_remaining_balance=30,
-        permit_balance_unit=None,
+        balances=(Balance(kind="time", amount=30, unit=None),),
         paid_hours=(window,),
         reservations=(),
         favorites=(),
@@ -1816,8 +1815,7 @@ async def test_service_get_status_stale_recomputes_consistent_windows(
     )
     entry.runtime_data.coordinator.data = CoordinatorData(
         permit_id="permit1",
-        permit_remaining_balance=45,
-        permit_balance_unit=None,
+        balances=(Balance(kind="time", amount=45, unit=None),),
         paid_hours=(provider_range,),
         reservations=(),
         favorites=(),
@@ -1985,8 +1983,7 @@ def _coordinator_data(
     """Return empty coordinator data, optionally with selectable parking areas."""
     return CoordinatorData(
         permit_id=permit_id,
-        permit_remaining_balance=0,
-        permit_balance_unit=None,
+        balances=(),
         paid_hours=parking_areas[0].paid_hours if parking_areas else (),
         reservations=(),
         favorites=(),

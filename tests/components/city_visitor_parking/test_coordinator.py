@@ -39,9 +39,9 @@ from custom_components.city_visitor_parking.coordinator import (
     ProviderReservation,
     _as_utc_datetime,
     _compute_paid_parking_status,
+    _normalize_balances,
     _normalize_favorites,
     _normalize_paid_hours,
-    _normalize_remaining_balance,
     _should_attempt_auto_end,
     normalize_reservations,
 )
@@ -51,6 +51,7 @@ from custom_components.city_visitor_parking.helpers import (
 )
 from custom_components.city_visitor_parking.models import (
     AutoEndState,
+    Balance,
     CoordinatorData,
     Favorite,
     PaidParkingStatus,
@@ -102,6 +103,41 @@ async def test_auto_end_reservation_once(hass: HomeAssistant) -> None:
         await coordinator.async_refresh()
 
     provider.end_reservation.assert_awaited_once()
+
+
+async def test_refresh_reads_every_permit_balance(hass: HomeAssistant) -> None:
+    """The coordinator data holds every balance of the library permit."""
+    entry = _create_entry(auto_end=False)
+    entry.add_to_hass(hass)
+    provider = AsyncMock()
+    provider.fetch_all.return_value = (
+        # Attribute objects shaped like the library's Permit and Balance.
+        SimpleNamespace(
+            id="permit",
+            paid_hours=[],
+            balances=[
+                SimpleNamespace(amount=EXPECTED_MINUTES, unit="MINUTE"),
+                SimpleNamespace(amount=-1, unit="EURO"),
+            ],
+        ),
+        [],
+        [],
+        [],
+    )
+    coordinator = CityVisitorParkingCoordinator(
+        hass,
+        provider=provider,
+        config_entry=entry,
+        permit_id="permit",
+        auto_end_state=AutoEndState(),
+    )
+
+    await coordinator.async_refresh()
+
+    assert coordinator.data.balances == (
+        Balance(kind="time", amount=EXPECTED_MINUTES, unit="MINUTE"),
+        Balance(kind="money", amount=0.0, unit="EURO"),
+    )
 
 
 def _parking_area_targets(
@@ -560,23 +596,51 @@ async def test_provider_protocol_raises() -> None:
         await protocol.end_reservation(object(), "res", datetime.now(UTC))
 
 
+def test_normalize_balances_keeps_one_balance_per_kind() -> None:
+    """Every known balance unit maps to a kind; the primary balance comes first."""
+    permit = SimpleNamespace(
+        balances=[
+            SimpleNamespace(amount=2.5, unit="EURO"),
+            SimpleNamespace(amount=EXPECTED_MINUTES, unit="MINUTE"),
+            SimpleNamespace(amount=3, unit="TIMES"),
+        ]
+    )
+
+    assert _normalize_balances(cast("Permit", permit)) == (
+        Balance(kind="money", amount=2.5, unit="EURO"),
+        Balance(kind="time", amount=EXPECTED_MINUTES, unit="MINUTE"),
+        Balance(kind="times", amount=3, unit="TIMES"),
+    )
+
+
+def test_normalize_balances_handles_invalid_input() -> None:
+    """Unusable balances are skipped instead of reported as zero."""
+    assert _normalize_balances(cast("Permit", {})) == ()
+    assert _normalize_balances(cast("Permit", {"balances": None})) == ()
+    assert _normalize_balances(cast("Permit", {"balances": "15"})) == ()
+    permit = {
+        "balances": [
+            {"amount": "bad", "unit": "MINUTE"},
+            {"amount": True, "unit": "EURO"},
+            {"amount": float("nan"), "unit": "EURO"},
+            {"amount": 5, "unit": "POINTS"},
+            {"amount": 5, "unit": 7},
+            # No unit has always meant minutes; negative amounts clamp to zero.
+            {"amount": "-5"},
+            # A second time balance never replaces the first one.
+            {"amount": 30, "unit": "MINUTE"},
+            {"amount": "1.5", "unit": "EURO"},
+        ]
+    }
+
+    assert _normalize_balances(cast("Permit", permit)) == (
+        Balance(kind="time", amount=0.0, unit=None),
+        Balance(kind="money", amount=1.5, unit="EURO"),
+    )
+
+
 def test_normalize_helpers() -> None:
     """Normalization helpers should handle invalid input."""
-    assert (
-        _normalize_remaining_balance(cast("Permit", {"remaining_balance": None})) == 0
-    )
-    assert (
-        _normalize_remaining_balance(cast("Permit", {"remaining_balance": "bad"})) == 0
-    )
-    assert (
-        _normalize_remaining_balance(cast("Permit", {"remaining_balance": "-5"})) == 0
-    )
-    assert (
-        _normalize_remaining_balance(cast("Permit", {"remaining_balance": 15}))
-        == EXPECTED_MINUTES
-    )
-    assert _normalize_remaining_balance(cast("Permit", {"remaining_balance": []})) == 0
-
     now = datetime(2025, 1, 1, 8, 0, tzinfo=UTC)
     validity = _normalize_paid_hours(
         cast(
@@ -669,8 +733,7 @@ async def test_auto_end_skips_when_paid(hass: HomeAssistant) -> None:
 
     data = CoordinatorData(
         permit_id="permit",
-        permit_remaining_balance=0,
-        permit_balance_unit=None,
+        balances=(),
         paid_hours=(),
         reservations=(),
         favorites=(),
@@ -708,8 +771,7 @@ async def test_auto_end_skips_without_reservations(hass: HomeAssistant) -> None:
 
     data = CoordinatorData(
         permit_id="permit",
-        permit_remaining_balance=0,
-        permit_balance_unit=None,
+        balances=(),
         paid_hours=(),
         reservations=(),
         favorites=(),
@@ -1065,8 +1127,7 @@ def _idle_data(
     """Return a CoordinatorData instance representing a quiet, idle state."""
     return CoordinatorData(
         permit_id="permit",
-        permit_remaining_balance=0,
-        permit_balance_unit=None,
+        balances=(),
         paid_hours=(),
         reservations=(),
         favorites=(),

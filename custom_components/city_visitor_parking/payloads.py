@@ -277,7 +277,8 @@ def build_status_payload(
     Top-level fields describe the default parking area. ``parking_areas`` repeats the
     state and window per selectable parking area (default first) so the card can switch
     parking areas without another request; it is empty when the permit has no parking
-    areas.
+    areas. ``balances`` lists every permit balance (primary first) with its kind, so
+    the card does not have to map library units itself.
     """
     provider_windows_today = windows_for_today(data.paid_hours, {}, now)
     provider_window = current_or_next_window(data.paid_hours, now)
@@ -307,8 +308,10 @@ def build_status_payload(
         "provider_window_end": (
             utc_iso(provider_window.end) if provider_window else None
         ),
-        "remaining_balance": max(0.0, data.permit_remaining_balance),
-        "balance_unit": data.permit_balance_unit,
+        "balances": [
+            {"amount": balance.amount, "unit": balance.unit, "kind": balance.kind}
+            for balance in data.balances
+        ],
         "permit_id": data.permit_id,
         "parking_areas": parking_areas,
         # Whether a parking area ID outside ``parking_areas`` may be entered.

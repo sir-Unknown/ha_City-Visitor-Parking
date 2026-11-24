@@ -37,8 +37,7 @@ const PAYLOAD: PaidParkingStatusResponse = {
   window_kind: PARKING_AREA_10.window_kind,
   window_start: PARKING_AREA_10.window_start,
   window_end: PARKING_AREA_10.window_end,
-  remaining_balance: 120,
-  balance_unit: "MINUTE",
+  balances: [{ amount: 120, unit: "MINUTE", kind: "time" }],
   parking_areas: [PARKING_AREA_10, PARKING_AREA_630],
   parking_area_free_input: false,
 };
@@ -119,7 +118,7 @@ describe("parking area selection", () => {
     ).toEqual([]);
   });
 
-  it("uses the selected parking area window and keeps the permit balance", () => {
+  it("uses the selected parking area window and keeps the permit balances", () => {
     const status = applyParkingAreaToStatus(
       normalizePaidParkingStatus(PAYLOAD),
       PARKING_AREA_630,
@@ -129,8 +128,7 @@ describe("parking area selection", () => {
       kind: "next",
       start: PARKING_AREA_630.window_start,
       end: PARKING_AREA_630.window_end,
-      remainingMinutes: 120,
-      balanceUnit: "MINUTE",
+      balances: [{ amount: 120, unit: "MINUTE", kind: "time" }],
     });
   });
 

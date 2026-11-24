@@ -2,6 +2,8 @@
 import { css, html, nothing, type TemplateResult } from "lit";
 import { keyed } from "lit/directives/keyed.js";
 import type {
+  BalanceKind,
+  BalancePayload,
   DeviceEntry,
   FavoriteItem,
   HomeAssistant,
@@ -47,6 +49,7 @@ import {
   parseDateTimeValue,
   resolveCardParkingArea,
   resolveCardParkingAreaId,
+  selectCardBalances,
   setPendingPermitDefaults,
   startedReservationMessage,
 } from "./helpers";
@@ -84,6 +87,8 @@ type CardConfig = {
   default_license_plate?: string;
   config_entry_id?: string;
   show_parking_area?: boolean;
+  /** Balance kinds shown in the card; all kinds when unset. */
+  balances?: BalanceKind[];
   device_id?: string;
 };
 type FavoriteActionState = {
@@ -120,6 +125,7 @@ class CityVisitorParkingNewReservationCard extends BaseLocalizedCard<CardConfig>
       .favorite-actions {
         display: flex;
         align-items: center;
+        gap: var(--ha-space-2, 8px);
       }
       .favorite-actions ha-badge {
         --badge-color: var(--secondary-text-color);
@@ -161,8 +167,7 @@ class CityVisitorParkingNewReservationCard extends BaseLocalizedCard<CardConfig>
   _windowKind: "current" | "next" | null = null;
   _windowStartIso: string | null = null;
   _windowEndIso: string | null = null;
-  _remainingMinutes: number | null = null;
-  _balanceUnit: string | null = null;
+  _balances: BalancePayload[] = [];
   _paidParkingStatusTsByEntryId = new Map<string, number>();
   _paidParkingStatusInFlightByEntryId = new Map<string, Promise<void>>();
   _paidParkingStatusByEntryId = new Map<string, PaidParkingStatus>();
@@ -775,8 +780,8 @@ class CityVisitorParkingNewReservationCard extends BaseLocalizedCard<CardConfig>
             startButtonTimeConflict: plateAlreadyActive,
             startDisabled,
             hasTarget,
-            remainingMinutes: this._remainingMinutes,
-            balanceUnit: this._balanceUnit,
+            balances: selectCardBalances(this._balances, this._config.balances),
+            language: getHassLanguage(this._hass),
             localize: localizeFn,
           })}
         </div>
