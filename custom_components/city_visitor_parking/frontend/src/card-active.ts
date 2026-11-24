@@ -12,6 +12,7 @@ import {
   RESERVATION_ENDED_EVENT,
   RESERVATION_STARTED_EVENT,
   buildPermitTitleMap,
+  canEditReservationStart,
   fetchPermitEntries,
   fetchReservations,
   filterDomainDevices,
@@ -401,7 +402,12 @@ class CityVisitorParkingActiveCard extends BaseLocalizedCard<CardConfig> {
       : null;
     const parkingAreaLabel = formatReservationParkingArea(reservation);
     const updateFlags = this._getReservationUpdateFlags(reservation.device_id);
-    const allowStart = Boolean(updateFlags & UPDATE_START_FLAG);
+    // Without a native start update, the backend replaces a reservation that
+    // has not started yet to change its start time.
+    const allowStart = canEditReservationStart(
+      Boolean(updateFlags & UPDATE_START_FLAG),
+      reservation.start_time,
+    );
     const allowEnd = Boolean(updateFlags & UPDATE_END_FLAG);
     const isBusy = this._reservationInFlight.has(reservation.reservation_id);
     const endButtonSuccess = this._endButtonSuccessByReservationId.has(
@@ -688,18 +694,26 @@ class CityVisitorParkingActiveCard extends BaseLocalizedCard<CardConfig> {
     const { reservation, deviceId } = target;
     if (!this._beginReservationAction(reservationId)) return;
     const updateFlags = this._getReservationUpdateFlags(deviceId);
-    const allowStart = Boolean(updateFlags & UPDATE_START_FLAG);
+    const nativeStart = Boolean(updateFlags & UPDATE_START_FLAG);
+    const currentStartValue = formatOptionalDateTimeLocal(
+      reservation.start_time,
+    );
+    const startOverride = this._getReservationInputOverride(
+      reservationId,
+      "start",
+    )?.trim();
+    // Without a native start update, a start time is only sent when it
+    // changed: the backend then replaces the reservation, or explains why a
+    // reservation that has started meanwhile keeps its start time.
+    const allowStart =
+      nativeStart ||
+      (startOverride !== undefined && startOverride !== currentStartValue);
     const allowEnd = Boolean(updateFlags & UPDATE_END_FLAG);
     if (!allowStart && !allowEnd) {
       this._endReservationAction(reservationId);
       return;
     }
-    const startValue = allowStart
-      ? (
-          this._getReservationInputOverride(reservationId, "start") ??
-          formatOptionalDateTimeLocal(reservation.start_time)
-        ).trim()
-      : "";
+    const startValue = allowStart ? (startOverride ?? currentStartValue) : "";
     const endValue = allowEnd
       ? (
           this._getReservationInputOverride(reservationId, "end") ??
@@ -741,6 +755,17 @@ class CityVisitorParkingActiveCard extends BaseLocalizedCard<CardConfig> {
         this._errorMessage(err, "message.reservation_update_failed"),
         "warning",
       );
+      // A changed start of a reservation that has started meanwhile is refused
+      // and its field is now disabled; forget it, so a later end time change
+      // does not send the refused start again.
+      if (
+        !nativeStart &&
+        allowStart &&
+        !canEditReservationStart(false, reservation.start_time)
+      ) {
+        delete this._reservationInputValues.get(reservationId)?.start;
+        this._requestRender();
+      }
       this._endReservationAction(reservationId);
       return;
     }
