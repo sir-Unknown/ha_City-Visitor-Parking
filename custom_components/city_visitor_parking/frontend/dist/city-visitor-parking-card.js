@@ -829,6 +829,11 @@ var parseDateTimeValue = (value) => {
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? null : date;
 };
+var canEditReservationStart = (nativeStartUpdate, startTime, now = /* @__PURE__ */ new Date()) => {
+  if (nativeStartUpdate) return true;
+  const start = parseDateTimeValue(startTime);
+  return start !== null && start > now;
+};
 var startedReservationMessage = (response, now, language, localizeKey) => {
   const format = (value) => {
     const date = parseDateTimeValue(value) ?? now;
@@ -3071,7 +3076,10 @@ var CityVisitorParkingActiveCard = class extends BaseLocalizedCard {
     const permitLabel = reservation.device_id ? this._permitLabelsByDeviceId.get(reservation.device_id) : null;
     const parkingAreaLabel = formatReservationParkingArea(reservation);
     const updateFlags = this._getReservationUpdateFlags(reservation.device_id);
-    const allowStart = Boolean(updateFlags & UPDATE_START_FLAG);
+    const allowStart = canEditReservationStart(
+      Boolean(updateFlags & UPDATE_START_FLAG),
+      reservation.start_time
+    );
     const allowEnd = Boolean(updateFlags & UPDATE_END_FLAG);
     const isBusy = this._reservationInFlight.has(reservation.reservation_id);
     const endButtonSuccess = this._endButtonSuccessByReservationId.has(
@@ -3294,13 +3302,21 @@ var CityVisitorParkingActiveCard = class extends BaseLocalizedCard {
     const { reservation, deviceId } = target;
     if (!this._beginReservationAction(reservationId)) return;
     const updateFlags = this._getReservationUpdateFlags(deviceId);
-    const allowStart = Boolean(updateFlags & UPDATE_START_FLAG);
+    const nativeStart = Boolean(updateFlags & UPDATE_START_FLAG);
+    const currentStartValue = formatOptionalDateTimeLocal(
+      reservation.start_time
+    );
+    const startOverride = this._getReservationInputOverride(
+      reservationId,
+      "start"
+    )?.trim();
+    const allowStart = nativeStart || startOverride !== void 0 && startOverride !== currentStartValue;
     const allowEnd = Boolean(updateFlags & UPDATE_END_FLAG);
     if (!allowStart && !allowEnd) {
       this._endReservationAction(reservationId);
       return;
     }
-    const startValue = allowStart ? (this._getReservationInputOverride(reservationId, "start") ?? formatOptionalDateTimeLocal(reservation.start_time)).trim() : "";
+    const startValue = allowStart ? startOverride ?? currentStartValue : "";
     const endValue = allowEnd ? (this._getReservationInputOverride(reservationId, "end") ?? formatOptionalDateTimeLocal(reservation.end_time)).trim() : "";
     const startDate = allowStart ? parseDateTimeValue(startValue) : parseDateTimeValue(reservation.start_time);
     const endDate = allowEnd ? parseDateTimeValue(endValue) : parseDateTimeValue(reservation.end_time);

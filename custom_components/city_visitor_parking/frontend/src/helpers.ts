@@ -374,6 +374,22 @@ export const parseDateTimeValue = (
 };
 
 /**
+ * Whether the card lets the user change the start time of a reservation.
+ * A provider that updates start times natively allows it at any time. For
+ * other providers the backend replaces the reservation, which it only does
+ * while the reservation has not started yet.
+ */
+export const canEditReservationStart = (
+  nativeStartUpdate: boolean,
+  startTime: string | undefined | null,
+  now: Date = new Date(),
+): boolean => {
+  if (nativeStartUpdate) return true;
+  const start = parseDateTimeValue(startTime);
+  return start !== null && start > now;
+};
+
+/**
  * Returns the message for a reservation the provider confirmed: running until
  * its end, or planned from its start to its end. Times on the same day as
  * `now` show only the time; other days add the short weekday and date.

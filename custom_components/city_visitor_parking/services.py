@@ -761,7 +761,9 @@ async def _async_handle_update_reservation(call: ServiceCall) -> ServiceResponse
     """Handle reservation update service.
 
     Returns the reservation as changed. A different license plate replaces the
-    reservation, so the returned ``reservation_id`` is then a new one.
+    reservation, so the returned ``reservation_id`` is then a new one. So does a
+    new start time for a provider that can only change the end time natively,
+    which is allowed only while the reservation has not started yet.
     """
     runtime = _runtime_from_call(call)
     reservation_id: str = call.data[ATTR_RESERVATION_ID]
@@ -799,19 +801,22 @@ async def _async_handle_update_reservation(call: ServiceCall) -> ServiceResponse
 
     update_fields = set(reservation_update_fields(runtime.provider))
     allow_start = ATTR_START_TIME in update_fields
-    allow_end = ATTR_END_TIME in update_fields
-    start_dt = start_dt_raw if start_dt_raw and allow_start else None
-    end_dt = end_dt_raw if end_dt_raw and allow_end else None
-    if start_raw is not None and not allow_start:
-        _LOGGER.debug(
-            "Ignoring start_time update for device %s (unsupported by provider)",
-            call.data[ATTR_DEVICE_ID],
+    # A start time equal to the current one is no change, so an end-only update
+    # that repeats the start is still done natively.
+    start_changed = start_dt_raw is not None and (
+        current is None or start_dt_raw != current.start_time
+    )
+    if start_changed and not allow_start:
+        return await _replace_planned_reservation(
+            call, reservation_id, current, start_dt_raw, end_dt_raw
         )
-    if end_raw is not None and not allow_end:
-        _LOGGER.debug(
-            "Ignoring end_time update for device %s (unsupported by provider)",
-            call.data[ATTR_DEVICE_ID],
+    if end_dt_raw is not None and ATTR_END_TIME not in update_fields:
+        raise ServiceValidationError(
+            translation_domain=DOMAIN,
+            translation_key="update_end_time_not_supported",
         )
+    start_dt = start_dt_raw if allow_start else None
+    end_dt = end_dt_raw
     if start_dt is None and end_dt is None:
         raise ServiceValidationError(
             translation_domain=DOMAIN,
@@ -858,6 +863,37 @@ async def _async_handle_update_reservation(call: ServiceCall) -> ServiceResponse
     )
     return _updated_reservation_response(
         provider_reservation, current, reservation_id, start_dt, end_dt
+    )
+
+
+async def _replace_planned_reservation(
+    call: ServiceCall,
+    reservation_id: str,
+    current: Reservation | None,
+    start_time: datetime | None,
+    end_time: datetime | None,
+) -> dict[str, JsonValueType]:
+    """Change the start time by replacing a reservation that has not started.
+
+    Used when the provider can only change the end time natively. A started
+    reservation is never replaced for a new start time: ending it would end the
+    parking that is running now. An unknown reservation is refused as well,
+    because whether it has started cannot be checked.
+    """
+    if current is None:
+        raise ServiceValidationError(
+            translation_domain=DOMAIN,
+            translation_key="update_start_time_unknown_reservation",
+        )
+    if current.start_time <= dt_util.utcnow():
+        raise ServiceValidationError(
+            translation_domain=DOMAIN,
+            translation_key="update_start_time_reservation_started",
+        )
+    # The same license plate makes the replacement end the current reservation
+    # first; missing values are taken from the current reservation.
+    return await _fallback_update_reservation(
+        call, reservation_id, start_time, end_time, None
     )
 
 
