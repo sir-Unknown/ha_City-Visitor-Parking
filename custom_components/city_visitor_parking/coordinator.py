@@ -669,10 +669,15 @@ def _normalize_balances(permit: Permit) -> tuple[Balance, ...]:
     for raw_balance in cast("list[object] | tuple[object, ...]", raw_balances):
         unit = get_attr(raw_balance, "unit")
         if unit is not None and not isinstance(unit, str):
+            _LOGGER.debug("Skipping a permit balance without a text unit")
             continue
         kind = _BALANCE_KIND_BY_UNIT.get(unit)
         amount = _normalize_balance_amount(get_attr(raw_balance, "amount"))
-        if kind is None or amount is None:
+        if kind is None:
+            _LOGGER.debug("Skipping a permit balance with unknown unit %r", unit)
+            continue
+        if amount is None:
+            _LOGGER.debug("Skipping a %s balance whose amount is not a number", kind)
             continue
         # The library sends at most one balance per unit, but MINUTE and no unit
         # both map to time; the first one is the primary balance, so it wins.
