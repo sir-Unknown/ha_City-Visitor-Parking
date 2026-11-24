@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import logging
+import math
 import time
 from datetime import UTC, datetime, timedelta
-from typing import TYPE_CHECKING, Protocol, cast
+from typing import TYPE_CHECKING, Final, Protocol, cast
 
 from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers import issue_registry as ir
@@ -14,7 +15,15 @@ from homeassistant.helpers.update_coordinator import (
     UpdateFailed,
 )
 from homeassistant.util import dt as dt_util
-from pycityvisitorparking import AuthError, NetworkError, ProviderError
+from pycityvisitorparking import (
+    BALANCE_UNIT_EURO,
+    BALANCE_UNIT_MINUTE,
+    BALANCE_UNIT_TIMES,
+    RESERVATION_TARGET_SELECTION_FREE_INPUT,
+    AuthError,
+    NetworkError,
+    ProviderError,
+)
 from pycityvisitorparking.exceptions import (
     NotFoundError,
     PyCityVisitorParkingError,
@@ -25,6 +34,9 @@ from pycityvisitorparking.exceptions import (
 from .auth import async_provider_login, has_stored_credentials
 from .const import (
     AUTO_END_COOLDOWN,
+    BALANCE_KIND_MONEY,
+    BALANCE_KIND_TIME,
+    BALANCE_KIND_TIMES,
     CONF_AUTO_END,
     CONF_DEFAULT_PARKING_AREA,
     DEFAULT_UPDATE_INTERVAL,
@@ -40,6 +52,7 @@ from .const import (
 from .helpers import get_attr
 from .models import (
     AutoEndState,
+    Balance,
     CoordinatorData,
     PaidParkingStatus,
     ParkingArea,
@@ -59,6 +72,8 @@ if TYPE_CHECKING:
     from pycityvisitorparking import Permit
     from pycityvisitorparking import Reservation as ProviderReservation
     from pycityvisitorparking.provider.base import BaseProvider as ProviderProtocol
+
+    from .models import BalanceKind
 else:
 
     class ProviderProtocol(Protocol):
@@ -83,6 +98,15 @@ else:
     ProviderReservation = object
 
 _LOGGER = logging.getLogger(__name__)
+
+# Library balance unit to integration balance kind. A balance without a unit has
+# always been shown as minutes, so it stays a time balance.
+_BALANCE_KIND_BY_UNIT: Final[Mapping[str | None, BalanceKind]] = {
+    BALANCE_UNIT_MINUTE: BALANCE_KIND_TIME,
+    None: BALANCE_KIND_TIME,
+    BALANCE_UNIT_EURO: BALANCE_KIND_MONEY,
+    BALANCE_UNIT_TIMES: BALANCE_KIND_TIMES,
+}
 
 
 def permit_not_found_issue_id(entry_id: str) -> str:
@@ -234,8 +258,7 @@ class CityVisitorParkingCoordinator(TimestampDataUpdateCoordinator[CoordinatorDa
             raise UpdateFailed("Unexpected error") from err
 
         self._check_provider_permit(permit)
-        remaining_balance = _normalize_remaining_balance(permit)
-        balance_unit = get_attr(permit, "balance_unit")
+        balances = _normalize_balances(permit)
         normalized_reservations = normalize_reservations(reservations)
         normalized_favorites = _normalize_favorites(favorites)
         now = dt_util.utcnow()
@@ -260,14 +283,17 @@ class CityVisitorParkingCoordinator(TimestampDataUpdateCoordinator[CoordinatorDa
 
         data = CoordinatorData(
             permit_id=self._permit_id,
-            permit_remaining_balance=remaining_balance,
-            permit_balance_unit=balance_unit if isinstance(balance_unit, str) else None,
+            balances=balances,
             paid_hours=tuple(paid_hours),
             reservations=tuple(normalized_reservations),
             favorites=tuple(normalized_favorites),
             paid_parking_status=paid_parking_status,
             active_reservations=tuple(active_reservations),
             parking_areas=tuple(parking_areas),
+            # The library accepts other target IDs only while the permit lists targets.
+            parking_area_free_input=bool(parking_areas)
+            and getattr(self._provider, "reservation_target_selection", None)
+            == RESERVATION_TARGET_SELECTION_FREE_INPUT,
         )
 
         next_interval = self._compute_next_interval(data, now)
@@ -418,8 +444,16 @@ class CityVisitorParkingCoordinator(TimestampDataUpdateCoordinator[CoordinatorDa
         for reservation in data.active_reservations:
             # Parking areas have different paid hours, so judge each reservation by its
             # own parking area; fall back to the permit's default parking area when it
-            # is unknown.
+            # is unknown. A free input permit's unlisted (typed) parking area has its
+            # own, unknown paid hours: its reservation is not ended, because the
+            # default parking area may be free while that one is still paid.
             parking_area = data.parking_area(reservation.parking_area_id)
+            if (
+                parking_area is None
+                and reservation.parking_area_id is not None
+                and data.parking_area_free_input
+            ):
+                continue
             availability = (
                 parking_area.paid_parking_status
                 if parking_area is not None
@@ -598,24 +632,29 @@ def _normalize_parking_areas(
     """
     if not isinstance(targets, list):
         return []
-    parking_areas: list[ParkingArea] = []
-    for raw_parking_area in cast("list[object]", targets):
-        parking_area_id = get_attr(raw_parking_area, "id")
-        if parking_area_id is None:
-            continue
-        name = get_attr(raw_parking_area, "name")
-        paid_hours = _normalize_paid_hours(raw_parking_area)
-        parking_areas.append(
-            ParkingArea(
-                parking_area_id=str(parking_area_id),
-                name=str(name) if name else str(parking_area_id),
-                paid_hours=tuple(paid_hours),
-                paid_parking_status=_compute_paid_parking_status(
-                    paid_hours, options, now
-                ),
-            )
-        )
-    return parking_areas
+    return [
+        parking_area
+        for raw_parking_area in cast("list[object]", targets)
+        if (parking_area := normalize_parking_area(raw_parking_area, options, now))
+        is not None
+    ]
+
+
+def normalize_parking_area(
+    target: object, options: Mapping[str, object], now: datetime
+) -> ParkingArea | None:
+    """Normalize one library reservation target to a parking area; None without ID."""
+    parking_area_id = get_attr(target, "id")
+    if parking_area_id is None:
+        return None
+    name = get_attr(target, "name")
+    paid_hours = _normalize_paid_hours(target)
+    return ParkingArea(
+        parking_area_id=str(parking_area_id),
+        name=str(name) if name else str(parking_area_id),
+        paid_hours=tuple(paid_hours),
+        paid_parking_status=_compute_paid_parking_status(paid_hours, options, now),
+    )
 
 
 def _order_default_parking_area_first(
@@ -634,17 +673,48 @@ def _order_default_parking_area_first(
     return parking_areas
 
 
-def _normalize_remaining_balance(permit: Permit) -> float:
-    """Normalize remaining balance (minutes, times, or monetary amount)."""
-    raw = get_attr(permit, "remaining_balance")
-    if raw is None:
-        return 0.0
+def _normalize_balances(permit: Permit) -> tuple[Balance, ...]:
+    """Return the permit's balances, at most one per kind, primary first.
+
+    A balance with a unit the integration does not know, or an amount that is
+    not a number, is skipped instead of shown as zero, which could trigger
+    "balance used up" automations. Amounts are clamped to zero or more.
+    """
+    raw_balances = get_attr(permit, "balances")
+    if not isinstance(raw_balances, list | tuple):
+        return ()
+    balances: list[Balance] = []
+    for raw_balance in cast("list[object] | tuple[object, ...]", raw_balances):
+        unit = get_attr(raw_balance, "unit")
+        if unit is not None and not isinstance(unit, str):
+            _LOGGER.debug("Skipping a permit balance without a text unit")
+            continue
+        kind = _BALANCE_KIND_BY_UNIT.get(unit)
+        amount = _normalize_balance_amount(get_attr(raw_balance, "amount"))
+        if kind is None:
+            _LOGGER.debug("Skipping a permit balance with unknown unit %r", unit)
+            continue
+        if amount is None:
+            _LOGGER.debug("Skipping a %s balance whose amount is not a number", kind)
+            continue
+        # The library sends at most one balance per unit, but MINUTE and no unit
+        # both map to time; the first one is the primary balance, so it wins.
+        if any(balance.kind == kind for balance in balances):
+            continue
+        balances.append(Balance(kind=kind, amount=amount, unit=unit))
+    return tuple(balances)
+
+
+def _normalize_balance_amount(raw: object) -> float | None:
+    """Return a non-negative balance amount, or None when it is not a number."""
+    if isinstance(raw, bool) or not isinstance(raw, int | float | str):
+        return None
     try:
-        if not isinstance(raw, int | float | str):
-            return 0.0
         value = float(raw)
-    except TypeError, ValueError:
-        return 0.0
+    except ValueError:
+        return None
+    if not math.isfinite(value):
+        return None
     return max(0.0, value)
 
 

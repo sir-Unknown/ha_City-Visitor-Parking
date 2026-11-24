@@ -42,6 +42,7 @@ from custom_components.city_visitor_parking.const import (
 )
 from custom_components.city_visitor_parking.models import (
     AutoEndState,
+    Balance,
     CoordinatorData,
     Favorite,
     PaidParkingStatus,
@@ -1577,8 +1578,7 @@ async def test_service_list_reservations_response(
     )
     data = CoordinatorData(
         permit_id="permit1",
-        permit_remaining_balance=0,
-        permit_balance_unit=None,
+        balances=(),
         paid_hours=(),
         reservations=(active_reservation, future_reservation, past_reservation),
         favorites=(Favorite(favorite_id="fav1", license_plate="AB1234", name="Ada"),),
@@ -1645,8 +1645,7 @@ async def test_service_list_reservations_stale(hass: HomeAssistant) -> None:
     now = datetime(2025, 1, 1, 12, 0, tzinfo=UTC)
     data = CoordinatorData(
         permit_id="permit1",
-        permit_remaining_balance=0,
-        permit_balance_unit=None,
+        balances=(),
         paid_hours=(),
         reservations=(
             Reservation(
@@ -1703,8 +1702,7 @@ async def test_service_get_status_response(hass: HomeAssistant) -> None:
     effective_range = _override_range_for_day(now, time(11, 0), time(12, 0))
     entry.runtime_data.coordinator.data = CoordinatorData(
         permit_id="permit1",
-        permit_remaining_balance=90,
-        permit_balance_unit=None,
+        balances=(Balance(kind="time", amount=90, unit=None),),
         paid_hours=(provider_range,),
         reservations=(),
         favorites=(),
@@ -1731,7 +1729,9 @@ async def test_service_get_status_response(hass: HomeAssistant) -> None:
     assert response["is_paid_now"] is False
     assert response["window_kind"] == "next"
     assert response["permit_id"] == "permit1"
-    assert response["remaining_balance"] == EXPECTED_REMAINING_MINUTES
+    assert response["balances"] == [
+        {"amount": EXPECTED_REMAINING_MINUTES, "unit": None, "kind": "time"}
+    ]
     assert response["stale"] is False
     assert response["provider_windows_today"] == [
         {
@@ -1760,8 +1760,7 @@ async def test_service_get_status_stale(hass: HomeAssistant) -> None:
     )
     entry.runtime_data.coordinator.data = CoordinatorData(
         permit_id="permit1",
-        permit_remaining_balance=30,
-        permit_balance_unit=None,
+        balances=(Balance(kind="time", amount=30, unit=None),),
         paid_hours=(window,),
         reservations=(),
         favorites=(),
@@ -1816,8 +1815,7 @@ async def test_service_get_status_stale_recomputes_consistent_windows(
     )
     entry.runtime_data.coordinator.data = CoordinatorData(
         permit_id="permit1",
-        permit_remaining_balance=45,
-        permit_balance_unit=None,
+        balances=(Balance(kind="time", amount=45, unit=None),),
         paid_hours=(provider_range,),
         reservations=(),
         favorites=(),
@@ -1985,8 +1983,7 @@ def _coordinator_data(
     """Return empty coordinator data, optionally with selectable parking areas."""
     return CoordinatorData(
         permit_id=permit_id,
-        permit_remaining_balance=0,
-        permit_balance_unit=None,
+        balances=(),
         paid_hours=parking_areas[0].paid_hours if parking_areas else (),
         reservations=(),
         favorites=(),
@@ -2071,6 +2068,37 @@ async def test_service_start_reservation_rejects_unknown_parking_area(
 
     assert excinfo.value.translation_key == "invalid_parking_area"
     provider.start_reservation.assert_not_awaited()
+
+
+async def test_service_start_reservation_passes_a_free_input_parking_area(
+    hass: HomeAssistant,
+) -> None:
+    """With free input an unlisted parking area ID reaches the provider, trimmed."""
+    await async_setup_services(hass)
+    entry, device, provider = _create_entry_with_device(hass, "permit1")
+    entry.runtime_data.coordinator.data = replace(
+        _coordinator_data("permit1", (_parking_area("10"),)),
+        parking_area_free_input=True,
+    )
+    now = datetime(2025, 1, 1, 12, 0, tzinfo=UTC)
+
+    with freeze_time(now):
+        await hass.services.async_call(
+            DOMAIN,
+            SERVICE_START_RESERVATION,
+            {
+                ATTR_DEVICE_ID: device.id,
+                ATTR_START_TIME: now + timedelta(hours=1),
+                ATTR_END_TIME: now + timedelta(hours=2),
+                ATTR_LICENSE_PLATE: "AB1234",
+                ATTR_PARKING_AREA_ID: " 2222 ",
+            },
+            blocking=True,
+        )
+
+    assert (
+        provider.start_reservation.await_args.kwargs["reservation_target_id"] == "2222"
+    )
 
 
 def _create_entry_with_device(

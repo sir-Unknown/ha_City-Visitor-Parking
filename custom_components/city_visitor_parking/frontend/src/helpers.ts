@@ -1,5 +1,7 @@
 /** Shared frontend helpers for permit selection, status handling, and formatting. */
 import type {
+  BalanceKind,
+  BalancePayload,
   DeviceEntry,
   FavoriteItem,
   HomeAssistant,
@@ -18,6 +20,8 @@ import { localize } from "./translations";
 export const DOMAIN = "city_visitor_parking";
 /** Websocket command returning the status and parking areas of one permit. */
 export const WS_GET_STATUS = "city_visitor_parking/status";
+/** Websocket command returning the status of one parking area, also a typed ID. */
+export const WS_GET_PARKING_AREA = "city_visitor_parking/parking_area";
 /** Websocket command returning the reservations held by the coordinator. */
 export const WS_LIST_RESERVATIONS = "city_visitor_parking/reservations";
 export const RESERVATION_STARTED_EVENT =
@@ -30,9 +34,11 @@ export const EMPTY_PAID_PARKING_STATUS: PaidParkingStatus = {
   kind: null,
   start: null,
   end: null,
-  remainingMinutes: null,
-  balanceUnit: null,
+  balances: [],
 };
+
+/** Every balance kind, in the order the card editor lists them. */
+export const BALANCE_KINDS: readonly BalanceKind[] = ["time", "money", "times"];
 
 /** Normalizes free-form text for case-insensitive matching. */
 export const normalizeMatchValue = (value: string | undefined | null): string =>
@@ -114,8 +120,7 @@ export const applyPaidParkingStatus = (
     _windowKind: PaidParkingStatus["kind"];
     _windowStartIso: string | null;
     _windowEndIso: string | null;
-    _remainingMinutes: number | null;
-    _balanceUnit: string | null;
+    _balances: BalancePayload[];
   },
   status: PaidParkingStatus | null,
 ): void => {
@@ -124,8 +129,7 @@ export const applyPaidParkingStatus = (
     _windowKind: status?.kind ?? null,
     _windowStartIso: status?.start ?? null,
     _windowEndIso: status?.end ?? null,
-    _remainingMinutes: status?.remainingMinutes ?? null,
-    _balanceUnit: status?.balanceUnit ?? null,
+    _balances: status?.balances ?? [],
   });
 };
 
@@ -159,18 +163,48 @@ const normalizeParkingAreaPaidWindow = (
   };
 };
 
+const isBalanceKind = (value: unknown): value is BalanceKind =>
+  BALANCE_KINDS.includes(value as BalanceKind);
+
+/** Keeps the well-formed balances of a status payload, in permit order. */
+const normalizeBalances = (value: unknown): BalancePayload[] =>
+  Array.isArray(value)
+    ? (value as Array<Partial<BalancePayload> | null | undefined>).flatMap(
+        (balance) =>
+          balance &&
+          isBalanceKind(balance.kind) &&
+          typeof balance.amount === "number" &&
+          Number.isFinite(balance.amount)
+            ? [
+                {
+                  amount: balance.amount,
+                  unit: nonEmptyString(balance.unit),
+                  kind: balance.kind,
+                },
+              ]
+            : [],
+      )
+    : [];
+
 /** Normalizes the top-level (default parking area) part of a status payload. */
 export const normalizePaidParkingStatus = (
   payload: PaidParkingStatusResponse | null | undefined,
-): PaidParkingStatus => {
-  const balance = payload?.remaining_balance;
-  return {
-    ...normalizeParkingAreaPaidWindow(payload),
-    remainingMinutes:
-      typeof balance === "number" && Number.isFinite(balance) ? balance : null,
-    balanceUnit: nonEmptyString(payload?.balance_unit),
-  };
-};
+): PaidParkingStatus => ({
+  ...normalizeParkingAreaPaidWindow(payload),
+  balances: normalizeBalances(payload?.balances),
+});
+
+/**
+ * Returns the balances the card shows: those of the configured kinds, in permit
+ * order. Without a configured list every kind is shown.
+ */
+export const selectCardBalances = (
+  balances: readonly BalancePayload[],
+  kinds: readonly BalanceKind[] | undefined,
+): BalancePayload[] =>
+  kinds
+    ? balances.filter((balance) => kinds.includes(balance.kind))
+    : [...balances];
 
 /** Returns the usable parking area entries of a status payload, default parking area first. */
 export const normalizeParkingAreas = (
@@ -198,6 +232,24 @@ export const applyParkingAreaToStatus = (
 /** Minimum number of parking areas before a permit offers a parking area choice. */
 export const MIN_SELECTABLE_PARKING_AREAS = 2;
 
+/** Returns whether a status payload allows entering an unlisted parking area ID. */
+export const parkingAreaFreeInput = (
+  payload: PaidParkingStatusResponse | null | undefined,
+): boolean =>
+  payload?.parking_area_free_input === true &&
+  normalizeParkingAreas(payload).length > 0;
+
+/**
+ * Returns whether a permit offers a parking area choice: several parking areas, or
+ * a default parking area plus free input of another ID.
+ */
+export const offersParkingAreaChoice = (
+  parkingAreas: readonly ParkingAreaStatus[],
+  freeInput: boolean,
+): boolean =>
+  parkingAreas.length >= MIN_SELECTABLE_PARKING_AREAS ||
+  (freeInput && parkingAreas.length > 0);
+
 /**
  * Resolves the parking area the new-reservation card uses for a permit: the
  * user's pick in the card's parking area field, else the first parking area,
@@ -215,6 +267,21 @@ export const resolveCardParkingArea = (
     : undefined) ??
   parkingAreas[0] ??
   null;
+
+/**
+ * Resolves the parking area ID the new-reservation card books in. Like
+ * `resolveCardParkingArea`, but with free input a pick outside the list is kept;
+ * the provider validates it.
+ */
+export const resolveCardParkingAreaId = (
+  parkingAreas: readonly ParkingAreaStatus[],
+  pickedParkingAreaId: string | null | undefined,
+  freeInput: boolean,
+): string | null => {
+  const picked = nonEmptyString(pickedParkingAreaId?.trim());
+  if (picked && freeInput && parkingAreas.length > 0) return picked;
+  return resolveCardParkingArea(parkingAreas, picked)?.parking_area_id ?? null;
+};
 
 /**
  * Loads the reservations of one integration device.
@@ -248,22 +315,47 @@ export const fetchReservations = async (
   return "response" in result ? result.response : result;
 };
 
-/** Fetches the parking areas of one permit from the status websocket; empty on failure. */
-export const fetchPermitParkingAreas = async (
+/** Returns whether a permit offers a parking area choice, from the status websocket; false on failure. */
+export const fetchPermitParkingAreaChoice = async (
   hass: HomeAssistant,
   entryId: string,
-): Promise<ParkingAreaStatus[]> => {
+): Promise<boolean> => {
   try {
-    return normalizeParkingAreas(
-      await hass.callWS<PaidParkingStatusResponse>({
-        type: WS_GET_STATUS,
-        config_entry_id: entryId,
-      }),
+    const payload = await hass.callWS<PaidParkingStatusResponse>({
+      type: WS_GET_STATUS,
+      config_entry_id: entryId,
+    });
+    return offersParkingAreaChoice(
+      normalizeParkingAreas(payload),
+      parkingAreaFreeInput(payload),
     );
   } catch {
-    return [];
+    return false;
   }
 };
+
+/**
+ * Fetches the status of one parking area, also a typed free input ID that the
+ * provider resolves with its own paid hours. Rejects with the websocket error;
+ * see `isInvalidParkingAreaError`.
+ */
+export const fetchParkingAreaStatus = (
+  hass: HomeAssistant,
+  entryId: string,
+  parkingAreaId: string,
+): Promise<ParkingAreaStatus> =>
+  hass.callWS<ParkingAreaStatus>({
+    type: WS_GET_PARKING_AREA,
+    config_entry_id: entryId,
+    parking_area_id: parkingAreaId,
+  });
+
+/** Returns whether a websocket error means the permit cannot park in that parking area. */
+export const isInvalidParkingAreaError = (err: unknown): boolean =>
+  typeof err === "object" &&
+  err !== null &&
+  "code" in err &&
+  err.code === "invalid_parking_area";
 
 /** Returns the parking area label of a listed reservation: its name, else its id. */
 export const formatReservationParkingArea = (reservation: {
@@ -479,34 +571,31 @@ export const isHassRunning = (
   hass: { config?: { state?: string } } | null | undefined,
 ): boolean => hass?.config?.state === "RUNNING";
 
-/** Formats remaining permit balance as a badge label and matching icon. */
+/**
+ * Formats one permit balance as a badge label and matching icon: money as a
+ * currency amount in the user's language, uses as a count, time as hours and
+ * minutes.
+ */
 export const formatBalanceLabel = (
-  remainingMinutes: number,
-  balanceUnit: string | null,
+  balance: BalancePayload,
   localize: (key: string) => string,
+  language: string | undefined,
 ): { text: string; icon: string } => {
-  const isMonetary =
-    balanceUnit !== null && balanceUnit !== "TIMES" && balanceUnit !== "MINUTE";
-  if (isMonetary) {
-    const formatted = Number.isInteger(remainingMinutes)
-      ? String(remainingMinutes)
-      : remainingMinutes.toFixed(2);
-    const currencySymbols: Record<string, string> = {
-      EURO: "€",
-      EUR: "€",
-      GBP: "£",
-      USD: "$",
-    };
-    const symbol = currencySymbols[balanceUnit ?? ""] ?? balanceUnit ?? "";
-    return { text: `${symbol}${formatted}`, icon: "mdi:cash" };
+  if (balance.kind === "money") {
+    // The integration only reports euro balances as money.
+    const text = new Intl.NumberFormat(language, {
+      style: "currency",
+      currency: "EUR",
+    }).format(balance.amount);
+    return { text, icon: "mdi:cash" };
   }
-  if (balanceUnit === "TIMES") {
+  if (balance.kind === "times") {
     return {
-      text: String(Math.round(remainingMinutes)),
+      text: String(Math.round(balance.amount)),
       icon: "mdi:ticket-outline",
     };
   }
-  const totalMins = Math.round(remainingMinutes);
+  const totalMins = Math.round(balance.amount);
   const hours = Math.floor(totalMins / 60);
   const mins = totalMins % 60;
   const h = localize("unit.hours");

@@ -32,7 +32,7 @@ start_reservation:
         text: {}
     parking_area_id:
       name: Parking area
-      description: The parking area to park in, for permits that cover several parking areas. Leave empty to use the default parking area.
+      description: The parking area to park in, for permits that cover several parking areas. Some municipalities also accept the number shown on a parking machine. Leave empty to use the default parking area.
       required: false
       selector:
         text: {}

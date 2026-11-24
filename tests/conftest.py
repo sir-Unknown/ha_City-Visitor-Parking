@@ -156,6 +156,10 @@ module.ProviderError = ProviderError
 module.ValidationError = ValidationError
 module.ProviderInfo = ProviderInfo
 module.Client = Client
+module.RESERVATION_TARGET_SELECTION_FREE_INPUT = "free_input"
+module.BALANCE_UNIT_MINUTE = "MINUTE"
+module.BALANCE_UNIT_EURO = "EURO"
+module.BALANCE_UNIT_TIMES = "TIMES"
 
 exceptions_module = cast("Any", ModuleType("pycityvisitorparking.exceptions"))
 exceptions_module.ErrorCode = ErrorCode

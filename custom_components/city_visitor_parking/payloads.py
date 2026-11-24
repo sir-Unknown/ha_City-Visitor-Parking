@@ -241,6 +241,30 @@ def _availability_payload(
     }
 
 
+def parking_area_status_payload(
+    parking_area: ParkingArea,
+    options: Mapping[str, object],
+    now: datetime,
+    *,
+    stale: bool = False,
+) -> dict[str, object]:
+    """Return the state and window of one parking area (card ParkingAreaStatus)."""
+    parking_area_status = _availability_payload(
+        parking_area.paid_hours,
+        parking_area.paid_parking_status,
+        options,
+        now,
+        stale=stale,
+    )
+    del parking_area_status["effective_windows_today"]
+    del parking_area_status["is_paid_now"]
+    return {
+        "parking_area_id": parking_area.parking_area_id,
+        "name": parking_area.name,
+        **parking_area_status,
+    }
+
+
 def build_status_payload(
     data: CoordinatorData,
     options: Mapping[str, object],
@@ -253,7 +277,8 @@ def build_status_payload(
     Top-level fields describe the default parking area. ``parking_areas`` repeats the
     state and window per selectable parking area (default first) so the card can switch
     parking areas without another request; it is empty when the permit has no parking
-    areas.
+    areas. ``balances`` lists every permit balance (primary first) with its kind, so
+    the card does not have to map library units itself.
     """
     provider_windows_today = windows_for_today(data.paid_hours, {}, now)
     provider_window = current_or_next_window(data.paid_hours, now)
@@ -263,24 +288,10 @@ def build_status_payload(
     effective_windows_today = cast(
         "list[TimeRange]", default_status.pop("effective_windows_today")
     )
-    parking_areas: list[dict[str, object]] = []
-    for parking_area in data.parking_areas:
-        parking_area_status = _availability_payload(
-            parking_area.paid_hours,
-            parking_area.paid_parking_status,
-            options,
-            now,
-            stale=stale,
-        )
-        del parking_area_status["effective_windows_today"]
-        del parking_area_status["is_paid_now"]
-        parking_areas.append(
-            {
-                "parking_area_id": parking_area.parking_area_id,
-                "name": parking_area.name,
-                **parking_area_status,
-            }
-        )
+    parking_areas = [
+        parking_area_status_payload(parking_area, options, now, stale=stale)
+        for parking_area in data.parking_areas
+    ]
 
     return {
         **default_status,
@@ -297,8 +308,12 @@ def build_status_payload(
         "provider_window_end": (
             utc_iso(provider_window.end) if provider_window else None
         ),
-        "remaining_balance": max(0.0, data.permit_remaining_balance),
-        "balance_unit": data.permit_balance_unit,
+        "balances": [
+            {"amount": balance.amount, "unit": balance.unit, "kind": balance.kind}
+            for balance in data.balances
+        ],
         "permit_id": data.permit_id,
         "parking_areas": parking_areas,
+        # Whether a parking area ID outside ``parking_areas`` may be entered.
+        "parking_area_free_input": data.parking_area_free_input,
     }

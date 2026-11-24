@@ -162,7 +162,7 @@
         },
         "parking_area_id": {
           "name": "Parking area",
-          "description": "The parking area to park in, for permits that cover several parking areas. Leave empty to use the default parking area."
+          "description": "The parking area to park in, for permits that cover several parking areas. Some municipalities also accept the number shown on a parking machine. Leave empty to use the default parking area."
         }
       }
     },
@@ -426,8 +426,14 @@
       "future_reservations": {
         "name": "Future reservations"
       },
-      "remaining_time": {
-        "name": "Remaining balance"
+      "remaining_time_balance": {
+        "name": "Remaining time balance"
+      },
+      "remaining_money_balance": {
+        "name": "Remaining money balance"
+      },
+      "remaining_uses": {
+        "name": "Remaining uses"
       },
       "paid_parking": {
         "name": "Paid parking",

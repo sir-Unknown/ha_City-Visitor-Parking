@@ -2,6 +2,8 @@
 import { css, html, nothing, type TemplateResult } from "lit";
 import { keyed } from "lit/directives/keyed.js";
 import type {
+  BalanceKind,
+  BalancePayload,
   DeviceEntry,
   FavoriteItem,
   HomeAssistant,
@@ -19,7 +21,6 @@ import {
 } from "./translations";
 import {
   DOMAIN,
-  MIN_SELECTABLE_PARKING_AREAS,
   RESERVATION_ENDED_EVENT,
   EMPTY_PAID_PARKING_STATUS,
   RESERVATION_STARTED_EVENT,
@@ -30,6 +31,7 @@ import {
   clearFavoriteTransientState,
   createFavoriteIndex,
   extractEventValue,
+  fetchParkingAreaStatus,
   fetchPermitEntries,
   fetchReservations,
   filterDomainDevicesForEntry,
@@ -37,12 +39,17 @@ import {
   getConfigEntryId,
   invalidateFavoritesCache,
   isHassRunning,
+  isInvalidParkingAreaError,
   normalizeMatchValue,
   normalizePlateValue,
   normalizePaidParkingStatus,
   normalizeParkingAreas,
+  offersParkingAreaChoice,
+  parkingAreaFreeInput,
   parseDateTimeValue,
   resolveCardParkingArea,
+  resolveCardParkingAreaId,
+  selectCardBalances,
   setPendingPermitDefaults,
   startedReservationMessage,
 } from "./helpers";
@@ -61,6 +68,8 @@ import { getCardConfigForm } from "./editor-parking";
 
 const CARD_TYPE = "city-visitor-parking-card";
 const WS_LIST_FAVORITES = "city_visitor_parking/favorites";
+// Translation key of the warning for a typed parking area whose lookup failed transiently.
+const PARKING_AREA_FAILED_KEY = "message.parking_area_failed";
 // Minimum interval between status fetches triggered by hass updates.
 const STATUS_THROTTLE_MS = 60000;
 // Background polling interval for parking area status (and on page visibility restore).
@@ -78,6 +87,8 @@ type CardConfig = {
   default_license_plate?: string;
   config_entry_id?: string;
   show_parking_area?: boolean;
+  /** Balance kinds shown in the card; all kinds when unset. */
+  balances?: BalanceKind[];
   device_id?: string;
 };
 type FavoriteActionState = {
@@ -114,6 +125,7 @@ class CityVisitorParkingNewReservationCard extends BaseLocalizedCard<CardConfig>
       .favorite-actions {
         display: flex;
         align-items: center;
+        gap: var(--ha-space-2, 8px);
       }
       .favorite-actions ha-badge {
         --badge-color: var(--secondary-text-color);
@@ -155,15 +167,26 @@ class CityVisitorParkingNewReservationCard extends BaseLocalizedCard<CardConfig>
   _windowKind: "current" | "next" | null = null;
   _windowStartIso: string | null = null;
   _windowEndIso: string | null = null;
-  _remainingMinutes: number | null = null;
-  _balanceUnit: string | null = null;
+  _balances: BalancePayload[] = [];
   _paidParkingStatusTsByEntryId = new Map<string, number>();
   _paidParkingStatusInFlightByEntryId = new Map<string, Promise<void>>();
   _paidParkingStatusByEntryId = new Map<string, PaidParkingStatus>();
   // Parking areas of the last successful status response; kept on fetch failure so a
   // chosen parking area is not silently replaced by the provider default.
   _parkingAreasByEntryId = new Map<string, ParkingAreaStatus[]>();
+  // Whether a permit accepts a typed parking area ID outside its list.
+  _parkingAreaFreeInputByEntryId = new Map<string, boolean>();
   _selectedParkingAreaIdByEntryId = new Map<string, string>();
+  // Status of a typed free input parking area, fetched with its own paid hours.
+  _typedParkingAreaByEntryId = new Map<string, ParkingAreaStatus>();
+  // Translation key of why a typed parking area could not be loaded.
+  _parkingAreaErrorByEntryId = new Map<string, string>();
+  // Typed parking area ID whose times are loading, per entry; the start button
+  // waits for it.
+  _typedParkingAreaLookupByEntryId = new Map<string, string>();
+  // Whether the user changed the start or end time since picking a typed parking
+  // area; its loaded status then only fills empty times instead of replacing them.
+  _timesEditedSinceParkingAreaPick = false;
   _pendingPermitDefaultsEntryId: string | null = null;
   _pendingPermitDefaultsForce = false;
   _statusRefreshHandle: number | null = null;
@@ -472,6 +495,10 @@ class CityVisitorParkingNewReservationCard extends BaseLocalizedCard<CardConfig>
           entryId,
           normalizeParkingAreas(payload),
         );
+        this._parkingAreaFreeInputByEntryId.set(
+          entryId,
+          parkingAreaFreeInput(payload),
+        );
       } catch {
         status = EMPTY_PAID_PARKING_STATUS;
       }
@@ -482,6 +509,17 @@ class CityVisitorParkingNewReservationCard extends BaseLocalizedCard<CardConfig>
           this._getEffectivePaidParkingStatus(entryId),
         );
         this._applyPendingPermitDefaults(entryId);
+        // Keep the window of a typed parking area current too.
+        const picked = this._pickedParkingAreaId(entryId);
+        const typed = this._typedParkingAreaByEntryId.get(entryId);
+        // A failed lookup has no cached status; retry it only when it failed
+        // transiently (a rejected ID would be rejected again).
+        const retryFailed =
+          this._parkingAreaErrorByEntryId.get(entryId) ===
+          PARKING_AREA_FAILED_KEY;
+        if (picked && (typed?.parking_area_id === picked || retryFailed)) {
+          void this._loadTypedParkingArea(entryId, picked, retryFailed);
+        }
       }
       this._paidParkingStatusTsByEntryId.set(entryId, Date.now());
       this._paidParkingStatusInFlightByEntryId.delete(entryId);
@@ -574,20 +612,24 @@ class CityVisitorParkingNewReservationCard extends BaseLocalizedCard<CardConfig>
     const parkingAreas = activeEntryId
       ? (this._parkingAreasByEntryId.get(activeEntryId) ?? [])
       : [];
-    const selectedParkingArea = activeEntryId
-      ? this._resolveParkingArea(activeEntryId)
+    const selectedParkingAreaId = activeEntryId
+      ? this._resolveParkingAreaId(activeEntryId)
       : null;
+    const parkingAreaFreeInput = activeEntryId
+      ? this._parkingAreaFreeInputByEntryId.get(activeEntryId) === true
+      : false;
     // Without a permit only the preview shows an (empty) parking area field: there the
     // permit picker is read-only, so any permit with parking areas stands in for it.
     const showParkingAreaField =
       this._config.show_parking_area !== false &&
-      (parkingAreas.length >= MIN_SELECTABLE_PARKING_AREAS ||
+      (offersParkingAreaChoice(parkingAreas, parkingAreaFreeInput) ||
         (controlsDisabled &&
           !activeEntryId &&
-          this._permitOptions.some(
-            (option) =>
-              (this._parkingAreasByEntryId.get(option.id)?.length ?? 0) >=
-              MIN_SELECTABLE_PARKING_AREAS,
+          this._permitOptions.some((option) =>
+            offersParkingAreaChoice(
+              this._parkingAreasByEntryId.get(option.id) ?? [],
+              this._parkingAreaFreeInputByEntryId.get(option.id) === true,
+            ),
           )));
     const { showAddFavorite, showRemoveFavorite, removeFavorite } =
       this._getFavoriteActionState();
@@ -616,7 +658,8 @@ class CityVisitorParkingNewReservationCard extends BaseLocalizedCard<CardConfig>
       !hasTarget ||
       !hasLicense ||
       plateAlreadyActive ||
-      this._startInFlight;
+      this._startInFlight ||
+      this._typedParkingAreaPending(activeEntryId);
     const todayStart = new Date();
     todayStart.setHours(0, 0, 0, 0);
     const minDateTime = formatDateTimeLocal(todayStart);
@@ -643,9 +686,13 @@ class CityVisitorParkingNewReservationCard extends BaseLocalizedCard<CardConfig>
                 hass: this._hass,
                 label: localizeFn("field.parking_area"),
                 parkingAreas,
-                value: selectedParkingArea?.parking_area_id ?? "",
+                value: selectedParkingAreaId ?? "",
                 disabled: controlsDisabled || selectedPermitDisabled,
                 preview: controlsDisabled,
+                customValue: parkingAreaFreeInput,
+                error: activeEntryId
+                  ? this._parkingAreaError(activeEntryId)
+                  : null,
                 onSelected: this._onParkingAreaSelectChange,
               })
             : nothing}
@@ -733,8 +780,8 @@ class CityVisitorParkingNewReservationCard extends BaseLocalizedCard<CardConfig>
             startButtonTimeConflict: plateAlreadyActive,
             startDisabled,
             hasTarget,
-            remainingMinutes: this._remainingMinutes,
-            balanceUnit: this._balanceUnit,
+            balances: selectCardBalances(this._balances, this._config.balances),
+            language: getHassLanguage(this._hass),
             localize: localizeFn,
           })}
         </div>
@@ -811,6 +858,9 @@ class CityVisitorParkingNewReservationCard extends BaseLocalizedCard<CardConfig>
       this._scheduleFavoriteActionsUpdate();
       return;
     }
+    if (field?.id === "startDateTime" || field?.id === "endDateTime") {
+      this._timesEditedSinceParkingAreaPick = true;
+    }
     if (field?.id === "startDateTime") {
       this._syncEndDateWithStart();
     }
@@ -821,6 +871,9 @@ class CityVisitorParkingNewReservationCard extends BaseLocalizedCard<CardConfig>
     if (!target) return;
     const field = this._getValueFromEvent(event, CHANGE_VALUE_IDS);
     if (field) this._setInputValue(field.id, field.value);
+    if (field?.id === "startDateTime" || field?.id === "endDateTime") {
+      this._timesEditedSinceParkingAreaPick = true;
+    }
     if (field?.id === "startDateTime") {
       this._syncEndDateWithStart();
     }
@@ -840,32 +893,149 @@ class CityVisitorParkingNewReservationCard extends BaseLocalizedCard<CardConfig>
     const target = event.currentTarget as
       | (HTMLElement & { value?: string })
       | null;
-    const parkingAreaId = extractEventValue(event, target);
+    const parkingAreaId = extractEventValue(event, target).trim();
     if (!entryId || !parkingAreaId) return;
     const parkingAreas = this._parkingAreasByEntryId.get(entryId) ?? [];
     if (
+      this._parkingAreaFreeInputByEntryId.get(entryId) !== true &&
       !parkingAreas.some(
         (parkingArea) => parkingArea.parking_area_id === parkingAreaId,
       )
     )
       return;
-    if (this._resolveParkingArea(entryId)?.parking_area_id === parkingAreaId)
+    // Selecting the ID again retries a failed lookup.
+    if (
+      this._resolveParkingAreaId(entryId) === parkingAreaId &&
+      !this._parkingAreaErrorByEntryId.has(entryId)
+    )
       return;
+    const previousParkingArea = this._resolveParkingArea(entryId);
     this._selectedParkingAreaIdByEntryId.set(entryId, parkingAreaId);
-    applyPaidParkingStatus(this, this._getEffectivePaidParkingStatus(entryId));
-    this._applyStatusDefaultsToForm(true);
+    this._parkingAreaErrorByEntryId.delete(entryId);
+    this._timesEditedSinceParkingAreaPick = false;
+    if (this._resolveParkingArea(entryId) !== previousParkingArea) {
+      applyPaidParkingStatus(
+        this,
+        this._getEffectivePaidParkingStatus(entryId),
+      );
+      this._applyStatusDefaultsToForm(true);
+    }
+    if (
+      !parkingAreas.some(
+        (parkingArea) => parkingArea.parking_area_id === parkingAreaId,
+      )
+    ) {
+      // A typed ID: fetch its own paid hours, then show them like a listed area.
+      void this._loadTypedParkingArea(entryId, parkingAreaId, true);
+    }
     this._requestRender();
   }
 
-  /** Parking area the card uses for an entry: the user's pick or the default. */
-  _resolveParkingArea(entryId: string): ParkingAreaStatus | null {
-    return resolveCardParkingArea(
-      this._parkingAreasByEntryId.get(entryId) ?? [],
-      // With the field hidden there is nothing to pick: the default applies.
-      this._config?.show_parking_area !== false
-        ? this._selectedParkingAreaIdByEntryId.get(entryId)
-        : null,
+  /**
+   * Loads the status of a typed parking area. A response for an ID the user no
+   * longer picked is dropped; an ID the provider rejects shows a warning below the
+   * parking area field.
+   */
+  async _loadTypedParkingArea(
+    entryId: string,
+    parkingAreaId: string,
+    applyDefaults: boolean,
+  ): Promise<void> {
+    if (!this._hass) return;
+    // Only a lookup that sets the form's times holds back the start button.
+    if (applyDefaults) {
+      this._typedParkingAreaLookupByEntryId.set(entryId, parkingAreaId);
+      this._requestRender();
+    }
+    let parkingArea: ParkingAreaStatus;
+    try {
+      parkingArea = await fetchParkingAreaStatus(
+        this._hass,
+        entryId,
+        parkingAreaId,
+      );
+    } catch (err: unknown) {
+      this._endTypedParkingAreaLookup(entryId, parkingAreaId);
+      if (this._pickedParkingAreaId(entryId) !== parkingAreaId) return;
+      this._typedParkingAreaByEntryId.delete(entryId);
+      this._parkingAreaErrorByEntryId.set(
+        entryId,
+        isInvalidParkingAreaError(err)
+          ? "message.invalid_parking_area"
+          : PARKING_AREA_FAILED_KEY,
+      );
+      this._requestRender();
+      return;
+    }
+    this._endTypedParkingAreaLookup(entryId, parkingAreaId);
+    if (this._pickedParkingAreaId(entryId) !== parkingAreaId) return;
+    this._typedParkingAreaByEntryId.set(entryId, parkingArea);
+    this._parkingAreaErrorByEntryId.delete(entryId);
+    if (entryId === this._getActiveEntryId()) {
+      applyPaidParkingStatus(
+        this,
+        this._getEffectivePaidParkingStatus(entryId),
+      );
+      // Times the user changed while the lookup was pending (or since a failed
+      // lookup) are kept; only empty or past times are filled in.
+      if (applyDefaults)
+        this._applyStatusDefaultsToForm(!this._timesEditedSinceParkingAreaPick);
+    }
+    this._requestRender();
+  }
+
+  /** Ends a pending lookup unless a newer one for another ID replaced it. */
+  _endTypedParkingAreaLookup(entryId: string, parkingAreaId: string): void {
+    if (this._typedParkingAreaLookupByEntryId.get(entryId) === parkingAreaId) {
+      this._typedParkingAreaLookupByEntryId.delete(entryId);
+    }
+  }
+
+  /** Whether the picked typed parking area's times are still loading. */
+  _typedParkingAreaPending(entryId: string | null): boolean {
+    if (!entryId) return false;
+    const pending = this._typedParkingAreaLookupByEntryId.get(entryId);
+    return (
+      pending !== undefined && pending === this._pickedParkingAreaId(entryId)
     );
+  }
+
+  /** Localized warning for a typed parking area that could not be loaded, if any. */
+  _parkingAreaError(entryId: string): string | null {
+    const key = this._parkingAreaErrorByEntryId.get(entryId);
+    return key ? this._localize(key) : null;
+  }
+
+  /**
+   * Parking area the card uses for an entry's status: the user's pick (listed, or a
+   * typed ID once its status is loaded) or the default.
+   */
+  _resolveParkingArea(entryId: string): ParkingAreaStatus | null {
+    const parkingAreas = this._parkingAreasByEntryId.get(entryId) ?? [];
+    const picked = this._pickedParkingAreaId(entryId);
+    const typed = this._typedParkingAreaByEntryId.get(entryId);
+    return resolveCardParkingArea(
+      typed && typed.parking_area_id === picked
+        ? [...parkingAreas, typed]
+        : parkingAreas,
+      picked,
+    );
+  }
+
+  /** Parking area ID the card books in for an entry, including a typed free input ID. */
+  _resolveParkingAreaId(entryId: string): string | null {
+    return resolveCardParkingAreaId(
+      this._parkingAreasByEntryId.get(entryId) ?? [],
+      this._pickedParkingAreaId(entryId),
+      this._parkingAreaFreeInputByEntryId.get(entryId) === true,
+    );
+  }
+
+  _pickedParkingAreaId(entryId: string): string | null {
+    // With the field hidden there is nothing to pick: the default applies.
+    return this._config?.show_parking_area !== false
+      ? (this._selectedParkingAreaIdByEntryId.get(entryId) ?? null)
+      : null;
   }
 
   /** Parking area status of an entry with the selected parking area's state and window applied. */
@@ -1161,6 +1331,9 @@ class CityVisitorParkingNewReservationCard extends BaseLocalizedCard<CardConfig>
       return;
     }
     if (this._startInFlight) return;
+    // The form still holds the previous parking area's times until a typed one
+    // has loaded; starting now would book those times.
+    if (this._typedParkingAreaPending(this._getActiveEntryId())) return;
     this._startInFlight = true;
     this._requestRender();
     const license = this._getInputValue("licensePlate").trim();
@@ -1183,8 +1356,8 @@ class CityVisitorParkingNewReservationCard extends BaseLocalizedCard<CardConfig>
     let confirmed: StartReservationResponse | undefined;
     try {
       const activeEntryId = this._getActiveEntryId();
-      const parkingArea = activeEntryId
-        ? this._resolveParkingArea(activeEntryId)
+      const parkingAreaId = activeEntryId
+        ? this._resolveParkingAreaId(activeEntryId)
         : null;
       // The service returns the reservation as the provider confirmed it.
       const result = await this._hass.callService<
@@ -1198,9 +1371,7 @@ class CityVisitorParkingNewReservationCard extends BaseLocalizedCard<CardConfig>
           end_time: end!.toISOString(),
           license_plate: license,
           // Permits without parking areas send no parking_area_id at all.
-          ...(parkingArea
-            ? { parking_area_id: parkingArea.parking_area_id }
-            : {}),
+          ...(parkingAreaId ? { parking_area_id: parkingAreaId } : {}),
         },
         undefined,
         true,

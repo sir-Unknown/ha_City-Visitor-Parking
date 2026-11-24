@@ -86,6 +86,7 @@ The integration supports a growing number of Dutch municipalities and connects t
 | Letter | Municipality     | Portal                                                                                  |
 | ------ | ---------------- | --------------------------------------------------------------------------------------- |
 | **A**  | Amstelveen       | [mijn.2park.nl](https://mijn.2park.nl/)                                                 |
+|        | Amsterdam        | [parkeervergunningen.amsterdam.nl](https://parkeervergunningen.amsterdam.nl/login-ssp)  |
 |        | Apeldoorn        | [parkeren.apeldoorn.nl](https://parkeren.apeldoorn.nl/DVSPortal/)                       |
 |        | Assen            | [mijn.2park.nl](https://mijn.2park.nl/)                                                 |
 | **B**  | Bergen op Zoom   | [mijn.2park.nl](https://mijn.2park.nl/)                                                 |
@@ -142,6 +143,8 @@ The integration supports a growing number of Dutch municipalities and connects t
 |        | Zevenaar         | [parkeren.zevenaar.nl](https://parkeren.zevenaar.nl/DVSPortal/)                         |
 |        | Zutphen          | [parkeren.zutphen.nl](https://parkeren.zutphen.nl/DVSPortal/)                           |
 |        | Zwolle           | [parkeerloket.zwolle.nl](https://parkeerloket.zwolle.nl/DVSPortal/)                     |
+
+**Amsterdam:** sign in with the _meldcode_ as username and the _pincode_ as password, the codes you use on [Mijn Parkeren](https://parkeervergunningen.amsterdam.nl/login-ssp). Both are on your permit page in Mijn Parkeren after you log in with DigiD or eHerkenning.
 
 ---
 

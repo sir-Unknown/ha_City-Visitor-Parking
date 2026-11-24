@@ -1,6 +1,7 @@
 /** Shared presentation helpers and templates used by both Lovelace cards. */
 import { css, html, nothing, type TemplateResult } from "lit";
 import type {
+  BalancePayload,
   FavoriteOption,
   HomeAssistant,
   LocalizeTarget,
@@ -229,7 +230,10 @@ export const renderPermitSelect = (params: {
   `;
 };
 
-/** Renders the parking area selector for permits with multiple parking areas, or a preview. */
+/**
+ * Renders the parking area selector, or a preview. With `customValue` the user may
+ * also type a parking area ID that is not in the list.
+ */
 export const renderParkingAreaSelect = (params: {
   hass: HomeAssistant | null | undefined;
   label: string;
@@ -237,6 +241,8 @@ export const renderParkingAreaSelect = (params: {
   value: string;
   disabled: boolean;
   preview?: boolean;
+  customValue?: boolean;
+  error?: string | null;
   onSelected: (event: Event) => void;
 }): TemplateResult => {
   if (params.preview) {
@@ -247,7 +253,7 @@ export const renderParkingAreaSelect = (params: {
           .label=${params.label}
           .value=${params.parkingAreas.find(
             (parkingArea) => parkingArea.parking_area_id === params.value,
-          )?.name ?? ""}
+          )?.name ?? params.value}
           ?disabled=${true}
         ></ha-input>
       </div>
@@ -265,6 +271,7 @@ export const renderParkingAreaSelect = (params: {
               label: parkingArea.name || parkingArea.parking_area_id,
             })),
             mode: "dropdown",
+            custom_value: params.customValue === true,
           },
         }}
         .label=${params.label}
@@ -273,6 +280,9 @@ export const renderParkingAreaSelect = (params: {
         ?disabled=${params.disabled}
         @value-changed=${params.onSelected}
       ></ha-selector>
+      ${params.error
+        ? html`<ha-alert alert-type="warning">${params.error}</ha-alert>`
+        : nothing}
     </div>
   `;
 };
@@ -391,15 +401,15 @@ export const renderFavoriteActionRow = (params: {
   startButtonTimeConflict: boolean;
   startDisabled: boolean;
   hasTarget: boolean;
-  remainingMinutes: number | null;
-  balanceUnit: string | null;
+  /** Balances to show, already filtered to the card's balance kinds. */
+  balances: readonly BalancePayload[];
+  language: string | undefined;
   localize: (key: string, ...args: Array<string | number>) => string;
 }): TemplateResult => {
   const showFavoriteButton =
     params.showFavorites &&
     (params.showRemoveFavorite || params.showAddFavorite);
-  const showBalance =
-    !showFavoriteButton && params.hasTarget && params.remainingMinutes !== null;
+  const showBalance = !showFavoriteButton && params.hasTarget;
   return html`
     <div class="row actions">
       <div class="favorite-actions">
@@ -434,18 +444,18 @@ export const renderFavoriteActionRow = (params: {
               : nothing
           : nothing}
         ${showBalance
-          ? (() => {
+          ? params.balances.map((balance) => {
               const { text, icon } = formatBalanceLabel(
-                params.remainingMinutes!,
-                params.balanceUnit,
+                balance,
                 params.localize,
+                params.language,
               );
               return html`
                 <ha-badge class="balance-badge" .label=${text}>
                   <ha-icon slot="icon" icon=${icon}></ha-icon>
                 </ha-badge>
               `;
-            })()
+            })
           : nothing}
       </div>
       ${(() => {

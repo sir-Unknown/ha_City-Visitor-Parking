@@ -7,13 +7,12 @@ import type {
   ParkingCardEditorConfig,
   SelectOption,
   FormSchema,
-  ParkingAreaStatus,
 } from "./types";
 import {
+  BALANCE_KINDS,
   DOMAIN,
-  MIN_SELECTABLE_PARKING_AREAS,
   fetchPermitEntries,
-  fetchPermitParkingAreas,
+  fetchPermitParkingAreaChoice,
   isPermitEntryDisabled,
 } from "./helpers";
 import { ensureTranslations, localize, getGlobalHass } from "./translations";
@@ -59,8 +58,20 @@ export const buildCardTypeOptions = (
   ];
 };
 
+/** Returns the balance kind options of the card editor's balances field. */
+const buildBalanceKindOptions = (
+  localizeTarget: LocalizeTarget | LocalizeFunc,
+  prefix: string,
+): Array<{ value: string; label: string }> =>
+  BALANCE_KINDS.map((kind) => {
+    const key = `${prefix}.value.balance_kind.${kind}`;
+    const label = localize(localizeTarget, key);
+    return { value: kind, label: label === key ? kind : label };
+  });
+
 const buildCardEditorSchema = (
   cardTypeOptions: ReadonlyArray<readonly [string, string]>,
+  balanceKindOptions: ReadonlyArray<{ value: string; label: string }>,
   displayOptionsExpanded: boolean,
   showParkingAreaToggle = false,
 ): CardEditorFormSchema => [
@@ -101,14 +112,21 @@ const buildCardEditorSchema = (
         selector: { text: {} },
         required: false,
       },
+      {
+        name: "balances",
+        selector: {
+          select: { multiple: true, mode: "list", options: balanceKindOptions },
+        },
+        required: false,
+      },
     ],
   },
 ];
 
 /** Lovelace editor element for configuring the new-reservation card. */
 export class CityVisitorParkingCardEditor extends BaseCardEditor<ParkingCardEditorConfig> {
-  // Parking areas per permit from the status websocket; empty when a fetch failed.
-  private _parkingAreasByEntryId = new Map<string, ParkingAreaStatus[]>();
+  // Whether each permit offers a parking area choice; false when a fetch failed.
+  private _parkingAreaChoiceByEntryId = new Map<string, boolean>();
   private _parkingAreasLoading = new Set<string>();
   // Enabled permits, loaded only while no permit is configured.
   private _permitIds: string[] | null = null;
@@ -134,14 +152,16 @@ export class CityVisitorParkingCardEditor extends BaseCardEditor<ParkingCardEdit
       this._config?.show_favorites === false ||
       this._config?.show_start_time === false ||
       this._config?.show_end_time === false ||
-      this._config?.default_license_plate,
+      this._config?.default_license_plate ||
+      this._config?.balances,
     );
     return html`
       <ha-form
         .hass=${this.hass}
-        .data=${this._config ?? {}}
+        .data=${{ balances: [...BALANCE_KINDS], ...this._config }}
         .schema=${buildCardEditorSchema(
           cardTypeOptions,
+          buildBalanceKindOptions(localizeTarget, "editor"),
           displayOptionsExpanded,
           this._hasParkingAreaChoice(),
         )}
@@ -153,6 +173,22 @@ export class CityVisitorParkingCardEditor extends BaseCardEditor<ParkingCardEdit
   }
 
   /**
+   * Leaves `balances` out of the config while every kind is selected. The form
+   * shows every kind selected for a config without `balances`, which is the
+   * card's default, so the default round-trips instead of being written out.
+   */
+  protected _handleValueChanged(ev: CustomEvent): void {
+    ev.stopPropagation();
+    const config = { ...(ev.detail?.value ?? {}) } as ParkingCardEditorConfig;
+    if (BALANCE_KINDS.every((kind) => config.balances?.includes(kind))) {
+      delete config.balances;
+    }
+    super._handleValueChanged(
+      new CustomEvent("value-changed", { detail: { value: config } }),
+    );
+  }
+
+  /**
    * Whether the card can offer a parking area choice: the configured permit, or,
    * without one (the card then shows a permit picker), any permit has one.
    */
@@ -160,9 +196,7 @@ export class CityVisitorParkingCardEditor extends BaseCardEditor<ParkingCardEdit
     const entryId = this._config?.config_entry_id;
     const permitIds = entryId ? [entryId] : (this._permitIds ?? []);
     return permitIds.some(
-      (id) =>
-        (this._parkingAreasByEntryId.get(id)?.length ?? 0) >=
-        MIN_SELECTABLE_PARKING_AREAS,
+      (id) => this._parkingAreaChoiceByEntryId.get(id) === true,
     );
   }
 
@@ -199,14 +233,14 @@ export class CityVisitorParkingCardEditor extends BaseCardEditor<ParkingCardEdit
 
   private _loadParkingAreas(hass: HomeAssistant, entryId: string): void {
     if (
-      this._parkingAreasByEntryId.has(entryId) ||
+      this._parkingAreaChoiceByEntryId.has(entryId) ||
       this._parkingAreasLoading.has(entryId)
     ) {
       return;
     }
     this._parkingAreasLoading.add(entryId);
-    void fetchPermitParkingAreas(hass, entryId).then((parkingAreas) => {
-      this._parkingAreasByEntryId.set(entryId, parkingAreas);
+    void fetchPermitParkingAreaChoice(hass, entryId).then((hasChoice) => {
+      this._parkingAreaChoiceByEntryId.set(entryId, hasChoice);
       this._parkingAreasLoading.delete(entryId);
       this.requestUpdate();
     });
@@ -249,5 +283,10 @@ export const createConfigFormGetter =
 /** Returns the config-form schema for the new-reservation card. */
 export const getCardConfigForm = createConfigFormGetter(
   "editor",
-  (cardTypeOptions) => buildCardEditorSchema(cardTypeOptions, false),
+  (cardTypeOptions, localizeTarget) =>
+    buildCardEditorSchema(
+      cardTypeOptions,
+      buildBalanceKindOptions(localizeTarget, "editor"),
+      false,
+    ),
 );

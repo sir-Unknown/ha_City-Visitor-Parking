@@ -8,14 +8,25 @@ from types import SimpleNamespace
 from typing import TYPE_CHECKING, Any, cast
 from unittest.mock import AsyncMock, MagicMock
 
+import pytest
 from freezegun import freeze_time
 from homeassistant.components.sensor import SensorDeviceClass, SensorStateClass
-from homeassistant.const import UnitOfTime
+from homeassistant.const import (
+    CONF_PASSWORD,
+    CONF_USERNAME,
+    CURRENCY_EURO,
+    UnitOfTime,
+)
+from homeassistant.helpers import entity_registry as er
 from homeassistant.util import dt as dt_util
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
+import custom_components.city_visitor_parking as init_module
 from custom_components.city_visitor_parking.const import (
+    CONF_MUNICIPALITY,
     CONF_OPERATING_TIME_OVERRIDES,
+    CONF_PERMIT_ID,
+    CONF_PROVIDER_ID,
     DOMAIN,
     STATE_PAID,
 )
@@ -24,6 +35,7 @@ from custom_components.city_visitor_parking.coordinator import (
 )
 from custom_components.city_visitor_parking.entity import CityVisitorParkingEntity
 from custom_components.city_visitor_parking.models import (
+    Balance,
     CoordinatorData,
     Favorite,
     PaidParkingStatus,
@@ -32,6 +44,8 @@ from custom_components.city_visitor_parking.models import (
     TimeRange,
 )
 from custom_components.city_visitor_parking.sensor import (
+    BALANCE_SENSOR_CLASSES,
+    LEGACY_BALANCE_SENSOR_KEY,
     ActiveReservationsSensor,
     FavoritesSensor,
     FutureReservationsSensor,
@@ -45,10 +59,11 @@ from custom_components.city_visitor_parking.sensor import (
     ParkingAreaProviderPaidParkingStartSensor,
     ProviderPaidParkingEndSensor,
     ProviderPaidParkingStartSensor,
-    RemainingTimeSensor,
+    RemainingMoneyBalanceSensor,
+    RemainingTimeBalanceSensor,
+    RemainingUsesSensor,
     _as_utc_iso,
     _next_end_time,
-    _remaining_balance,
     _timerange_to_dict,
     async_setup_entry,
 )
@@ -59,15 +74,12 @@ if TYPE_CHECKING:
 
     from homeassistant.components.sensor import SensorEntity
     from homeassistant.core import HomeAssistant
-    from homeassistant.helpers import entity_registry as er
     from pytest import MonkeyPatch
 
 EXPECTED_REMAINING_HOURS = 2.0
-EXPECTED_REMAINING_MINUTES = 90
 EXPECTED_COUNT_BALANCE = 3
 EXPECTED_DURATION_BALANCE = 120
 EXPECTED_MONETARY_BALANCE = 12.5
-EXPECTED_EURO_BALANCE = 237.5
 PERMIT_SENSOR_COUNT = 9
 PARKING_AREA_SENSOR_SUFFIXES = (
     "paid_parking",
@@ -155,8 +167,7 @@ async def test_paid_parking_status_uses_overrides() -> None:
 
         data = CoordinatorData(
             permit_id="permit",
-            permit_remaining_balance=0,
-            permit_balance_unit=None,
+            balances=(),
             paid_hours=tuple(paid_hours),
             reservations=(),
             favorites=(),
@@ -211,8 +222,7 @@ async def test_next_paid_window_uses_overrides() -> None:
         availability = _compute_paid_parking_status(paid_hours, options, now)
         data = CoordinatorData(
             permit_id="permit",
-            permit_remaining_balance=0,
-            permit_balance_unit=None,
+            balances=(),
             paid_hours=tuple(paid_hours),
             reservations=(),
             favorites=(),
@@ -276,8 +286,7 @@ async def test_sensors_handle_coordinator_update(
     )
     data = CoordinatorData(
         permit_id="permit",
-        permit_remaining_balance=120,
-        permit_balance_unit=None,
+        balances=(Balance(kind="time", amount=120, unit=None),),
         paid_hours=(parking_area_window,),
         reservations=(
             Reservation(
@@ -307,7 +316,7 @@ async def test_sensors_handle_coordinator_update(
     with freeze_time(now):
         active_sensor = ActiveReservationsSensor(coordinator, entry)
         future_sensor = FutureReservationsSensor(coordinator, entry)
-        remaining_sensor = RemainingTimeSensor(coordinator, entry)
+        remaining_sensor = RemainingTimeBalanceSensor(coordinator, entry)
         availability_sensor = PaidParkingSensor(coordinator, entry)
         provider_start = ProviderPaidParkingStartSensor(coordinator, entry)
         provider_end = ProviderPaidParkingEndSensor(coordinator, entry)
@@ -341,122 +350,282 @@ async def test_sensors_handle_coordinator_update(
     assert favorites_sensor.native_value == 1
 
 
-async def test_remaining_balance_sensor_uses_count_presentation() -> None:
-    """Count balances should not be converted to hours."""
-    coordinator = _make_coordinator(
-        CoordinatorData(
-            permit_id="permit",
-            permit_remaining_balance=EXPECTED_COUNT_BALANCE,
-            permit_balance_unit="TIMES",
-            paid_hours=(),
-            reservations=(),
-            favorites=(),
-            paid_parking_status=PaidParkingStatus(
-                is_paid_now=True,
-                next_change_time=None,
-                windows_today=(),
-            ),
-            active_reservations=(),
-        )
-    )
-    entry = _create_entry("provider:permit1:city")
+_TIME_BALANCE = Balance(kind="time", amount=EXPECTED_DURATION_BALANCE, unit="MINUTE")
+_MONEY_BALANCE = Balance(kind="money", amount=EXPECTED_MONETARY_BALANCE, unit="EURO")
+_USES_BALANCE = Balance(kind="times", amount=EXPECTED_COUNT_BALANCE, unit="TIMES")
+_LEGACY_BALANCE_UNIQUE_ID = f"provider:permit1:city:{LEGACY_BALANCE_SENSOR_KEY}"
 
-    sensor = RemainingTimeSensor(coordinator, entry)
+
+def _balance_data(*balances: Balance) -> CoordinatorData:
+    """Return sample coordinator data with ``balances``."""
+    return dataclasses.replace(_sample_data(), balances=balances)
+
+
+def _balance_sensors(entities: Iterable[SensorEntity]) -> dict[str, SensorEntity]:
+    """Return the balance sensors keyed by their unique ID suffix."""
+    balance_classes = tuple(BALANCE_SENSOR_CLASSES.values())
+    return {
+        str(entity.unique_id).rsplit(":", 1)[-1]: entity
+        for entity in entities
+        if type(entity) in balance_classes
+    }
+
+
+def _register_legacy_balance_sensor(hass: HomeAssistant) -> str:
+    """Register the single balance sensor of earlier versions; return its ID."""
+    return (
+        er.async_get(hass)
+        .async_get_or_create(
+            "sensor",
+            DOMAIN,
+            _LEGACY_BALANCE_UNIQUE_ID,
+            suggested_object_id="city_remaining_balance",
+        )
+        .entity_id
+    )
+
+
+async def test_balance_sensors_for_time_and_money_permit(hass: HomeAssistant) -> None:
+    """A permit with a time and a money balance gets one sensor per balance."""
+    _coordinator, entities, _listener = await _setup_sensors(
+        hass, _balance_data(_TIME_BALANCE, _MONEY_BALANCE)
+    )
+
+    sensors = _balance_sensors(entities)
+    assert set(sensors) == {"remaining_time_balance", "remaining_money_balance"}
+    assert len(entities) == PERMIT_SENSOR_COUNT + 1
+
+    time_sensor = sensors["remaining_time_balance"]
+    assert isinstance(time_sensor, RemainingTimeBalanceSensor)
+    assert time_sensor.translation_key == "remaining_time_balance"
+    assert time_sensor.native_value == EXPECTED_REMAINING_HOURS
+    assert time_sensor.native_unit_of_measurement == UnitOfTime.HOURS
+    assert time_sensor.device_class == SensorDeviceClass.DURATION
+    assert time_sensor.state_class == SensorStateClass.MEASUREMENT
+    time_attributes = time_sensor.extra_state_attributes
+    assert time_attributes is not None
+    assert time_attributes["remaining_balance"] == EXPECTED_DURATION_BALANCE
+
+    money_sensor = sensors["remaining_money_balance"]
+    assert isinstance(money_sensor, RemainingMoneyBalanceSensor)
+    assert money_sensor.translation_key == "remaining_money_balance"
+    assert money_sensor.native_value == EXPECTED_MONETARY_BALANCE
+    assert money_sensor.native_unit_of_measurement == CURRENCY_EURO
+    assert money_sensor.device_class == SensorDeviceClass.MONETARY
+    # Home Assistant only allows TOTAL for monetary sensors.
+    assert money_sensor.state_class == SensorStateClass.TOTAL
+    money_attributes = money_sensor.extra_state_attributes
+    assert money_attributes is not None
+    assert money_attributes["remaining_balance"] == EXPECTED_MONETARY_BALANCE
+    assert money_attributes["has_active_reservation"] is False
+
+
+@pytest.mark.parametrize(
+    ("balance", "key", "expected_value"),
+    [
+        (_TIME_BALANCE, "remaining_time_balance", EXPECTED_REMAINING_HOURS),
+        (_MONEY_BALANCE, "remaining_money_balance", EXPECTED_MONETARY_BALANCE),
+        (_USES_BALANCE, "remaining_uses", EXPECTED_COUNT_BALANCE),
+    ],
+)
+async def test_balance_sensor_for_single_balance_permit(
+    hass: HomeAssistant, balance: Balance, key: str, expected_value: float
+) -> None:
+    """A permit with one balance gets only the sensor of that kind."""
+    _coordinator, entities, _listener = await _setup_sensors(
+        hass, _balance_data(balance)
+    )
+
+    sensors = _balance_sensors(entities)
+    assert list(sensors) == [key]
+    assert sensors[key].native_value == expected_value
+    assert len(entities) == PERMIT_SENSOR_COUNT
+
+
+async def test_remaining_uses_sensor_is_an_integer_count() -> None:
+    """Uses are counted, not converted to hours."""
+    sensor = RemainingUsesSensor(
+        _make_coordinator(_balance_data(_USES_BALANCE)),
+        _create_entry("provider:permit1:city"),
+    )
 
     assert sensor.native_value == EXPECTED_COUNT_BALANCE
+    assert isinstance(sensor.native_value, int)
     assert sensor.native_unit_of_measurement == "times"
     assert sensor.device_class is None
+    assert sensor.state_class == SensorStateClass.MEASUREMENT
     assert sensor.extra_state_attributes is not None
     assert sensor.extra_state_attributes["remaining_balance"] == EXPECTED_COUNT_BALANCE
 
 
-async def test_remaining_balance_sensor_uses_duration_presentation() -> None:
-    """Minute balances should be presented as a duration."""
-    coordinator = _make_coordinator(
-        CoordinatorData(
-            permit_id="permit",
-            permit_remaining_balance=EXPECTED_DURATION_BALANCE,
-            permit_balance_unit="MINUTE",
-            paid_hours=(),
-            reservations=(),
-            favorites=(),
-            paid_parking_status=PaidParkingStatus(
-                is_paid_now=True,
-                next_change_time=None,
-                windows_today=(),
-            ),
-            active_reservations=(),
-        )
+async def test_no_balance_sensors_without_balances(hass: HomeAssistant) -> None:
+    """A permit without balances gets no balance sensor."""
+    _coordinator, entities, _listener = await _setup_sensors(hass, _balance_data())
+
+    assert not _balance_sensors(entities)
+    assert len(entities) == PERMIT_SENSOR_COUNT - 1
+
+
+async def test_balance_sensor_added_when_kind_appears(hass: HomeAssistant) -> None:
+    """A balance kind reported after setup gets its sensor once."""
+    coordinator, entities, listener = await _setup_sensors(
+        hass, _balance_data(_TIME_BALANCE)
     )
-    entry = _create_entry("provider:permit1:city")
+    assert set(_balance_sensors(entities)) == {"remaining_time_balance"}
 
-    sensor = RemainingTimeSensor(coordinator, entry)
+    coordinator.data = _balance_data(_TIME_BALANCE, _MONEY_BALANCE)
+    listener()
+    listener()
 
-    assert sensor.native_value == EXPECTED_REMAINING_HOURS
-    assert sensor.native_unit_of_measurement == UnitOfTime.HOURS
-    assert sensor.device_class == SensorDeviceClass.DURATION
-    assert sensor.extra_state_attributes is not None
+    assert set(_balance_sensors(entities)) == {
+        "remaining_time_balance",
+        "remaining_money_balance",
+    }
+    assert len(entities) == PERMIT_SENSOR_COUNT + 1
+
+
+async def test_balance_sensor_unavailable_when_kind_disappears(
+    hass: HomeAssistant, monkeypatch: MonkeyPatch
+) -> None:
+    """A balance kind missing from coordinator data makes its sensor unavailable."""
+    coordinator, entities, _listener = await _setup_sensors(
+        hass, _balance_data(_TIME_BALANCE, _MONEY_BALANCE)
+    )
+    sensors = _balance_sensors(entities)
+    money_sensor = sensors["remaining_money_balance"]
+    monkeypatch.setattr(money_sensor, "async_write_ha_state", MagicMock())
+    assert money_sensor.available is True
+
+    coordinator.data = _balance_data(_TIME_BALANCE)
+    money_sensor._handle_coordinator_update()
+
+    assert money_sensor.available is False
+    assert money_sensor.native_value == EXPECTED_MONETARY_BALANCE
+    assert sensors["remaining_time_balance"].available is True
+
+
+async def test_legacy_balance_sensor_moves_to_primary_balance(
+    hass: HomeAssistant,
+) -> None:
+    """The single balance sensor of earlier versions becomes the first balance's."""
+    entity_id = _register_legacy_balance_sensor(hass)
+
+    await _setup_sensors(hass, _balance_data(_MONEY_BALANCE, _TIME_BALANCE))
+
+    registry = er.async_get(hass)
+    migrated = registry.async_get(entity_id)
+    assert migrated is not None
+    assert migrated.unique_id == "provider:permit1:city:remaining_money_balance"
     assert (
-        sensor.extra_state_attributes["remaining_balance"] == EXPECTED_DURATION_BALANCE
+        registry.async_get_entity_id("sensor", DOMAIN, _LEGACY_BALANCE_UNIQUE_ID)
+        is None
     )
 
 
-async def test_remaining_balance_sensor_uses_monetary_presentation() -> None:
-    """Monetary balances should keep their provider currency unit."""
-    coordinator = _make_coordinator(
-        CoordinatorData(
-            permit_id="permit",
-            permit_remaining_balance=EXPECTED_MONETARY_BALANCE,
-            permit_balance_unit="EUR",
-            paid_hours=(),
-            reservations=(),
-            favorites=(),
-            paid_parking_status=PaidParkingStatus(
-                is_paid_now=True,
-                next_change_time=None,
-                windows_today=(),
-            ),
-            active_reservations=(),
-        )
-    )
-    entry = _create_entry("provider:permit1:city")
+async def test_legacy_balance_sensor_waits_for_a_balance(hass: HomeAssistant) -> None:
+    """Without a balance the legacy sensor is kept until a balance is known."""
+    entity_id = _register_legacy_balance_sensor(hass)
+    coordinator, _entities, listener = await _setup_sensors(hass, _balance_data())
+    registry = er.async_get(hass)
+    legacy = registry.async_get(entity_id)
+    assert legacy is not None
+    assert legacy.unique_id == _LEGACY_BALANCE_UNIQUE_ID
 
-    sensor = RemainingTimeSensor(coordinator, entry)
+    coordinator.data = _balance_data(_USES_BALANCE)
+    listener()
 
-    assert sensor.native_value == EXPECTED_MONETARY_BALANCE
-    assert sensor.native_unit_of_measurement == "EUR"
-    assert sensor.device_class == SensorDeviceClass.MONETARY
-    assert sensor.extra_state_attributes is not None
-    assert (
-        sensor.extra_state_attributes["remaining_balance"] == EXPECTED_MONETARY_BALANCE
+    migrated = registry.async_get(entity_id)
+    assert migrated is not None
+    assert migrated.unique_id == "provider:permit1:city:remaining_uses"
+
+
+async def test_legacy_balance_sensor_kept_when_new_unique_id_is_taken(
+    hass: HomeAssistant,
+) -> None:
+    """The legacy sensor never takes over the unique ID of an existing entity."""
+    entity_id = _register_legacy_balance_sensor(hass)
+    registry = er.async_get(hass)
+    registry.async_get_or_create(
+        "sensor", DOMAIN, "provider:permit1:city:remaining_time_balance"
     )
 
+    await _setup_sensors(hass, _balance_data(_TIME_BALANCE))
 
-async def test_remaining_balance_sensor_normalizes_euro_currency_code() -> None:
-    """Provider EURO labels should be normalized to EUR for display."""
-    coordinator = _make_coordinator(
-        CoordinatorData(
-            permit_id="permit",
-            permit_remaining_balance=EXPECTED_EURO_BALANCE,
-            permit_balance_unit="EURO",
-            paid_hours=(),
-            reservations=(),
-            favorites=(),
-            paid_parking_status=PaidParkingStatus(
-                is_paid_now=True,
-                next_change_time=None,
-                windows_today=(),
-            ),
-            active_reservations=(),
-        )
+    legacy = registry.async_get(entity_id)
+    assert legacy is not None
+    assert legacy.unique_id == _LEGACY_BALANCE_UNIQUE_ID
+
+
+async def test_balance_sensors_through_entry_setup(
+    hass: HomeAssistant, monkeypatch: MonkeyPatch
+) -> None:
+    """Setup keeps the legacy entity ID and adds kinds reported later."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_PROVIDER_ID: "dvsportal",
+            CONF_MUNICIPALITY: "City",
+            CONF_PERMIT_ID: "permit",
+            CONF_USERNAME: "user",
+            CONF_PASSWORD: "pass",
+        },
+        unique_id="dvsportal:permit:city",
+        title="City - permit",
     )
-    entry = _create_entry("provider:permit1:city")
+    entry.add_to_hass(hass)
+    registry = er.async_get(hass)
+    legacy = registry.async_get_or_create(
+        "sensor",
+        DOMAIN,
+        f"dvsportal:permit:city:{LEGACY_BALANCE_SENSOR_KEY}",
+        config_entry=entry,
+        suggested_object_id="city_permit_remaining_balance",
+    )
+    provider = AsyncMock()
+    provider.fetch_all.return_value = (
+        {"id": "permit", "paid_hours": [], "balances": [{"amount": 90}]},
+        [],
+        [],
+        [],
+    )
+    client = AsyncMock()
+    client.get_provider.return_value = provider
+    monkeypatch.setattr(
+        init_module, "async_create_client", AsyncMock(return_value=client)
+    )
 
-    sensor = RemainingTimeSensor(coordinator, entry)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
 
-    assert sensor.native_value == EXPECTED_EURO_BALANCE
-    assert sensor.native_unit_of_measurement == "EUR"
-    assert sensor.device_class == SensorDeviceClass.MONETARY
+    # The legacy entity is now the time balance sensor; history stays with it.
+    state = hass.states.get(legacy.entity_id)
+    assert state is not None
+    assert state.state == "1.5"
+    migrated = registry.async_get(legacy.entity_id)
+    assert migrated is not None
+    assert migrated.unique_id == "dvsportal:permit:city:remaining_time_balance"
+
+    provider.fetch_all.return_value = (
+        {
+            "id": "permit",
+            "paid_hours": [],
+            "balances": [{"amount": 90}, {"amount": 4.5, "unit": "EURO"}],
+        },
+        [],
+        [],
+        [],
+    )
+    await entry.runtime_data.coordinator.async_refresh()
+    await hass.async_block_till_done()
+
+    money_entity_id = registry.async_get_entity_id(
+        "sensor", DOMAIN, "dvsportal:permit:city:remaining_money_balance"
+    )
+    assert money_entity_id is not None
+    money_state = hass.states.get(money_entity_id)
+    assert money_state is not None
+    assert money_state.state == "4.5"
+    assert money_state.attributes["unit_of_measurement"] == CURRENCY_EURO
 
 
 def _sample_data(
@@ -470,8 +639,7 @@ def _sample_data(
     )
     return CoordinatorData(
         permit_id="permit",
-        permit_remaining_balance=90,
-        permit_balance_unit=None,
+        balances=(Balance(kind="time", amount=90, unit=None),),
         paid_hours=(),
         reservations=(
             Reservation(
@@ -512,8 +680,7 @@ def test_sensor_helpers() -> None:
     data = _sample_data()
     data_no_active = CoordinatorData(
         permit_id=data.permit_id,
-        permit_remaining_balance=data.permit_remaining_balance,
-        permit_balance_unit=None,
+        balances=data.balances,
         paid_hours=data.paid_hours,
         reservations=data.reservations,
         favorites=data.favorites,
@@ -522,8 +689,7 @@ def test_sensor_helpers() -> None:
     )
     data_with_active = CoordinatorData(
         permit_id=data.permit_id,
-        permit_remaining_balance=data.permit_remaining_balance,
-        permit_balance_unit=None,
+        balances=data.balances,
         paid_hours=data.paid_hours,
         reservations=data.reservations,
         favorites=data.favorites,
@@ -541,7 +707,6 @@ def test_sensor_helpers() -> None:
             ),
         ),
     )
-    assert _remaining_balance(data) == EXPECTED_REMAINING_MINUTES
     assert _next_end_time(data_no_active) is None
     assert _next_end_time(data_with_active) == datetime(2025, 1, 1, 7, 30, tzinfo=UTC)
     assert _as_utc_iso(None) == ""
@@ -598,8 +763,7 @@ def _parking_area_data(parking_areas: Iterable[ParkingArea]) -> CoordinatorData:
     base = _sample_data()
     return CoordinatorData(
         permit_id=base.permit_id,
-        permit_remaining_balance=base.permit_remaining_balance,
-        permit_balance_unit=None,
+        balances=base.balances,
         paid_hours=parking_areas[0].paid_hours if parking_areas else (),
         reservations=(),
         favorites=(),
@@ -637,8 +801,14 @@ async def _setup_sensors(
         added.extend(entities)
 
     await async_setup_entry(hass, cast("Any", entry), cast("Any", _add_entities))
-    listener = coordinator.async_add_listener.call_args.args[0]
-    return coordinator, added, listener
+    listeners = [call.args[0] for call in coordinator.async_add_listener.call_args_list]
+
+    def _notify_listeners() -> None:
+        """Notify every platform listener, like a coordinator update does."""
+        for listener in listeners:
+            listener()
+
+    return coordinator, added, _notify_listeners
 
 
 def _parking_area_sensors(entities: Iterable[SensorEntity]) -> dict[str, SensorEntity]:

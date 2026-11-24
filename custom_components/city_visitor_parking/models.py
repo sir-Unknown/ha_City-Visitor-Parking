@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
 if TYPE_CHECKING:
     from datetime import datetime
@@ -67,13 +67,30 @@ class ParkingArea:
     paid_parking_status: PaidParkingStatus
 
 
+type BalanceKind = Literal["time", "money", "times"]
+"""Kind of a permit balance, see the ``BALANCE_KIND_*`` constants."""
+
+
+@dataclass(frozen=True)
+class Balance:
+    """Normalized permit balance of one kind."""
+
+    kind: BalanceKind
+    # Non-negative remaining amount: minutes for time, euros for money and uses
+    # for times.
+    amount: float
+    # Library balance unit; None when the provider reports none (a time balance).
+    unit: str | None
+
+
 @dataclass(frozen=True)
 class CoordinatorData:
     """Coordinator data for entities and services."""
 
     permit_id: str
-    permit_remaining_balance: float
-    permit_balance_unit: str | None
+    # Every balance of the permit, at most one per kind, the primary one first.
+    # Empty when the provider reports none.
+    balances: tuple[Balance, ...]
     paid_hours: tuple[TimeRange, ...]
     reservations: tuple[Reservation, ...]
     favorites: tuple[Favorite, ...]
@@ -83,6 +100,9 @@ class CoordinatorData:
     # default and matches ``paid_hours``. Empty when the provider has no parking area
     # selection.
     parking_areas: tuple[ParkingArea, ...] = ()
+    # Whether a parking area ID outside ``parking_areas`` may be requested, such as a
+    # number read from a parking machine. Only set when ``parking_areas`` is not empty.
+    parking_area_free_input: bool = False
 
     def parking_area(self, parking_area_id: str | None) -> ParkingArea | None:
         """Return the parking area with ``parking_area_id``, or None when unknown."""
@@ -95,6 +115,12 @@ class CoordinatorData:
                 if parking_area.parking_area_id == parking_area_id
             ),
             None,
+        )
+
+    def balance(self, kind: BalanceKind) -> Balance | None:
+        """Return the balance of ``kind``, or None when the permit has none."""
+        return next(
+            (balance for balance in self.balances if balance.kind == kind), None
         )
 
 

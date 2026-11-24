@@ -128,14 +128,29 @@ export type FavoriteItem = FavoriteOption & {
   [key: string]: unknown;
 };
 
+/** Kind of a permit balance; the permit has at most one balance per kind. */
+export type BalanceKind = "time" | "money" | "times";
+
+/** One permit balance, built by `build_status_payload()` in `payloads.py`. */
+export type BalancePayload = {
+  /**
+   * Non-negative remaining amount: minutes for `time`, euros for `money`, and
+   * uses for `times`.
+   */
+  amount: number;
+  /** Library balance unit (`MINUTE`, `EURO`, `TIMES`), or `null` for a time balance without unit. */
+  unit: string | null;
+  kind: BalanceKind;
+};
+
 /** Normalized parking area status state consumed by the reservation card UI. */
 export type PaidParkingStatus = {
   state: "paid" | "free" | null;
   kind: "current" | "next" | null;
   start: string | null;
   end: string | null;
-  remainingMinutes: number | null;
-  balanceUnit: string | null;
+  /** Permit balances in permit order, primary first; empty when unknown. */
+  balances: BalancePayload[];
 };
 
 /**
@@ -198,16 +213,10 @@ export type PaidParkingStatusResponse = {
   window_end: string | null;
 
   /**
-   * Non-negative remaining permit balance.
-   * `build_status_payload()` clamps this value to `0` or higher.
+   * Every balance of the permit, at most one per kind, the primary one first.
+   * Empty when the provider reports no balance.
    */
-  remaining_balance: number;
-
-  /**
-   * Permit balance unit from coordinator data, or `null` when the provider
-   * does not expose a string balance unit.
-   */
-  balance_unit: string | null;
+  balances: BalancePayload[];
 
   /**
    * Parking areas the permit can park in. The first entry is the provider's default
@@ -215,6 +224,12 @@ export type PaidParkingStatusResponse = {
    * the provider or permit exposes no parking areas.
    */
   parking_areas: ParkingAreaStatus[];
+
+  /**
+   * Whether a parking area ID outside `parking_areas` may be entered, such as a
+   * number read from a parking machine. Only `true` while `parking_areas` is not empty.
+   */
+  parking_area_free_input: boolean;
 };
 
 /** HTMLElement variant used for simple input-like value access. */
@@ -260,6 +275,8 @@ export type ParkingCardEditorConfig = {
   default_license_plate?: string;
   config_entry_id?: string;
   show_parking_area?: boolean;
+  /** Balance kinds shown in the card; all kinds when unset. */
+  balances?: BalanceKind[];
 };
 
 /** Generic schema payload returned to Lovelace card config forms. */
