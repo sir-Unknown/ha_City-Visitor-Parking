@@ -96,6 +96,7 @@ Stable releases (`vX.Y.Z`) are built from `main` and pin the latest stable `pyci
 - Two features that must be tested together go on a temporary integration branch from `main` that merges both; delete it after testing.
 - `release.yml` only builds a zip when `custom_components/` changed since the last stable release. A branch that changes only CI or docs yields a pre-release without an installable asset.
 - Create releases as drafts and publish only when the maintainer asks for it.
+- Publishing a release, stable or pre-release, starts `release.yml`, whose `build-release` job waits for a maintainer to approve the `release` environment (Actions run, "Review deployments"). Only then is the zip built and uploaded. The environment's required reviewers are set in the repository settings, not in the workflow.
 - If `main` already holds changes that must not ship yet, release a patch from a branch off the last stable tag (for example `git switch -c fix/some-fix v0.1.42`): cherry-pick the fix, tag the patch version on that branch, wait for `Validate` on the tag, and create the release by hand from it.
 
 Steps, for example for branch `fix/some-change`:
