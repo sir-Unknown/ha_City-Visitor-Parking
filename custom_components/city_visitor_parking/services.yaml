@@ -56,7 +56,7 @@ update_reservation:
         text: {}
     start_time:
       name: Start time
-      description: New start time for the reservation. Times without a time zone offset use the Home Assistant time zone.
+      description: "New start time for the reservation. When the provider can only change the end time, a new start time replaces a reservation that has not started yet: this reservation is ended, then a new one is started. The start time of a reservation that has started cannot be changed then. Times without a time zone offset use the Home Assistant time zone."
       required: false
       selector:
         datetime: {}

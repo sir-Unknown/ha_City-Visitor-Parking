@@ -85,7 +85,6 @@ type CardConfig = {
   balances?: BalanceKind[];
   device_id?: string;
 };
-type CheckedElement = HTMLElement & { checked: boolean; disabled?: boolean };
 type FavoriteActionState = {
   showAddFavorite: boolean;
   showRemoveFavorite: boolean;
@@ -125,9 +124,6 @@ class CityVisitorParkingNewReservationCard extends BaseLocalizedCard<CardConfig>
       .favorite-actions ha-badge {
         --badge-color: var(--secondary-text-color);
       }
-      .favorite-actions .badge-checked {
-        --badge-color: var(--primary-color);
-      }
       .favorite-actions .balance-badge {
         --ha-font-size-xs: var(--ha-font-size-s);
       }
@@ -159,7 +155,7 @@ class CityVisitorParkingNewReservationCard extends BaseLocalizedCard<CardConfig>
   _startButtonSuccessTimeout: number | null = null;
   _startInFlight = false;
   _favoriteRemoveInFlight = false;
-  _addFavoriteChecked = false;
+  _favoriteAddInFlight = false;
   _suppressFavoriteClear = false;
   _paidState: "paid" | "free" | null = null;
   _windowKind: "current" | "next" | null = null;
@@ -602,6 +598,10 @@ class CityVisitorParkingNewReservationCard extends BaseLocalizedCard<CardConfig>
       this._getFavoriteActionState();
     const favoriteRemoveDisabled =
       controlsDisabled || this._favoriteRemoveInFlight;
+    const favoriteAddDisabled =
+      controlsDisabled ||
+      this._favoriteAddInFlight ||
+      !this._getInputValue("licensePlate").trim();
     const favoritesOptions = this._favorites;
     const favoriteSelectDisabled =
       controlsDisabled || this._favoritesLoading || selectedPermitDisabled;
@@ -731,7 +731,7 @@ class CityVisitorParkingNewReservationCard extends BaseLocalizedCard<CardConfig>
             selectedFavoriteId:
               removeFavorite?.id || removeFavorite?.license_plate || "",
             favoriteRemoveDisabled,
-            addFavoriteChecked: this._addFavoriteChecked,
+            favoriteAddDisabled,
             startInFlight: this._startInFlight,
             startButtonSuccess: this._startButtonSuccess,
             startButtonWarning: selectedPermitDisabled,
@@ -752,13 +752,6 @@ class CityVisitorParkingNewReservationCard extends BaseLocalizedCard<CardConfig>
     const controlsDisabled = this._isInEditor();
     this.toggleAttribute("data-preview", controlsDisabled);
     if (controlsDisabled) this._loadPreviewPermitParkingAreas();
-    if (this._addFavoriteChecked) {
-      const { showAddFavorite } = this._getFavoriteActionState();
-      if (!showAddFavorite) {
-        this._addFavoriteChecked = false;
-        this._requestRender();
-      }
-    }
   }
 
   /**
@@ -794,10 +787,6 @@ class CityVisitorParkingNewReservationCard extends BaseLocalizedCard<CardConfig>
         this._setInputValue("favorite", matchingValue);
       }
     }
-    const { showAddFavorite } = this._getFavoriteActionState();
-    if (!showAddFavorite && this._addFavoriteChecked) {
-      this._addFavoriteChecked = false;
-    }
     this._requestRender();
   }
 
@@ -812,9 +801,8 @@ class CityVisitorParkingNewReservationCard extends BaseLocalizedCard<CardConfig>
       void this._removeFavorite(id);
       return;
     }
-    if (findById("addFavoriteWrap")) {
-      this._addFavoriteChecked = !this._addFavoriteChecked;
-      this._scheduleFavoriteActionsUpdate();
+    if (findById("addFavorite")) {
+      void this._addFavorite();
       return;
     }
     const startButton = findById("startReservation");
@@ -838,11 +826,6 @@ class CityVisitorParkingNewReservationCard extends BaseLocalizedCard<CardConfig>
     if (!target) return;
     const field = this._getValueFromEvent(event, CHANGE_VALUE_IDS);
     if (field) this._setInputValue(field.id, field.value);
-    if (target.id === "addFavorite") {
-      this._addFavoriteChecked = (target as CheckedElement).checked;
-      this._scheduleFavoriteActionsUpdate();
-      return;
-    }
     if (field?.id === "startDateTime") {
       this._syncEndDateWithStart();
     }
@@ -1000,11 +983,10 @@ class CityVisitorParkingNewReservationCard extends BaseLocalizedCard<CardConfig>
     const hadValues =
       Boolean(this._formValues.licensePlate) ||
       Boolean(this._formValues.favorite);
-    const hadAddFavoriteChecked = this._addFavoriteChecked;
     delete this._formValues.licensePlate;
     delete this._formValues.favorite;
     clearFavoriteTransientState(this);
-    if (hadValues || hadAddFavoriteChecked) this._requestRender();
+    if (hadValues) this._requestRender();
   }
 
   _syncEntryState(forceSetupRefresh: boolean): void {
@@ -1103,7 +1085,8 @@ class CityVisitorParkingNewReservationCard extends BaseLocalizedCard<CardConfig>
     return Boolean(key) && key === normalizePlateValue(license);
   }
 
-  _addFavorite(license: string, name: string): void {
+  async _addFavorite(): Promise<void> {
+    const license = this._getInputValue("licensePlate").trim();
     if (
       !this._hass ||
       !this._deviceId ||
@@ -1111,13 +1094,31 @@ class CityVisitorParkingNewReservationCard extends BaseLocalizedCard<CardConfig>
       !this._config?.show_favorites
     )
       return;
+    if (this._favoriteAddInFlight) return;
+    const name = this._getInputValue("favorite").trim();
+    this._favoriteAddInFlight = true;
+    this._setStatus(this._localize("message.adding_favorite"), "info", 5000);
+    this._requestRender();
+    try {
+      await this._hass.callService(DOMAIN, "add_favorite", {
+        device_id: this._deviceId,
+        license_plate: license,
+        ...(name ? { name } : {}),
+      });
+    } catch (err: unknown) {
+      this._setStatus(
+        this._errorMessage(err, "message.favorite_add_failed"),
+        "warning",
+      );
+      this._favoriteAddInFlight = false;
+      this._requestRender();
+      return;
+    }
     invalidateFavoritesCache(this);
-    this._hass.callService(DOMAIN, "add_favorite", {
-      device_id: this._deviceId,
-      license_plate: license,
-      ...(name ? { name } : {}),
-    });
-    this._maybeLoadFavorites();
+    await this._maybeLoadFavorites();
+    this._setStatus(this._localize("message.favorite_added"), "success", 5000);
+    this._favoriteAddInFlight = false;
+    this._requestRender();
   }
 
   async _removeFavorite(favoriteId: string): Promise<void> {
@@ -1184,11 +1185,6 @@ class CityVisitorParkingNewReservationCard extends BaseLocalizedCard<CardConfig>
       return;
     }
     const name = this._getInputValue("favorite").trim();
-    const { showAddFavorite } = this._getFavoriteActionState();
-    if (this._addFavoriteChecked && showAddFavorite) {
-      this._addFavorite(license, name);
-      this._addFavoriteChecked = false;
-    }
     let confirmed: StartReservationResponse | undefined;
     try {
       const activeEntryId = this._getActiveEntryId();

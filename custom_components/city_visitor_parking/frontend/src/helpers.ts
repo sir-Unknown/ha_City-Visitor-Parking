@@ -70,13 +70,13 @@ export const createFavoriteIndex = (favorites: FavoriteItem[]) => {
 export const clearFavoriteTransientState = (context: {
   _pendingRemoveFavoriteId: string | null;
   _favoriteRemoveInFlight: boolean;
-  _addFavoriteChecked: boolean;
+  _favoriteAddInFlight: boolean;
   _suppressFavoriteClear: boolean;
 }): void => {
   Object.assign(context, {
     _pendingRemoveFavoriteId: null,
     _favoriteRemoveInFlight: false,
-    _addFavoriteChecked: false,
+    _favoriteAddInFlight: false,
     _suppressFavoriteClear: false,
   });
 };
@@ -403,6 +403,22 @@ export const parseDateTimeValue = (
   if (!value) return null;
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? null : date;
+};
+
+/**
+ * Whether the card lets the user change the start time of a reservation.
+ * A provider that updates start times natively allows it at any time. For
+ * other providers the backend replaces the reservation, which it only does
+ * while the reservation has not started yet.
+ */
+export const canEditReservationStart = (
+  nativeStartUpdate: boolean,
+  startTime: string | undefined | null,
+  now: Date = new Date(),
+): boolean => {
+  if (nativeStartUpdate) return true;
+  const start = parseDateTimeValue(startTime);
+  return start !== null && start > now;
 };
 
 /**

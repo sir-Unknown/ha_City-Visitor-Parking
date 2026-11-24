@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   DOMAIN,
   buildPermitTitleMap,
+  canEditReservationStart,
   filterDomainDevices,
   filterDomainDevicesForEntry,
   getConfigEntryId,
@@ -172,5 +173,26 @@ describe("startedReservationMessage", () => {
         localizeKey,
       ),
     ).toMatch(/^planned Sat.*10:00 to Sat.*11:00$/);
+  });
+});
+
+describe("canEditReservationStart", () => {
+  const now = new Date(2026, 10, 21, 12, 0);
+
+  it("allows any start time with a native start update", () => {
+    const started = new Date(2026, 10, 21, 11, 0).toISOString();
+    expect(canEditReservationStart(true, started, now)).toBe(true);
+  });
+
+  it("allows a reservation that has not started without a native update", () => {
+    const planned = new Date(2026, 10, 21, 13, 0).toISOString();
+    expect(canEditReservationStart(false, planned, now)).toBe(true);
+  });
+
+  it("keeps the start of a started reservation without a native update", () => {
+    const started = new Date(2026, 10, 21, 11, 0).toISOString();
+    expect(canEditReservationStart(false, started, now)).toBe(false);
+    expect(canEditReservationStart(false, now.toISOString(), now)).toBe(false);
+    expect(canEditReservationStart(false, "not a date", now)).toBe(false);
   });
 });
