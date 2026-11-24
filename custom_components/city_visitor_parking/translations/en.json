@@ -180,7 +180,7 @@
         },
         "start_time": {
           "name": "Start time",
-          "description": "New start time for the reservation. Times without a time zone offset use the Home Assistant time zone."
+          "description": "New start time for the reservation. When the provider can only change the end time, a new start time replaces a reservation that has not started yet: this reservation is ended, then a new one is started. The start time of a reservation that has started cannot be changed then. Times without a time zone offset use the Home Assistant time zone."
         },
         "end_time": {
           "name": "End time",
@@ -310,6 +310,15 @@
     },
     "update_requires_full_details": {
       "message": "This reservation is not in the latest data from the provider, so its start time, end time, and license plate cannot be copied to the new reservation. Check the reservation ID, or provide the start time, end time, and license plate yourself."
+    },
+    "update_start_time_reservation_started": {
+      "message": "This reservation has started, so its start time cannot be changed. You can still change its end time."
+    },
+    "update_start_time_unknown_reservation": {
+      "message": "This reservation is not in the latest data from the provider, so it cannot be checked whether it has started. Check the reservation ID, or try again after the next update."
+    },
+    "update_end_time_not_supported": {
+      "message": "The provider cannot change the end time of a reservation."
     },
     "update_requires_license_plate": {
       "message": "Updating a favorite without a license plate is not supported."

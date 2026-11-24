@@ -414,17 +414,8 @@ def _with_current_reservation(
     return current
 
 
-async def test_update_reservation_new_plate_replaces_start_first(
-    hass: HomeAssistant,
-) -> None:
-    """A new plate starts the replacement in the same area, then ends the old one.
-
-    Times that are not given come from the current reservation.
-    """
-    await async_setup_services(hass)
-    entry, device, provider = _create_entry_with_device(hass, "permit1")
-    start = datetime.now(UTC) - timedelta(minutes=10)
-    current = _with_current_reservation(entry, start, start + timedelta(hours=1))
+def _record_replacement_calls(provider: AsyncMock) -> list[str]:
+    """Record the order of the end and start calls of a replacement."""
     calls: list[str] = []
     started = provider.start_reservation.return_value
 
@@ -437,6 +428,21 @@ async def test_update_reservation_new_plate_replaces_start_first(
 
     provider.start_reservation.side_effect = record_start
     provider.end_reservation.side_effect = record_end
+    return calls
+
+
+async def test_update_reservation_new_plate_replaces_start_first(
+    hass: HomeAssistant,
+) -> None:
+    """A new plate starts the replacement in the same area, then ends the old one.
+
+    Times that are not given come from the current reservation.
+    """
+    await async_setup_services(hass)
+    entry, device, provider = _create_entry_with_device(hass, "permit1")
+    start = datetime.now(UTC) - timedelta(minutes=10)
+    current = _with_current_reservation(entry, start, start + timedelta(hours=1))
+    calls = _record_replacement_calls(provider)
     new_end = current.end_time + timedelta(hours=1)
 
     response = await hass.services.async_call(
@@ -516,6 +522,197 @@ async def test_update_reservation_with_the_current_plate_updates_in_place(
 
     provider.update_reservation.assert_awaited_once_with(
         reservation_id="res1", start_time=None, end_time=new_end
+    )
+    provider.start_reservation.assert_not_awaited()
+    provider.end_reservation.assert_not_awaited()
+
+
+async def test_update_reservation_new_start_replaces_a_planned_reservation(
+    hass: HomeAssistant,
+) -> None:
+    """Without a native start update, a planned reservation is replaced.
+
+    The current one is ended first; the new one keeps its plate, end time, and
+    parking area.
+    """
+    await async_setup_services(hass)
+    entry, device, provider = _create_entry_with_device(hass, "permit1")
+    provider.reservation_update_fields = [ATTR_END_TIME]
+    start = datetime.now(UTC) + timedelta(hours=2)
+    current = _with_current_reservation(entry, start, start + timedelta(hours=1))
+    calls = _record_replacement_calls(provider)
+    new_start = start - timedelta(minutes=30)
+
+    response = await hass.services.async_call(
+        DOMAIN,
+        SERVICE_UPDATE_RESERVATION,
+        {
+            ATTR_DEVICE_ID: device.id,
+            ATTR_RESERVATION_ID: "res1",
+            ATTR_START_TIME: new_start,
+        },
+        blocking=True,
+        return_response=True,
+    )
+
+    assert calls == ["end", "start"]
+    assert provider.end_reservation.await_args.args[0] == "res1"
+    provider.start_reservation.assert_awaited_once_with(
+        license_plate="AB1234",
+        start_time=new_start,
+        end_time=current.end_time,
+        reservation_target_id="630",
+    )
+    provider.update_reservation.assert_not_awaited()
+    assert response is not None
+    assert response["reservation_id"] == "res-new"
+
+
+async def test_update_reservation_new_start_and_end_replace_with_both(
+    hass: HomeAssistant,
+) -> None:
+    """A replacement for a new start time also takes the given end time."""
+    await async_setup_services(hass)
+    entry, device, provider = _create_entry_with_device(hass, "permit1")
+    provider.reservation_update_fields = [ATTR_END_TIME]
+    start = datetime.now(UTC) + timedelta(hours=2)
+    _with_current_reservation(entry, start, start + timedelta(hours=1))
+    new_start = start + timedelta(hours=1)
+    new_end = new_start + timedelta(hours=2)
+
+    await hass.services.async_call(
+        DOMAIN,
+        SERVICE_UPDATE_RESERVATION,
+        {
+            ATTR_DEVICE_ID: device.id,
+            ATTR_RESERVATION_ID: "res1",
+            ATTR_START_TIME: new_start,
+            ATTR_END_TIME: new_end,
+        },
+        blocking=True,
+    )
+
+    provider.end_reservation.assert_awaited_once()
+    provider.start_reservation.assert_awaited_once_with(
+        license_plate="AB1234",
+        start_time=new_start,
+        end_time=new_end,
+        reservation_target_id="630",
+    )
+    provider.update_reservation.assert_not_awaited()
+
+
+async def test_update_reservation_new_start_of_a_started_reservation_is_refused(
+    hass: HomeAssistant,
+) -> None:
+    """Without a native start update, a started reservation keeps its start."""
+    await async_setup_services(hass)
+    entry, device, provider = _create_entry_with_device(hass, "permit1")
+    provider.reservation_update_fields = [ATTR_END_TIME]
+    start = datetime.now(UTC) - timedelta(minutes=10)
+    current = _with_current_reservation(entry, start, start + timedelta(hours=1))
+
+    with pytest.raises(ServiceValidationError) as exc_info:
+        await hass.services.async_call(
+            DOMAIN,
+            SERVICE_UPDATE_RESERVATION,
+            {
+                ATTR_DEVICE_ID: device.id,
+                ATTR_RESERVATION_ID: "res1",
+                ATTR_START_TIME: start + timedelta(minutes=30),
+                ATTR_END_TIME: current.end_time + timedelta(hours=1),
+            },
+            blocking=True,
+        )
+
+    assert exc_info.value.translation_key == "update_start_time_reservation_started"
+    provider.update_reservation.assert_not_awaited()
+    provider.end_reservation.assert_not_awaited()
+    provider.start_reservation.assert_not_awaited()
+
+
+async def test_update_reservation_new_start_of_an_unknown_reservation_is_refused(
+    hass: HomeAssistant,
+) -> None:
+    """Without a native start update, an unknown reservation is not replaced."""
+    await async_setup_services(hass)
+    _, device, provider = _create_entry_with_device(hass, "permit1")
+    provider.reservation_update_fields = [ATTR_END_TIME]
+    start = datetime.now(UTC) + timedelta(hours=1)
+
+    with pytest.raises(ServiceValidationError) as exc_info:
+        await hass.services.async_call(
+            DOMAIN,
+            SERVICE_UPDATE_RESERVATION,
+            {
+                ATTR_DEVICE_ID: device.id,
+                ATTR_RESERVATION_ID: "res1",
+                ATTR_START_TIME: start,
+                ATTR_END_TIME: start + timedelta(hours=1),
+            },
+            blocking=True,
+        )
+
+    assert exc_info.value.translation_key == "update_start_time_unknown_reservation"
+    provider.update_reservation.assert_not_awaited()
+    provider.end_reservation.assert_not_awaited()
+    provider.start_reservation.assert_not_awaited()
+
+
+async def test_update_reservation_unchanged_start_updates_the_end_natively(
+    hass: HomeAssistant,
+) -> None:
+    """Repeating the current start time with a new end time is no replacement."""
+    await async_setup_services(hass)
+    entry, device, provider = _create_entry_with_device(hass, "permit1")
+    provider.reservation_update_fields = [ATTR_END_TIME]
+    start = datetime.now(UTC) - timedelta(minutes=10)
+    current = _with_current_reservation(entry, start, start + timedelta(hours=1))
+    new_end = current.end_time + timedelta(hours=1)
+
+    await hass.services.async_call(
+        DOMAIN,
+        SERVICE_UPDATE_RESERVATION,
+        {
+            ATTR_DEVICE_ID: device.id,
+            ATTR_RESERVATION_ID: "res1",
+            ATTR_START_TIME: current.start_time,
+            ATTR_END_TIME: new_end,
+        },
+        blocking=True,
+    )
+
+    provider.update_reservation.assert_awaited_once_with(
+        reservation_id="res1", start_time=None, end_time=new_end
+    )
+    provider.start_reservation.assert_not_awaited()
+    provider.end_reservation.assert_not_awaited()
+
+
+async def test_update_reservation_native_start_updates_a_started_reservation(
+    hass: HomeAssistant,
+) -> None:
+    """A provider that changes start times natively is never replaced for one."""
+    await async_setup_services(hass)
+    entry, device, provider = _create_entry_with_device(hass, "permit1")
+    provider.reservation_update_fields = [ATTR_START_TIME, ATTR_END_TIME]
+    start = datetime.now(UTC) - timedelta(minutes=10)
+    _with_current_reservation(entry, start, start + timedelta(hours=1))
+    new_start = start + timedelta(minutes=5)
+
+    await hass.services.async_call(
+        DOMAIN,
+        SERVICE_UPDATE_RESERVATION,
+        {
+            ATTR_DEVICE_ID: device.id,
+            ATTR_RESERVATION_ID: "res1",
+            ATTR_START_TIME: new_start,
+        },
+        blocking=True,
+    )
+
+    provider.update_reservation.assert_awaited_once_with(
+        reservation_id="res1", start_time=new_start, end_time=None
     )
     provider.start_reservation.assert_not_awaited()
     provider.end_reservation.assert_not_awaited()
@@ -802,14 +999,14 @@ async def test_update_reservation_requires_full_details(
 
 
 async def test_update_reservation_unsupported_fields(hass: HomeAssistant) -> None:
-    """Update reservation should reject unsupported changes."""
+    """A start time the provider cannot change is not ignored silently."""
     await async_setup_services(hass)
 
     _, device, provider = _create_entry_with_device(hass, "permit1")
     provider.reservation_update_fields = []
     start = datetime.now(UTC)
 
-    with pytest.raises(ServiceValidationError):
+    with pytest.raises(ServiceValidationError) as exc_info:
         await hass.services.async_call(
             DOMAIN,
             SERVICE_UPDATE_RESERVATION,
@@ -821,11 +1018,14 @@ async def test_update_reservation_unsupported_fields(hass: HomeAssistant) -> Non
             blocking=True,
         )
 
+    assert exc_info.value.translation_key == "update_start_time_unknown_reservation"
+    provider.update_reservation.assert_not_awaited()
+
 
 async def test_update_reservation_unsupported_end_time(
     hass: HomeAssistant,
 ) -> None:
-    """Update reservation should ignore unsupported end_time."""
+    """An end time the provider cannot change is rejected, not ignored."""
     await async_setup_services(hass)
 
     _, device, provider = _create_entry_with_device(hass, "permit1")
@@ -833,7 +1033,7 @@ async def test_update_reservation_unsupported_end_time(
 
     end = datetime.now(UTC) + timedelta(hours=1)
 
-    with pytest.raises(ServiceValidationError):
+    with pytest.raises(ServiceValidationError) as exc_info:
         await hass.services.async_call(
             DOMAIN,
             SERVICE_UPDATE_RESERVATION,
@@ -844,6 +1044,9 @@ async def test_update_reservation_unsupported_end_time(
             },
             blocking=True,
         )
+
+    assert exc_info.value.translation_key == "update_end_time_not_supported"
+    provider.update_reservation.assert_not_awaited()
 
 
 async def test_update_reservation_not_supported_falls_back(

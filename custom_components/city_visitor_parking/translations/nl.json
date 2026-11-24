@@ -180,7 +180,7 @@
         },
         "start_time": {
           "name": "Starttijd",
-          "description": "Nieuwe starttijd van de reservering. Tijden zonder tijdzone-offset gebruiken de tijdzone van Home Assistant."
+          "description": "Nieuwe starttijd van de reservering. Kan de provider alleen de eindtijd wijzigen, dan vervangt een nieuwe starttijd een reservering die nog niet is begonnen: deze reservering wordt beëindigd, daarna start er een nieuwe. De starttijd van een reservering die al is begonnen, kan dan niet worden gewijzigd. Tijden zonder tijdzone-offset gebruiken de tijdzone van Home Assistant."
         },
         "end_time": {
           "name": "Eindtijd",
@@ -310,6 +310,15 @@
     },
     "update_requires_full_details": {
       "message": "Deze reservering staat niet in de laatste gegevens van de provider, dus de starttijd, eindtijd en het kenteken kunnen niet naar de nieuwe reservering worden overgenomen. Controleer de reservering-ID, of geef de starttijd, eindtijd en het kenteken zelf op."
+    },
+    "update_start_time_reservation_started": {
+      "message": "Deze reservering is al begonnen, dus de starttijd kan niet meer worden gewijzigd. De eindtijd kun je nog wel wijzigen."
+    },
+    "update_start_time_unknown_reservation": {
+      "message": "Deze reservering staat niet in de laatste gegevens van de provider, dus er kan niet worden gecontroleerd of die al is begonnen. Controleer de reservering-ID, of probeer het opnieuw na de volgende update."
+    },
+    "update_end_time_not_supported": {
+      "message": "De provider kan de eindtijd van een reservering niet wijzigen."
     },
     "update_requires_license_plate": {
       "message": "Bijwerken zonder kenteken wordt niet ondersteund."
