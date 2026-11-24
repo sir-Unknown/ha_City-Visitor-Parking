@@ -678,9 +678,9 @@ var EMPTY_PAID_PARKING_STATUS = {
   kind: null,
   start: null,
   end: null,
-  remainingMinutes: null,
-  balanceUnit: null
+  balances: []
 };
+var BALANCE_KINDS = ["time", "money", "times"];
 var normalizeMatchValue = (value) => String(value ?? "").trim().toLowerCase();
 var normalizePlateValue = (value) => normalizeMatchValue(value).replace(/[^a-z0-9]/g, "");
 var createFavoriteIndex = (favorites) => {
@@ -724,8 +724,7 @@ var applyPaidParkingStatus = (context, status) => {
     _windowKind: status?.kind ?? null,
     _windowStartIso: status?.start ?? null,
     _windowEndIso: status?.end ?? null,
-    _remainingMinutes: status?.remainingMinutes ?? null,
-    _balanceUnit: status?.balanceUnit ?? null
+    _balances: status?.balances ?? []
   });
 };
 var nonEmptyString = (value) => typeof value === "string" && value ? value : null;
@@ -739,14 +738,21 @@ var normalizeParkingAreaPaidWindow = (payload) => {
     end: kind ? nonEmptyString(payload?.window_end) : null
   };
 };
-var normalizePaidParkingStatus = (payload) => {
-  const balance = payload?.remaining_balance;
-  return {
-    ...normalizeParkingAreaPaidWindow(payload),
-    remainingMinutes: typeof balance === "number" && Number.isFinite(balance) ? balance : null,
-    balanceUnit: nonEmptyString(payload?.balance_unit)
-  };
-};
+var isBalanceKind = (value) => BALANCE_KINDS.includes(value);
+var normalizeBalances = (value) => Array.isArray(value) ? value.flatMap(
+  (balance) => balance && isBalanceKind(balance.kind) && typeof balance.amount === "number" && Number.isFinite(balance.amount) ? [
+    {
+      amount: balance.amount,
+      unit: nonEmptyString(balance.unit),
+      kind: balance.kind
+    }
+  ] : []
+) : [];
+var normalizePaidParkingStatus = (payload) => ({
+  ...normalizeParkingAreaPaidWindow(payload),
+  balances: normalizeBalances(payload?.balances)
+});
+var selectCardBalances = (balances, kinds) => kinds ? balances.filter((balance) => kinds.includes(balance.kind)) : [...balances];
 var normalizeParkingAreas = (payload) => Array.isArray(payload?.parking_areas) ? payload.parking_areas.filter(
   (parkingArea) => Boolean(nonEmptyString(parkingArea?.parking_area_id))
 ) : [];
@@ -869,26 +875,21 @@ var extractEventValue = (event, fallbackElement) => {
   return detail != null && "value" in detail ? detail.value ?? "" : fallbackElement?.value ?? "";
 };
 var isHassRunning = (hass) => hass?.config?.state === "RUNNING";
-var formatBalanceLabel = (remainingMinutes, balanceUnit, localize2) => {
-  const isMonetary = balanceUnit !== null && balanceUnit !== "TIMES" && balanceUnit !== "MINUTE";
-  if (isMonetary) {
-    const formatted = Number.isInteger(remainingMinutes) ? String(remainingMinutes) : remainingMinutes.toFixed(2);
-    const currencySymbols = {
-      EURO: "\u20AC",
-      EUR: "\u20AC",
-      GBP: "\xA3",
-      USD: "$"
-    };
-    const symbol = currencySymbols[balanceUnit ?? ""] ?? balanceUnit ?? "";
-    return { text: `${symbol}${formatted}`, icon: "mdi:cash" };
+var formatBalanceLabel = (balance, localize2, language) => {
+  if (balance.kind === "money") {
+    const text2 = new Intl.NumberFormat(language, {
+      style: "currency",
+      currency: "EUR"
+    }).format(balance.amount);
+    return { text: text2, icon: "mdi:cash" };
   }
-  if (balanceUnit === "TIMES") {
+  if (balance.kind === "times") {
     return {
-      text: String(Math.round(remainingMinutes)),
+      text: String(Math.round(balance.amount)),
       icon: "mdi:ticket-outline"
     };
   }
-  const totalMins = Math.round(remainingMinutes);
+  const totalMins = Math.round(balance.amount);
   const hours = Math.floor(totalMins / 60);
   const mins = totalMins % 60;
   const h3 = localize2("unit.hours");
@@ -1169,7 +1170,7 @@ var renderFavoriteSelect = (params) => {
 };
 var renderFavoriteActionRow = (params) => {
   const showFavoriteButton = params.showFavorites && (params.showRemoveFavorite || params.showAddFavorite);
-  const showBalance = !showFavoriteButton && params.hasTarget && params.remainingMinutes !== null;
+  const showBalance = !showFavoriteButton && params.hasTarget;
   return b2`
     <div class="row actions">
       <div class="favorite-actions">
@@ -1201,18 +1202,18 @@ var renderFavoriteActionRow = (params) => {
                     ></ha-icon>
                   </ha-badge>
                 ` : A : A}
-        ${showBalance ? (() => {
+        ${showBalance ? params.balances.map((balance) => {
     const { text, icon } = formatBalanceLabel(
-      params.remainingMinutes,
-      params.balanceUnit,
-      params.localize
+      balance,
+      params.localize,
+      params.language
     );
     return b2`
                 <ha-badge class="balance-badge" .label=${text}>
                   <ha-icon slot="icon" icon=${icon}></ha-icon>
                 </ha-badge>
               `;
-  })() : A}
+  }) : A}
       </div>
       ${(() => {
     const isSuccess = params.startButtonSuccess;
@@ -1393,7 +1394,12 @@ var buildCardTypeOptions = (localizeTarget, prefix) => {
     ]
   ];
 };
-var buildCardEditorSchema = (cardTypeOptions, displayOptionsExpanded, showParkingAreaToggle = false) => [
+var buildBalanceKindOptions = (localizeTarget, prefix) => BALANCE_KINDS.map((kind) => {
+  const key = `${prefix}.value.balance_kind.${kind}`;
+  const label = localize(localizeTarget, key);
+  return { value: kind, label: label === key ? kind : label };
+});
+var buildCardEditorSchema = (cardTypeOptions, balanceKindOptions, displayOptionsExpanded, showParkingAreaToggle = false) => [
   {
     type: "select",
     name: "type",
@@ -1428,6 +1434,13 @@ var buildCardEditorSchema = (cardTypeOptions, displayOptionsExpanded, showParkin
         name: "default_license_plate",
         selector: { text: {} },
         required: false
+      },
+      {
+        name: "balances",
+        selector: {
+          select: { multiple: true, mode: "list", options: balanceKindOptions }
+        },
+        required: false
       }
     ]
   }
@@ -1455,14 +1468,15 @@ var CityVisitorParkingCardEditor = class extends BaseCardEditor {
     );
     const cardTypeOptions = buildCardTypeOptions(localizeTarget, "editor");
     const displayOptionsExpanded = Boolean(
-      this._config?.config_entry_id || this._config?.show_parking_area === false || this._config?.show_name === false || this._config?.show_favorites === false || this._config?.show_start_time === false || this._config?.show_end_time === false || this._config?.default_license_plate
+      this._config?.config_entry_id || this._config?.show_parking_area === false || this._config?.show_name === false || this._config?.show_favorites === false || this._config?.show_start_time === false || this._config?.show_end_time === false || this._config?.default_license_plate || this._config?.balances
     );
     return b2`
       <ha-form
         .hass=${this.hass}
-        .data=${this._config ?? {}}
+        .data=${{ balances: [...BALANCE_KINDS], ...this._config }}
         .schema=${buildCardEditorSchema(
       cardTypeOptions,
+      buildBalanceKindOptions(localizeTarget, "editor"),
       displayOptionsExpanded,
       this._hasParkingAreaChoice()
     )}
@@ -1471,6 +1485,21 @@ var CityVisitorParkingCardEditor = class extends BaseCardEditor {
         @value-changed=${this._handleValueChanged}
       ></ha-form>
     `;
+  }
+  /**
+   * Leaves `balances` out of the config while every kind is selected. The form
+   * shows every kind selected for a config without `balances`, which is the
+   * card's default, so the default round-trips instead of being written out.
+   */
+  _handleValueChanged(ev) {
+    ev.stopPropagation();
+    const config = { ...ev.detail?.value ?? {} };
+    if (BALANCE_KINDS.every((kind) => config.balances?.includes(kind))) {
+      delete config.balances;
+    }
+    super._handleValueChanged(
+      new CustomEvent("value-changed", { detail: { value: config } })
+    );
   }
   /**
    * Whether the card can offer a parking area choice: the configured permit, or,
@@ -1540,7 +1569,11 @@ var createConfigFormGetter = (prefix, buildSchema) => async (hassOrLocalize) => 
 };
 var getCardConfigForm = createConfigFormGetter(
   "editor",
-  (cardTypeOptions) => buildCardEditorSchema(cardTypeOptions, false)
+  (cardTypeOptions, localizeTarget) => buildCardEditorSchema(
+    cardTypeOptions,
+    buildBalanceKindOptions(localizeTarget, "editor"),
+    false
+  )
 );
 
 // src/card-parking.ts
@@ -1587,8 +1620,7 @@ var CityVisitorParkingNewReservationCard = class extends BaseLocalizedCard {
     this._windowKind = null;
     this._windowStartIso = null;
     this._windowEndIso = null;
-    this._remainingMinutes = null;
-    this._balanceUnit = null;
+    this._balances = [];
     this._paidParkingStatusTsByEntryId = /* @__PURE__ */ new Map();
     this._paidParkingStatusInFlightByEntryId = /* @__PURE__ */ new Map();
     this._paidParkingStatusByEntryId = /* @__PURE__ */ new Map();
@@ -2063,8 +2095,8 @@ var CityVisitorParkingNewReservationCard = class extends BaseLocalizedCard {
       startButtonTimeConflict: plateAlreadyActive,
       startDisabled,
       hasTarget,
-      remainingMinutes: this._remainingMinutes,
-      balanceUnit: this._balanceUnit,
+      balances: selectCardBalances(this._balances, this._config.balances),
+      language: getHassLanguage(this._hass),
       localize: localizeFn
     })}
         </div>
@@ -2720,6 +2752,7 @@ CityVisitorParkingNewReservationCard.styles = [
       .favorite-actions {
         display: flex;
         align-items: center;
+        gap: var(--ha-space-2, 8px);
       }
       .favorite-actions ha-badge {
         --badge-color: var(--secondary-text-color);

@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import logging
+import math
 import time
 from datetime import UTC, datetime, timedelta
-from typing import TYPE_CHECKING, Protocol, cast
+from typing import TYPE_CHECKING, Final, Protocol, cast
 
 from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers import issue_registry as ir
@@ -14,7 +15,14 @@ from homeassistant.helpers.update_coordinator import (
     UpdateFailed,
 )
 from homeassistant.util import dt as dt_util
-from pycityvisitorparking import AuthError, NetworkError, ProviderError
+from pycityvisitorparking import (
+    BALANCE_UNIT_EURO,
+    BALANCE_UNIT_MINUTE,
+    BALANCE_UNIT_TIMES,
+    AuthError,
+    NetworkError,
+    ProviderError,
+)
 from pycityvisitorparking.exceptions import (
     NotFoundError,
     PyCityVisitorParkingError,
@@ -25,6 +33,9 @@ from pycityvisitorparking.exceptions import (
 from .auth import async_provider_login, has_stored_credentials
 from .const import (
     AUTO_END_COOLDOWN,
+    BALANCE_KIND_MONEY,
+    BALANCE_KIND_TIME,
+    BALANCE_KIND_TIMES,
     CONF_AUTO_END,
     CONF_DEFAULT_PARKING_AREA,
     DEFAULT_UPDATE_INTERVAL,
@@ -40,6 +51,7 @@ from .const import (
 from .helpers import get_attr
 from .models import (
     AutoEndState,
+    Balance,
     CoordinatorData,
     PaidParkingStatus,
     ParkingArea,
@@ -59,6 +71,8 @@ if TYPE_CHECKING:
     from pycityvisitorparking import Permit
     from pycityvisitorparking import Reservation as ProviderReservation
     from pycityvisitorparking.provider.base import BaseProvider as ProviderProtocol
+
+    from .models import BalanceKind
 else:
 
     class ProviderProtocol(Protocol):
@@ -83,6 +97,15 @@ else:
     ProviderReservation = object
 
 _LOGGER = logging.getLogger(__name__)
+
+# Library balance unit to integration balance kind. A balance without a unit has
+# always been shown as minutes, so it stays a time balance.
+_BALANCE_KIND_BY_UNIT: Final[Mapping[str | None, BalanceKind]] = {
+    BALANCE_UNIT_MINUTE: BALANCE_KIND_TIME,
+    None: BALANCE_KIND_TIME,
+    BALANCE_UNIT_EURO: BALANCE_KIND_MONEY,
+    BALANCE_UNIT_TIMES: BALANCE_KIND_TIMES,
+}
 
 
 def permit_not_found_issue_id(entry_id: str) -> str:
@@ -234,8 +257,7 @@ class CityVisitorParkingCoordinator(TimestampDataUpdateCoordinator[CoordinatorDa
             raise UpdateFailed("Unexpected error") from err
 
         self._check_provider_permit(permit)
-        remaining_balance = _normalize_remaining_balance(permit)
-        balance_unit = get_attr(permit, "balance_unit")
+        balances = _normalize_balances(permit)
         normalized_reservations = normalize_reservations(reservations)
         normalized_favorites = _normalize_favorites(favorites)
         now = dt_util.utcnow()
@@ -260,8 +282,7 @@ class CityVisitorParkingCoordinator(TimestampDataUpdateCoordinator[CoordinatorDa
 
         data = CoordinatorData(
             permit_id=self._permit_id,
-            permit_remaining_balance=remaining_balance,
-            permit_balance_unit=balance_unit if isinstance(balance_unit, str) else None,
+            balances=balances,
             paid_hours=tuple(paid_hours),
             reservations=tuple(normalized_reservations),
             favorites=tuple(normalized_favorites),
@@ -634,17 +655,43 @@ def _order_default_parking_area_first(
     return parking_areas
 
 
-def _normalize_remaining_balance(permit: Permit) -> float:
-    """Normalize remaining balance (minutes, times, or monetary amount)."""
-    raw = get_attr(permit, "remaining_balance")
-    if raw is None:
-        return 0.0
+def _normalize_balances(permit: Permit) -> tuple[Balance, ...]:
+    """Return the permit's balances, at most one per kind, primary first.
+
+    A balance with a unit the integration does not know, or an amount that is
+    not a number, is skipped instead of shown as zero, which could trigger
+    "balance used up" automations. Amounts are clamped to zero or more.
+    """
+    raw_balances = get_attr(permit, "balances")
+    if not isinstance(raw_balances, list | tuple):
+        return ()
+    balances: list[Balance] = []
+    for raw_balance in cast("list[object] | tuple[object, ...]", raw_balances):
+        unit = get_attr(raw_balance, "unit")
+        if unit is not None and not isinstance(unit, str):
+            continue
+        kind = _BALANCE_KIND_BY_UNIT.get(unit)
+        amount = _normalize_balance_amount(get_attr(raw_balance, "amount"))
+        if kind is None or amount is None:
+            continue
+        # The library sends at most one balance per unit, but MINUTE and no unit
+        # both map to time; the first one is the primary balance, so it wins.
+        if any(balance.kind == kind for balance in balances):
+            continue
+        balances.append(Balance(kind=kind, amount=amount, unit=unit))
+    return tuple(balances)
+
+
+def _normalize_balance_amount(raw: object) -> float | None:
+    """Return a non-negative balance amount, or None when it is not a number."""
+    if isinstance(raw, bool) or not isinstance(raw, int | float | str):
+        return None
     try:
-        if not isinstance(raw, int | float | str):
-            return 0.0
         value = float(raw)
-    except TypeError, ValueError:
-        return 0.0
+    except ValueError:
+        return None
+    if not math.isfinite(value):
+        return None
     return max(0.0, value)
 
 

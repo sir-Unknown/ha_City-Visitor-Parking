@@ -22,6 +22,7 @@ from custom_components.city_visitor_parking.diagnostics import (
 )
 from custom_components.city_visitor_parking.models import (
     AutoEndState,
+    Balance,
     CoordinatorData,
     Favorite,
     PaidParkingStatus,
@@ -70,8 +71,10 @@ async def test_diagnostics_redacts_sensitive_data(hass: HomeAssistant) -> None:
     )
     data = CoordinatorData(
         permit_id="permit",
-        permit_remaining_balance=30,
-        permit_balance_unit=None,
+        balances=(
+            Balance(kind="time", amount=30, unit=None),
+            Balance(kind="money", amount=4.5, unit="EURO"),
+        ),
         paid_hours=(
             TimeRange(
                 start=datetime(2025, 1, 1, 8, 0, tzinfo=UTC),
@@ -127,3 +130,8 @@ async def test_diagnostics_redacts_sensitive_data(hass: HomeAssistant) -> None:
     assert runtime["paid_hours_blocks"] == 1
     assert runtime["last_update_success_time"] == "2025-01-01T09:00:00+00:00"
     assert runtime["favorites"] == 1
+    # Kinds and units only; amounts are not needed to troubleshoot sensors.
+    assert runtime["balances"] == [
+        {"kind": "time", "unit": None},
+        {"kind": "money", "unit": "EURO"},
+    ]

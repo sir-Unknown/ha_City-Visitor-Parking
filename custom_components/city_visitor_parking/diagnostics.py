@@ -57,6 +57,11 @@ async def async_get_config_entry_diagnostics(
             else None,
             "active_reservations": len(data.active_reservations),
             "favorites": len(data.favorites),
+            # Kinds and units only: which balance sensors exist, not the amounts.
+            "balances": [
+                {"kind": balance.kind, "unit": balance.unit}
+                for balance in data.balances
+            ],
             "paid_hours_blocks": len(data.paid_hours),
             "is_paid_now": data.paid_parking_status.is_paid_now,
             # Parking area ids and names are public area names, not personal data.

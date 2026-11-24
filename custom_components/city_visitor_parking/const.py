@@ -36,6 +36,13 @@ ATTR_PARKING_AREA_ID: Final = "parking_area_id"
 STATE_PAID: Final = "paid"
 STATE_FREE: Final = "free"
 
+# Kinds of permit balance the integration exposes; one sensor and one status
+# payload entry per kind. A balance without a unit has always been treated as
+# minutes, so it is a time balance.
+BALANCE_KIND_TIME: Final = "time"
+BALANCE_KIND_MONEY: Final = "money"
+BALANCE_KIND_TIMES: Final = "times"
+
 ERROR_CODE_PROVIDER_REJECTED: Final = "provider_rejected"
 """Library error code: the provider processed the request and refused it.
 
