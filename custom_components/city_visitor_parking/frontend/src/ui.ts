@@ -393,7 +393,7 @@ export const renderFavoriteActionRow = (params: {
   showRemoveFavorite: boolean;
   selectedFavoriteId: string;
   favoriteRemoveDisabled: boolean;
-  addFavoriteChecked: boolean;
+  favoriteAddDisabled: boolean;
   startInFlight: boolean;
   startButtonSuccess: boolean;
   startButtonWarning: boolean;
@@ -430,20 +430,14 @@ export const renderFavoriteActionRow = (params: {
             : params.showAddFavorite
               ? html`
                   <ha-badge
-                    id="addFavoriteWrap"
+                    id="addFavorite"
                     type="button"
                     .label=${params.localize("action.add_favorite")}
-                    class=${params.addFavoriteChecked ? "badge-checked" : ""}
+                    ?disabled=${params.favoriteAddDisabled}
                     title=${params.localize("action.add_favorite")}
                     aria-label=${params.localize("action.add_favorite")}
-                    aria-pressed=${params.addFavoriteChecked ? "true" : "false"}
                   >
-                    <ha-icon
-                      slot="icon"
-                      icon=${params.addFavoriteChecked
-                        ? "mdi:heart"
-                        : "mdi:heart-outline"}
-                    ></ha-icon>
+                    <ha-icon slot="icon" icon="mdi:heart-outline"></ha-icon>
                   </ha-badge>
                 `
               : nothing

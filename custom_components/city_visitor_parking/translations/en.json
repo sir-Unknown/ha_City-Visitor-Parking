@@ -28,7 +28,7 @@
       },
       "permit": {
         "title": "Select permit",
-        "description": "Choose the permit to manage in Home Assistant.",
+        "description": "This account has several permits. Choose the permit to add. To use another permit as well, add the integration again and choose that permit.",
         "data": {
           "permit_id": "Permit"
         }
@@ -55,6 +55,8 @@
       }
     },
     "abort": {
+      "all_permits_configured": "All permits of this account are already configured.",
+      "already_configured": "This permit is already configured.",
       "reauth_successful": "Credentials updated",
       "reconfigure_successful": "Configuration updated",
       "wrong_account": "The selected account does not match this entry"
@@ -401,6 +403,10 @@
     "paid_parking_renamed": {
       "title": "Paid parking values renamed",
       "description": "The **Paid parking** sensor now reports `paid` instead of `chargeable`, and its attribute `is_chargeable_now` is now `is_paid_now`. The `get_status` action now returns `paid_hours` instead of `zone_validity` and `is_paid_now` instead of `is_chargeable_now`.\n\nUpdate automations, scripts and templates that use the old values. You can then ignore this repair."
+    },
+    "permit_not_found": {
+      "title": "Permit of {name} is no longer available",
+      "description": "The visitor parking account no longer has an active permit for **{name}**, for example because the permit ended or the authorization was revoked. Its entities stay unavailable; the integration never switches to another permit of the account.\n\nIf the permit becomes active again, this repair disappears by itself. Otherwise delete this entry and add the integration again to choose a permit that is still active."
     }
   },
   "entity": {

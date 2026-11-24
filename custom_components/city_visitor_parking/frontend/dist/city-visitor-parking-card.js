@@ -704,7 +704,7 @@ var clearFavoriteTransientState = (context) => {
   Object.assign(context, {
     _pendingRemoveFavoriteId: null,
     _favoriteRemoveInFlight: false,
-    _addFavoriteChecked: false,
+    _favoriteAddInFlight: false,
     _suppressFavoriteClear: false
   });
 };
@@ -1205,18 +1205,14 @@ var renderFavoriteActionRow = (params) => {
                 </ha-badge>
               ` : params.showAddFavorite ? b2`
                   <ha-badge
-                    id="addFavoriteWrap"
+                    id="addFavorite"
                     type="button"
                     .label=${params.localize("action.add_favorite")}
-                    class=${params.addFavoriteChecked ? "badge-checked" : ""}
+                    ?disabled=${params.favoriteAddDisabled}
                     title=${params.localize("action.add_favorite")}
                     aria-label=${params.localize("action.add_favorite")}
-                    aria-pressed=${params.addFavoriteChecked ? "true" : "false"}
                   >
-                    <ha-icon
-                      slot="icon"
-                      icon=${params.addFavoriteChecked ? "mdi:heart" : "mdi:heart-outline"}
-                    ></ha-icon>
+                    <ha-icon slot="icon" icon="mdi:heart-outline"></ha-icon>
                   </ha-badge>
                 ` : A : A}
         ${showBalance ? (() => {
@@ -1600,7 +1596,7 @@ var CityVisitorParkingNewReservationCard = class extends BaseLocalizedCard {
     this._startButtonSuccessTimeout = null;
     this._startInFlight = false;
     this._favoriteRemoveInFlight = false;
-    this._addFavoriteChecked = false;
+    this._favoriteAddInFlight = false;
     this._suppressFavoriteClear = false;
     this._paidState = null;
     this._windowKind = null;
@@ -1994,6 +1990,7 @@ var CityVisitorParkingNewReservationCard = class extends BaseLocalizedCard {
     ));
     const { showAddFavorite, showRemoveFavorite, removeFavorite } = this._getFavoriteActionState();
     const favoriteRemoveDisabled = controlsDisabled || this._favoriteRemoveInFlight;
+    const favoriteAddDisabled = controlsDisabled || this._favoriteAddInFlight || !this._getInputValue("licensePlate").trim();
     const favoritesOptions = this._favorites;
     const favoriteSelectDisabled = controlsDisabled || this._favoritesLoading || selectedPermitDisabled;
     const { start: resolvedStart, end: resolvedEnd } = this._resolveTimes();
@@ -2103,7 +2100,7 @@ var CityVisitorParkingNewReservationCard = class extends BaseLocalizedCard {
       showRemoveFavorite,
       selectedFavoriteId: removeFavorite?.id || removeFavorite?.license_plate || "",
       favoriteRemoveDisabled,
-      addFavoriteChecked: this._addFavoriteChecked,
+      favoriteAddDisabled,
       startInFlight: this._startInFlight,
       startButtonSuccess: this._startButtonSuccess,
       startButtonWarning: selectedPermitDisabled,
@@ -2123,13 +2120,6 @@ var CityVisitorParkingNewReservationCard = class extends BaseLocalizedCard {
     const controlsDisabled = this._isInEditor();
     this.toggleAttribute("data-preview", controlsDisabled);
     if (controlsDisabled) this._loadPreviewPermitParkingAreas();
-    if (this._addFavoriteChecked) {
-      const { showAddFavorite } = this._getFavoriteActionState();
-      if (!showAddFavorite) {
-        this._addFavoriteChecked = false;
-        this._requestRender();
-      }
-    }
   }
   /**
    * The preview's permit picker is read-only, so without a configured permit
@@ -2157,10 +2147,6 @@ var CityVisitorParkingNewReservationCard = class extends BaseLocalizedCard {
         this._setInputValue("favorite", matchingValue);
       }
     }
-    const { showAddFavorite } = this._getFavoriteActionState();
-    if (!showAddFavorite && this._addFavoriteChecked) {
-      this._addFavoriteChecked = false;
-    }
     this._requestRender();
   }
   _handleClick(event) {
@@ -2173,9 +2159,8 @@ var CityVisitorParkingNewReservationCard = class extends BaseLocalizedCard {
       void this._removeFavorite(id);
       return;
     }
-    if (findById("addFavoriteWrap")) {
-      this._addFavoriteChecked = !this._addFavoriteChecked;
-      this._scheduleFavoriteActionsUpdate();
+    if (findById("addFavorite")) {
+      void this._addFavorite();
       return;
     }
     const startButton = findById("startReservation");
@@ -2200,11 +2185,6 @@ var CityVisitorParkingNewReservationCard = class extends BaseLocalizedCard {
     if (!target) return;
     const field = this._getValueFromEvent(event, CHANGE_VALUE_IDS);
     if (field) this._setInputValue(field.id, field.value);
-    if (target.id === "addFavorite") {
-      this._addFavoriteChecked = target.checked;
-      this._scheduleFavoriteActionsUpdate();
-      return;
-    }
     if (field?.id === "startDateTime" || field?.id === "endDateTime") {
       this._timesEditedSinceParkingAreaPick = true;
     }
@@ -2422,11 +2402,10 @@ var CityVisitorParkingNewReservationCard = class extends BaseLocalizedCard {
   }
   _clearPermitScopedFormValues() {
     const hadValues = Boolean(this._formValues.licensePlate) || Boolean(this._formValues.favorite);
-    const hadAddFavoriteChecked = this._addFavoriteChecked;
     delete this._formValues.licensePlate;
     delete this._formValues.favorite;
     clearFavoriteTransientState(this);
-    if (hadValues || hadAddFavoriteChecked) this._requestRender();
+    if (hadValues) this._requestRender();
   }
   _syncEntryState(forceSetupRefresh) {
     const entryId = this._getActiveEntryId();
@@ -2511,16 +2490,35 @@ var CityVisitorParkingNewReservationCard = class extends BaseLocalizedCard {
     const key = normalizePlateValue(favorite.license_plate || favorite.id);
     return Boolean(key) && key === normalizePlateValue(license);
   }
-  _addFavorite(license, name) {
+  async _addFavorite() {
+    const license = this._getInputValue("licensePlate").trim();
     if (!this._hass || !this._deviceId || !license || !this._config?.show_favorites)
       return;
+    if (this._favoriteAddInFlight) return;
+    const name = this._getInputValue("favorite").trim();
+    this._favoriteAddInFlight = true;
+    this._setStatus(this._localize("message.adding_favorite"), "info", 5e3);
+    this._requestRender();
+    try {
+      await this._hass.callService(DOMAIN, "add_favorite", {
+        device_id: this._deviceId,
+        license_plate: license,
+        ...name ? { name } : {}
+      });
+    } catch (err) {
+      this._setStatus(
+        this._errorMessage(err, "message.favorite_add_failed"),
+        "warning"
+      );
+      this._favoriteAddInFlight = false;
+      this._requestRender();
+      return;
+    }
     invalidateFavoritesCache(this);
-    this._hass.callService(DOMAIN, "add_favorite", {
-      device_id: this._deviceId,
-      license_plate: license,
-      ...name ? { name } : {}
-    });
-    this._maybeLoadFavorites();
+    await this._maybeLoadFavorites();
+    this._setStatus(this._localize("message.favorite_added"), "success", 5e3);
+    this._favoriteAddInFlight = false;
+    this._requestRender();
   }
   async _removeFavorite(favoriteId) {
     if (!this._hass || !this._deviceId || !favoriteId || !this._config?.show_favorites)
@@ -2575,11 +2573,6 @@ var CityVisitorParkingNewReservationCard = class extends BaseLocalizedCard {
       return;
     }
     const name = this._getInputValue("favorite").trim();
-    const { showAddFavorite } = this._getFavoriteActionState();
-    if (this._addFavoriteChecked && showAddFavorite) {
-      this._addFavorite(license, name);
-      this._addFavoriteChecked = false;
-    }
     let confirmed;
     try {
       const activeEntryId2 = this._getActiveEntryId();
@@ -2866,9 +2859,6 @@ CityVisitorParkingNewReservationCard.styles = [
       }
       .favorite-actions ha-badge {
         --badge-color: var(--secondary-text-color);
-      }
-      .favorite-actions .badge-checked {
-        --badge-color: var(--primary-color);
       }
       .favorite-actions .balance-badge {
         --ha-font-size-xs: var(--ha-font-size-s);

@@ -128,6 +128,33 @@ async def test_async_setup_entry_provider_error(
         await init_module.async_setup_entry(hass, entry)
 
 
+async def test_async_setup_entry_permit_not_found_at_login(
+    hass: HomeAssistant, monkeypatch: MonkeyPatch, pv_library: ModuleType
+) -> None:
+    """A permit rejected at login raises a repair and keeps retrying setup."""
+    entry = _create_entry()
+    entry.add_to_hass(hass)
+
+    provider = AsyncMock()
+    provider.login.side_effect = pv_library.ProviderError(
+        "gone", error_code="permit_not_found"
+    )
+    client = AsyncMock()
+    client.get_provider.return_value = provider
+
+    monkeypatch.setattr(
+        init_module, "async_create_client", AsyncMock(return_value=client)
+    )
+
+    with pytest.raises(ConfigEntryNotReady):
+        await init_module.async_setup_entry(hass, entry)
+    issue = ir.async_get(hass).async_get_issue(
+        DOMAIN, f"permit_not_found_{entry.entry_id}"
+    )
+    assert issue is not None
+    assert issue.translation_placeholders == {"name": entry.title}
+
+
 async def test_update_listener_reloads_on_override_change(
     hass: HomeAssistant, monkeypatch: MonkeyPatch
 ) -> None:

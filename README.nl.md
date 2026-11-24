@@ -54,6 +54,8 @@ Zo hoef je niet elke keer handmatig in te loggen op het parkeerportaal van de ge
 
 Elke vergunning krijgt één apparaat met de naam `{gemeente} - {vergunnings-ID}`, en de entiteit-ID's beginnen met die naam. Sommige gemeenten gebruiken lange vergunnings-ID's. Voor kortere entiteit-ID's hernoem je het apparaat via **Instellingen** → **Apparaten & diensten** → **Apparaten** en laat je Home Assistant ook de entiteit-ID's hernoemen. Pas daarna automatiseringen en dashboards aan die de oude entiteit-ID's gebruiken.
 
+Heeft je account meerdere vergunningen, bijvoorbeeld je eigen vergunning en een vergunning waarvoor je gemachtigd bent, dan vraagt de installatie welke vergunning je wilt toevoegen. Voeg de integratie per vergunning toe om er meer dan één te gebruiken. Elke entry blijft bij zijn eigen vergunning; is die vergunning niet meer actief, dan toont Home Assistant een reparatiemelding in plaats van over te schakelen op een andere vergunning.
+
 ---
 
 ## Belangrijk

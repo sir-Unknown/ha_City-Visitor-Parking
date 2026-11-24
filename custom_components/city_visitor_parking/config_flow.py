@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 import re
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from datetime import date, time
 from importlib import resources
 from typing import Final, cast
@@ -83,6 +83,8 @@ class CityVisitorParkingConfigFlow(config_entries.ConfigFlow):
         self._provider_config: ProviderConfig | None = None
         self._credentials: dict[str, str] = {}
         self._reauth_entry: config_entries.ConfigEntry | None = None
+        # Permit id -> selector label of the permits offered in the permit step.
+        self._permit_options: dict[str, str] = {}
 
     def is_matching(self, other_flow: CityVisitorParkingConfigFlow) -> bool:
         """Return True if other_flow matches this flow."""
@@ -107,13 +109,38 @@ class CityVisitorParkingConfigFlow(config_entries.ConfigFlow):
         if self._provider_config is None:
             errors["base"] = "invalid_municipality"
             return self._show_user_form(user_input, errors)
-        permit_id = await self._async_validate_credentials(username, password, errors)
+        permits = await self._async_validate_credentials(username, password, errors)
         if errors:
             return self._show_user_form(user_input, errors)
-        if permit_id is None:
-            return self.async_abort(reason="unknown")
 
-        return await self._async_create_entry_for_permit(permit_id)
+        return await self._async_select_permit(permits)
+
+    async def async_step_permit(
+        self, user_input: dict[str, object] | None = None
+    ) -> config_entries.ConfigFlowResult:
+        """Let the user choose one of several permits of the account."""
+        if user_input is not None:
+            # The selector only accepts the offered permit ids.
+            return await self._async_create_entry_for_permit(
+                cast("str", user_input[CONF_PERMIT_ID])
+            )
+
+        return self.async_show_form(
+            step_id="permit",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(CONF_PERMIT_ID): selector.SelectSelector(
+                        selector.SelectSelectorConfig(
+                            options=[
+                                selector.SelectOptionDict(value=permit_id, label=label)
+                                for permit_id, label in self._permit_options.items()
+                            ],
+                            mode=selector.SelectSelectorMode.LIST,
+                        )
+                    )
+                }
+            ),
+        )
 
     async def async_step_auth(
         self, user_input: dict[str, object] | None = None
@@ -223,10 +250,14 @@ class CityVisitorParkingConfigFlow(config_entries.ConfigFlow):
         password = cast("str", user_input[CONF_PASSWORD])
         self._credentials = {CONF_USERNAME: username, CONF_PASSWORD: password}
 
-        permit_id = await self._async_validate_credentials(
+        permits = await self._async_validate_credentials(
             username,
             password,
             errors,
+            # Reauth validates the login exactly as the entry will use it.
+            permit_id=self._reauth_entry.data.get(CONF_PERMIT_ID)
+            if self._reauth_entry is not None
+            else None,
         )
         if errors:
             return self.async_show_form(
@@ -240,10 +271,7 @@ class CityVisitorParkingConfigFlow(config_entries.ConfigFlow):
                 reason="reauth_successful",
             )
 
-        if permit_id is None:
-            return self.async_abort(reason="unknown")
-
-        return await self._async_create_entry_for_permit(permit_id)
+        return await self._async_select_permit(permits)
 
     def _show_user_form(
         self, user_input: Mapping[str, object] | None, errors: dict[str, str]
@@ -298,6 +326,32 @@ class CityVisitorParkingConfigFlow(config_entries.ConfigFlow):
 
         return None
 
+    async def _async_select_permit(
+        self, permits: list[tuple[str, str]]
+    ) -> config_entries.ConfigFlowResult:
+        """Create the entry for the only permit, or ask which permit to add."""
+        if self._provider_config is None:
+            return self.async_abort(reason="unknown")
+        if len(permits) == 1:
+            return await self._async_create_entry_for_permit(permits[0][0])
+
+        # Each permit is its own entry; offer only the permits not added yet.
+        configured = self._async_current_ids(include_ignore=False)
+        self._permit_options = {
+            permit_id: label
+            for permit_id, label in permits
+            if _build_unique_id(self._provider_config, permit_id) not in configured
+        }
+        # Counts only: names and ids stay out of the log.
+        _LOGGER.debug(
+            "Account has %s permits; %s not configured yet",
+            len(permits),
+            len(self._permit_options),
+        )
+        if not self._permit_options:
+            return self.async_abort(reason="all_permits_configured")
+        return await self.async_step_permit()
+
     async def _async_create_entry_for_permit(
         self, permit_id: str
     ) -> config_entries.ConfigFlowResult:
@@ -324,15 +378,20 @@ class CityVisitorParkingConfigFlow(config_entries.ConfigFlow):
         return self.async_create_entry(title=title, data=data)
 
     async def _async_validate_credentials(
-        self, username: str, password: str, errors: dict[str, str]
-    ) -> str | None:
-        """Validate credentials and return the permit id."""
+        self,
+        username: str,
+        password: str,
+        errors: dict[str, str],
+        *,
+        permit_id: str | None = None,
+    ) -> list[tuple[str, str]]:
+        """Validate credentials and return the account's permits as (id, label)."""
         if self._provider_config is None:
             errors["base"] = "unknown"
-            return None
+            return []
 
         error_key: str | None = None
-        permit: object | None = None
+        permits: Sequence[object] = []
         ha_cvp_version, pycvp_version = await async_get_versions(self.hass)
         # Short-lived session with its own cookie jar; closed after the check.
         # auto_cleanup=False: no entry owns it, so detach() it ourselves.
@@ -349,8 +408,10 @@ class CityVisitorParkingConfigFlow(config_entries.ConfigFlow):
                 ha_cvp_version=ha_cvp_version,
                 pycvp_version=pycvp_version,
             )
-            await provider.login(username=username, password=password)
-            permit = await provider.get_permit()
+            await provider.login(
+                username=username, password=password, permit_id=permit_id
+            )
+            permits = await provider.list_permits()
         except AuthError as err:
             _LOGGER.debug(
                 "%s",
@@ -424,17 +485,26 @@ class CityVisitorParkingConfigFlow(config_entries.ConfigFlow):
 
         if error_key is not None:
             errors["base"] = error_key
-            return None
-        if permit is None:
-            errors["base"] = "unknown"
-            return None
+            return []
 
-        permit_id = get_attr(permit, "permit_id") or get_attr(permit, "id")
-        if not permit_id:
+        options: list[tuple[str, str]] = []
+        for permit in permits:
+            permit_id_value = get_attr(permit, "id")
+            if not permit_id_value:
+                continue
+            name = get_attr(permit, "name")
+            # The name tells permits apart; the id is what the entry title shows.
+            label = f"{name} ({permit_id_value})" if name else str(permit_id_value)
+            options.append((str(permit_id_value), label))
+        _LOGGER.debug(
+            "Login validated for %s: %s permits returned, %s usable",
+            self._provider_config.municipality_name,
+            len(permits),
+            len(options),
+        )
+        if not options:
             errors["base"] = "no_permits"
-            return None
-
-        return str(permit_id)
+        return options
 
     @staticmethod
     @callback

@@ -68,13 +68,13 @@ export const createFavoriteIndex = (favorites: FavoriteItem[]) => {
 export const clearFavoriteTransientState = (context: {
   _pendingRemoveFavoriteId: string | null;
   _favoriteRemoveInFlight: boolean;
-  _addFavoriteChecked: boolean;
+  _favoriteAddInFlight: boolean;
   _suppressFavoriteClear: boolean;
 }): void => {
   Object.assign(context, {
     _pendingRemoveFavoriteId: null,
     _favoriteRemoveInFlight: false,
-    _addFavoriteChecked: false,
+    _favoriteAddInFlight: false,
     _suppressFavoriteClear: false,
   });
 };

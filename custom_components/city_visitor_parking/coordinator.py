@@ -8,6 +8,7 @@ from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Protocol, cast
 
 from homeassistant.exceptions import ConfigEntryAuthFailed
+from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.update_coordinator import (
     TimestampDataUpdateCoordinator,
     UpdateFailed,
@@ -32,6 +33,8 @@ from .const import (
     CONF_AUTO_END,
     CONF_DEFAULT_PARKING_AREA,
     DEFAULT_UPDATE_INTERVAL,
+    DOMAIN,
+    ERROR_CODE_PERMIT_NOT_FOUND,
     ERROR_CODE_PROVIDER_REJECTED,
     IDLE_UPDATE_INTERVAL,
     RELOGIN_COOLDOWN,
@@ -87,6 +90,27 @@ else:
 _LOGGER = logging.getLogger(__name__)
 
 
+def permit_not_found_issue_id(entry_id: str) -> str:
+    """Return the repair issue id for an entry whose permit is no longer available."""
+    return f"permit_not_found_{entry_id}"
+
+
+def async_create_permit_issue(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Raise a repair issue: the entry's permit is gone from the account.
+
+    Used by setup (a provider may reject the permit at login) and by refreshes.
+    """
+    ir.async_create_issue(
+        hass,
+        DOMAIN,
+        permit_not_found_issue_id(entry.entry_id),
+        is_fixable=False,
+        severity=ir.IssueSeverity.ERROR,
+        translation_key="permit_not_found",
+        translation_placeholders={"name": entry.title},
+    )
+
+
 class CityVisitorParkingCoordinator(TimestampDataUpdateCoordinator[CoordinatorData]):
     """Data update coordinator for City visitor parking."""
 
@@ -115,6 +139,8 @@ class CityVisitorParkingCoordinator(TimestampDataUpdateCoordinator[CoordinatorDa
         self._entry: ConfigEntry = config_entry
         self._last_relogin: datetime | None = None
         self._relogin_rejections: int = 0
+        # Whether the provider's permit is the entry's permit; None until known.
+        self.permit_matches_entry: bool | None = None
 
     async def _async_update_data(self) -> CoordinatorData:
         """Fetch data from the API and normalize it."""
@@ -145,6 +171,7 @@ class CityVisitorParkingCoordinator(TimestampDataUpdateCoordinator[CoordinatorDa
             if self._unavailable_logged:
                 _LOGGER.info("Visitor parking data is available again")
                 self._unavailable_logged = False
+            self._async_delete_permit_issue()
         except AuthError as err:
             self._log_unavailable_once()
             _LOGGER.debug(
@@ -184,6 +211,11 @@ class CityVisitorParkingCoordinator(TimestampDataUpdateCoordinator[CoordinatorDa
                     pycvp_version=pycvp_version,
                 ),
             )
+            if err.error_code == ERROR_CODE_PERMIT_NOT_FOUND:
+                # The library never switches to another permit; tell the user
+                # instead of leaving the entities unavailable without a reason.
+                async_create_permit_issue(self.hass, self._entry)
+                raise UpdateFailed("Permit is no longer available") from err
             raise UpdateFailed("API communication error") from err
         except Exception as err:  # Allowed in background tasks
             self._log_unavailable_once()
@@ -206,6 +238,7 @@ class CityVisitorParkingCoordinator(TimestampDataUpdateCoordinator[CoordinatorDa
             )
             raise UpdateFailed("Unexpected error") from err
 
+        self._check_provider_permit(permit)
         remaining_balance = _normalize_remaining_balance(permit)
         balance_unit = get_attr(permit, "balance_unit")
         normalized_reservations = normalize_reservations(reservations)
@@ -450,6 +483,39 @@ class CityVisitorParkingCoordinator(TimestampDataUpdateCoordinator[CoordinatorDa
             return
         _LOGGER.info("Visitor parking data is unavailable")
         self._unavailable_logged = True
+
+    def _check_provider_permit(self, permit: object) -> None:
+        """Record whether the provider returned the entry's permit.
+
+        The entry asks for its own permit at login. A provider that ignores the
+        request silently serves another permit of the account (issue #261), so a
+        mismatch is logged when it starts and when it ends, not on every poll.
+        """
+        provider_permit_id = get_attr(permit, "id")
+        matches = (
+            None
+            if provider_permit_id is None
+            else str(provider_permit_id) == self._permit_id
+        )
+        if matches is False and self.permit_matches_entry is not False:
+            _LOGGER.debug(
+                "Provider returned permit %s for %s, which uses permit %s",
+                provider_permit_id,
+                self._entry_title,
+                self._permit_id,
+            )
+        elif matches is True and self.permit_matches_entry is False:
+            _LOGGER.debug("Provider returns the permit of %s again", self._entry_title)
+        self.permit_matches_entry = matches
+
+    def _async_delete_permit_issue(self) -> None:
+        """Remove the unavailable-permit issue once the permit loads again.
+
+        Unconditional: the issue may come from an earlier setup attempt.
+        """
+        ir.async_delete_issue(
+            self.hass, DOMAIN, permit_not_found_issue_id(self._entry.entry_id)
+        )
 
     def _compute_next_interval(self, data: CoordinatorData, now: datetime) -> timedelta:
         """Return the polling interval to use after the current update.
