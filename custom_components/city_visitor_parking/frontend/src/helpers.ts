@@ -1,5 +1,7 @@
 /** Shared frontend helpers for permit selection, status handling, and formatting. */
 import type {
+  BalanceKind,
+  BalancePayload,
   DeviceEntry,
   FavoriteItem,
   HomeAssistant,
@@ -30,9 +32,11 @@ export const EMPTY_PAID_PARKING_STATUS: PaidParkingStatus = {
   kind: null,
   start: null,
   end: null,
-  remainingMinutes: null,
-  balanceUnit: null,
+  balances: [],
 };
+
+/** Every balance kind, in the order the card editor lists them. */
+export const BALANCE_KINDS: readonly BalanceKind[] = ["time", "money", "times"];
 
 /** Normalizes free-form text for case-insensitive matching. */
 export const normalizeMatchValue = (value: string | undefined | null): string =>
@@ -114,8 +118,7 @@ export const applyPaidParkingStatus = (
     _windowKind: PaidParkingStatus["kind"];
     _windowStartIso: string | null;
     _windowEndIso: string | null;
-    _remainingMinutes: number | null;
-    _balanceUnit: string | null;
+    _balances: BalancePayload[];
   },
   status: PaidParkingStatus | null,
 ): void => {
@@ -124,8 +127,7 @@ export const applyPaidParkingStatus = (
     _windowKind: status?.kind ?? null,
     _windowStartIso: status?.start ?? null,
     _windowEndIso: status?.end ?? null,
-    _remainingMinutes: status?.remainingMinutes ?? null,
-    _balanceUnit: status?.balanceUnit ?? null,
+    _balances: status?.balances ?? [],
   });
 };
 
@@ -159,18 +161,48 @@ const normalizeParkingAreaPaidWindow = (
   };
 };
 
+const isBalanceKind = (value: unknown): value is BalanceKind =>
+  BALANCE_KINDS.includes(value as BalanceKind);
+
+/** Keeps the well-formed balances of a status payload, in permit order. */
+const normalizeBalances = (value: unknown): BalancePayload[] =>
+  Array.isArray(value)
+    ? (value as Array<Partial<BalancePayload> | null | undefined>).flatMap(
+        (balance) =>
+          balance &&
+          isBalanceKind(balance.kind) &&
+          typeof balance.amount === "number" &&
+          Number.isFinite(balance.amount)
+            ? [
+                {
+                  amount: balance.amount,
+                  unit: nonEmptyString(balance.unit),
+                  kind: balance.kind,
+                },
+              ]
+            : [],
+      )
+    : [];
+
 /** Normalizes the top-level (default parking area) part of a status payload. */
 export const normalizePaidParkingStatus = (
   payload: PaidParkingStatusResponse | null | undefined,
-): PaidParkingStatus => {
-  const balance = payload?.remaining_balance;
-  return {
-    ...normalizeParkingAreaPaidWindow(payload),
-    remainingMinutes:
-      typeof balance === "number" && Number.isFinite(balance) ? balance : null,
-    balanceUnit: nonEmptyString(payload?.balance_unit),
-  };
-};
+): PaidParkingStatus => ({
+  ...normalizeParkingAreaPaidWindow(payload),
+  balances: normalizeBalances(payload?.balances),
+});
+
+/**
+ * Returns the balances the card shows: those of the configured kinds, in permit
+ * order. Without a configured list every kind is shown.
+ */
+export const selectCardBalances = (
+  balances: readonly BalancePayload[],
+  kinds: readonly BalanceKind[] | undefined,
+): BalancePayload[] =>
+  kinds
+    ? balances.filter((balance) => kinds.includes(balance.kind))
+    : [...balances];
 
 /** Returns the usable parking area entries of a status payload, default parking area first. */
 export const normalizeParkingAreas = (
@@ -479,34 +511,31 @@ export const isHassRunning = (
   hass: { config?: { state?: string } } | null | undefined,
 ): boolean => hass?.config?.state === "RUNNING";
 
-/** Formats remaining permit balance as a badge label and matching icon. */
+/**
+ * Formats one permit balance as a badge label and matching icon: money as a
+ * currency amount in the user's language, uses as a count, time as hours and
+ * minutes.
+ */
 export const formatBalanceLabel = (
-  remainingMinutes: number,
-  balanceUnit: string | null,
+  balance: BalancePayload,
   localize: (key: string) => string,
+  language: string | undefined,
 ): { text: string; icon: string } => {
-  const isMonetary =
-    balanceUnit !== null && balanceUnit !== "TIMES" && balanceUnit !== "MINUTE";
-  if (isMonetary) {
-    const formatted = Number.isInteger(remainingMinutes)
-      ? String(remainingMinutes)
-      : remainingMinutes.toFixed(2);
-    const currencySymbols: Record<string, string> = {
-      EURO: "€",
-      EUR: "€",
-      GBP: "£",
-      USD: "$",
-    };
-    const symbol = currencySymbols[balanceUnit ?? ""] ?? balanceUnit ?? "";
-    return { text: `${symbol}${formatted}`, icon: "mdi:cash" };
+  if (balance.kind === "money") {
+    // The integration only reports euro balances as money.
+    const text = new Intl.NumberFormat(language, {
+      style: "currency",
+      currency: "EUR",
+    }).format(balance.amount);
+    return { text, icon: "mdi:cash" };
   }
-  if (balanceUnit === "TIMES") {
+  if (balance.kind === "times") {
     return {
-      text: String(Math.round(remainingMinutes)),
+      text: String(Math.round(balance.amount)),
       icon: "mdi:ticket-outline",
     };
   }
-  const totalMins = Math.round(remainingMinutes);
+  const totalMins = Math.round(balance.amount);
   const hours = Math.floor(totalMins / 60);
   const mins = totalMins % 60;
   const h = localize("unit.hours");

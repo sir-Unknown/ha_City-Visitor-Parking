@@ -1,6 +1,7 @@
 /** Shared presentation helpers and templates used by both Lovelace cards. */
 import { css, html, nothing, type TemplateResult } from "lit";
 import type {
+  BalancePayload,
   FavoriteOption,
   HomeAssistant,
   LocalizeTarget,
@@ -391,15 +392,15 @@ export const renderFavoriteActionRow = (params: {
   startButtonTimeConflict: boolean;
   startDisabled: boolean;
   hasTarget: boolean;
-  remainingMinutes: number | null;
-  balanceUnit: string | null;
+  /** Balances to show, already filtered to the card's balance kinds. */
+  balances: readonly BalancePayload[];
+  language: string | undefined;
   localize: (key: string, ...args: Array<string | number>) => string;
 }): TemplateResult => {
   const showFavoriteButton =
     params.showFavorites &&
     (params.showRemoveFavorite || params.showAddFavorite);
-  const showBalance =
-    !showFavoriteButton && params.hasTarget && params.remainingMinutes !== null;
+  const showBalance = !showFavoriteButton && params.hasTarget;
   return html`
     <div class="row actions">
       <div class="favorite-actions">
@@ -434,18 +435,18 @@ export const renderFavoriteActionRow = (params: {
               : nothing
           : nothing}
         ${showBalance
-          ? (() => {
+          ? params.balances.map((balance) => {
               const { text, icon } = formatBalanceLabel(
-                params.remainingMinutes!,
-                params.balanceUnit,
+                balance,
                 params.localize,
+                params.language,
               );
               return html`
                 <ha-badge class="balance-badge" .label=${text}>
                   <ha-icon slot="icon" icon=${icon}></ha-icon>
                 </ha-badge>
               `;
-            })()
+            })
           : nothing}
       </div>
       ${(() => {

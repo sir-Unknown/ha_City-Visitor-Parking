@@ -426,8 +426,14 @@
       "future_reservations": {
         "name": "Toekomstige reserveringen"
       },
-      "remaining_time": {
-        "name": "Resterend saldo"
+      "remaining_time_balance": {
+        "name": "Resterend tijdsaldo"
+      },
+      "remaining_money_balance": {
+        "name": "Resterend geldsaldo"
+      },
+      "remaining_uses": {
+        "name": "Resterend aantal keer"
       },
       "paid_parking": {
         "name": "Betaald parkeren",

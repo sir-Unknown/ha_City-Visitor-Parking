@@ -2,14 +2,23 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Final
 
+from homeassistant.components.sensor import DOMAIN as SENSOR_DOMAIN
 from homeassistant.components.sensor import SensorDeviceClass, SensorStateClass
-from homeassistant.const import EntityCategory, UnitOfTime
+from homeassistant.const import CURRENCY_EURO, EntityCategory, UnitOfTime
 from homeassistant.core import callback
+from homeassistant.helpers import entity_registry as er
 from homeassistant.util import dt as dt_util
 
-from .const import STATE_FREE, STATE_PAID
+from .const import (
+    BALANCE_KIND_MONEY,
+    BALANCE_KIND_TIME,
+    BALANCE_KIND_TIMES,
+    DOMAIN,
+    STATE_FREE,
+    STATE_PAID,
+)
 from .entity import CityVisitorParkingEntity
 from .payloads import reservation_parking_area_payload, utc_iso
 from .time_windows import (
@@ -19,18 +28,34 @@ from .time_windows import (
 )
 
 if TYPE_CHECKING:
+    from collections.abc import Mapping
     from datetime import datetime
 
     from homeassistant.core import HomeAssistant
     from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
     from .coordinator import CityVisitorParkingCoordinator
-    from .models import CoordinatorData, PaidParkingStatus, ParkingArea, TimeRange
+    from .models import (
+        BalanceKind,
+        CoordinatorData,
+        PaidParkingStatus,
+        ParkingArea,
+        TimeRange,
+    )
     from .runtime_data import CityVisitorParkingConfigEntry
 
 PARALLEL_UPDATES = 0
 # Single parking area permits are fully covered by the permit-level sensors.
 MIN_PARKING_AREAS_FOR_PARKING_AREA_SENSORS = 2
+# Unique ID suffix of the single remaining balance sensor from before a permit
+# could have several balances; see ``_async_migrate_legacy_balance_sensor``.
+LEGACY_BALANCE_SENSOR_KEY: Final = "remaining_time"
+# Unique ID suffix of the balance sensor of each kind.
+BALANCE_SENSOR_KEYS: Final[Mapping[BalanceKind, str]] = {
+    BALANCE_KIND_TIME: "remaining_time_balance",
+    BALANCE_KIND_MONEY: "remaining_money_balance",
+    BALANCE_KIND_TIMES: "remaining_uses",
+}
 
 
 async def async_setup_entry(
@@ -44,7 +69,6 @@ async def async_setup_entry(
         [
             ActiveReservationsSensor(coordinator, entry),
             FutureReservationsSensor(coordinator, entry),
-            RemainingTimeSensor(coordinator, entry),
             PaidParkingSensor(coordinator, entry),
             ProviderPaidParkingStartSensor(coordinator, entry),
             ProviderPaidParkingEndSensor(coordinator, entry),
@@ -89,6 +113,65 @@ async def async_setup_entry(
     entry.async_on_unload(
         coordinator.async_add_listener(_async_add_parking_area_sensors)
     )
+
+    known_balance_kinds: set[BalanceKind] = set()
+
+    @callback
+    def _async_add_balance_sensors() -> None:
+        """Add a balance sensor for every balance kind that has no entity yet.
+
+        Balances are only known from coordinator data and a provider may report a
+        kind later (for example a money balance next to the time balance), so this
+        also runs on every coordinator update. A kind that disappears keeps its
+        entity, which then reports unavailable.
+        """
+        balances = coordinator.data.balances
+        new_kinds: list[BalanceKind] = [
+            balance.kind
+            for balance in balances
+            if balance.kind not in known_balance_kinds
+        ]
+        if not new_kinds:
+            return
+        if not known_balance_kinds:
+            # The first balance sensors of this setup: hand the legacy sensor to
+            # the primary balance before its new entity is registered.
+            _async_migrate_legacy_balance_sensor(hass, entry, balances[0].kind)
+        known_balance_kinds.update(new_kinds)
+        async_add_entities(
+            [BALANCE_SENSOR_CLASSES[kind](coordinator, entry) for kind in new_kinds]
+        )
+
+    _async_add_balance_sensors()
+    entry.async_on_unload(coordinator.async_add_listener(_async_add_balance_sensors))
+
+
+@callback
+def _async_migrate_legacy_balance_sensor(
+    hass: HomeAssistant,
+    entry: CityVisitorParkingConfigEntry,
+    kind: BalanceKind,
+) -> None:
+    """Move the legacy remaining balance sensor to the balance sensor of ``kind``.
+
+    Before a permit could have several balances, one sensor showed whatever
+    balance the permit had. Which kind that was is only known from provider data,
+    so this cannot run in ``async_migrate_entry``; it runs before the first
+    balance sensor is added, with the permit's primary balance, which is the one
+    the legacy sensor showed. Changing only the unique ID keeps the entity ID,
+    history and automations. While the permit reports no balance the legacy
+    entity is left untouched, and so is it when the new unique ID is taken.
+    """
+    registry = er.async_get(hass)
+    legacy_entity_id = registry.async_get_entity_id(
+        SENSOR_DOMAIN, DOMAIN, f"{entry.unique_id}:{LEGACY_BALANCE_SENSOR_KEY}"
+    )
+    if legacy_entity_id is None:
+        return
+    new_unique_id = f"{entry.unique_id}:{BALANCE_SENSOR_KEYS[kind]}"
+    if registry.async_get_entity_id(SENSOR_DOMAIN, DOMAIN, new_unique_id):
+        return
+    registry.async_update_entity(legacy_entity_id, new_unique_id=new_unique_id)
 
 
 class ActiveReservationsSensor(CityVisitorParkingEntity):
@@ -137,52 +220,98 @@ class FutureReservationsSensor(CityVisitorParkingEntity):
         )
 
 
-class RemainingTimeSensor(CityVisitorParkingEntity):
-    """Sensor for remaining balance presented by balance unit."""
+class _BalanceSensor(CityVisitorParkingEntity):
+    """Base for the remaining balance sensor of one balance kind.
 
-    _entity_key = "remaining_time"
-    _attr_translation_key: str | None = "remaining_time"
-    _attr_device_class: SensorDeviceClass | None = None
-    _attr_native_unit_of_measurement: str | None = UnitOfTime.HOURS
-    _attr_suggested_display_precision: int | None = 2
+    Created once the permit reports a balance of the kind and unavailable while it
+    reports none, so its history stays.
+    """
+
+    _balance_kind: BalanceKind
+
+    @property
+    def available(self) -> bool:  # pyright: ignore[reportIncompatibleVariableOverride]
+        """Return if the coordinator is healthy and the permit has this balance."""
+        return (
+            super().available
+            and self.coordinator.data.balance(self._balance_kind) is not None
+        )
 
     def _update_from_coordinator(self) -> None:
         """Update the sensor from coordinator data."""
-        balance_unit = self.coordinator.data.permit_balance_unit
-        remaining_balance = _remaining_balance(self.coordinator.data)
-        next_end_time = _next_end_time(self.coordinator.data)
-        active_count = len(self.coordinator.data.active_reservations)
+        data = self.coordinator.data
+        balance = data.balance(self._balance_kind)
+        if balance is None:
+            return
+        next_end_time = _next_end_time(data)
+        active_count = len(data.active_reservations)
         attributes: dict[str, object] = dict(self._attr_extra_state_attributes or {})  # type: ignore[has-type]
         attributes.update(
             {
                 "active_reservations": active_count,
                 "next_end_time": _as_utc_iso(next_end_time) if next_end_time else None,
                 "has_active_reservation": active_count > 0,
+                # The amount in the balance's own unit: minutes, euros or uses.
+                "remaining_balance": balance.amount,
             }
         )
-
-        if balance_unit == "TIMES":
-            self._attr_device_class = None
-            self._attr_native_unit_of_measurement = "times"
-            self._attr_suggested_display_precision = 0
-            attributes["remaining_balance"] = remaining_balance
-            self._attr_native_value = _as_count_value(remaining_balance)
-        elif balance_unit is not None and balance_unit != "MINUTE":
-            self._attr_device_class = SensorDeviceClass.MONETARY
-            self._attr_native_unit_of_measurement = _normalize_currency_unit(
-                balance_unit
-            )
-            self._attr_suggested_display_precision = 2
-            attributes["remaining_balance"] = remaining_balance
-            self._attr_native_value = float(remaining_balance)
-        else:
-            self._attr_device_class = SensorDeviceClass.DURATION
-            self._attr_native_unit_of_measurement = UnitOfTime.HOURS
-            self._attr_suggested_display_precision = 2
-            attributes["remaining_balance"] = remaining_balance
-            self._attr_native_value = round(remaining_balance / 60, 2)
-
+        self._attr_native_value = self._native_balance_value(balance.amount)
         self._attr_extra_state_attributes = attributes
+
+    def _native_balance_value(self, amount: float) -> float:
+        """Return the sensor state for a balance amount."""
+        return amount
+
+
+class RemainingTimeBalanceSensor(_BalanceSensor):
+    """Sensor for the remaining time balance, in hours."""
+
+    _balance_kind: BalanceKind = BALANCE_KIND_TIME
+    _entity_key = BALANCE_SENSOR_KEYS[BALANCE_KIND_TIME]
+    _attr_translation_key: str | None = "remaining_time_balance"
+    _attr_device_class: SensorDeviceClass | None = SensorDeviceClass.DURATION
+    _attr_native_unit_of_measurement: str | None = UnitOfTime.HOURS
+    _attr_suggested_display_precision: int | None = 2
+    _attr_state_class: SensorStateClass | None = SensorStateClass.MEASUREMENT
+
+    def _native_balance_value(self, amount: float) -> float:
+        """Return the balance minutes as hours."""
+        return round(amount / 60, 2)
+
+
+class RemainingMoneyBalanceSensor(_BalanceSensor):
+    """Sensor for the remaining money balance, in euros."""
+
+    _balance_kind: BalanceKind = BALANCE_KIND_MONEY
+    _entity_key = BALANCE_SENSOR_KEYS[BALANCE_KIND_MONEY]
+    _attr_translation_key: str | None = "remaining_money_balance"
+    _attr_device_class: SensorDeviceClass | None = SensorDeviceClass.MONETARY
+    _attr_native_unit_of_measurement: str | None = CURRENCY_EURO
+    _attr_suggested_display_precision: int | None = 2
+    # Home Assistant allows only TOTAL as state class for monetary sensors.
+    _attr_state_class: SensorStateClass | None = SensorStateClass.TOTAL
+
+
+class RemainingUsesSensor(_BalanceSensor):
+    """Sensor for the remaining number of uses."""
+
+    _balance_kind: BalanceKind = BALANCE_KIND_TIMES
+    _entity_key = BALANCE_SENSOR_KEYS[BALANCE_KIND_TIMES]
+    _attr_translation_key: str | None = "remaining_uses"
+    _attr_native_unit_of_measurement: str | None = "times"
+    _attr_suggested_display_precision: int | None = 0
+    _attr_state_class: SensorStateClass | None = SensorStateClass.MEASUREMENT
+
+    def _native_balance_value(self, amount: float) -> float:
+        """Return the number of uses, as an integer when it is whole."""
+        return _as_count_value(amount)
+
+
+BALANCE_SENSOR_CLASSES: Final[Mapping[BalanceKind, type[_BalanceSensor]]] = {
+    BALANCE_KIND_TIME: RemainingTimeBalanceSensor,
+    BALANCE_KIND_MONEY: RemainingMoneyBalanceSensor,
+    BALANCE_KIND_TIMES: RemainingUsesSensor,
+}
 
 
 class _PaidParkingWindowSensor(CityVisitorParkingEntity):
@@ -423,23 +552,11 @@ class FavoritesSensor(CityVisitorParkingEntity):
         self._attr_native_value = len(self.coordinator.data.favorites)
 
 
-def _remaining_balance(data: CoordinatorData) -> float:
-    """Return the remaining balance (minutes, times, or monetary amount)."""
-    return max(0.0, data.permit_remaining_balance)
-
-
 def _as_count_value(value: float) -> int | float:
     """Return an integer count when the balance is a whole number."""
     if value.is_integer():
         return int(value)
     return value
-
-
-def _normalize_currency_unit(unit: str) -> str:
-    """Normalize provider currency labels to Home Assistant-friendly codes."""
-    if unit == "EURO":
-        return "EUR"
-    return unit
 
 
 def _next_end_time(data: CoordinatorData) -> datetime | None:

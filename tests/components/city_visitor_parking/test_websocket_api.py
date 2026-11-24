@@ -25,6 +25,7 @@ from custom_components.city_visitor_parking.const import (
 )
 from custom_components.city_visitor_parking.models import (
     AutoEndState,
+    Balance,
     CoordinatorData,
     Favorite,
     PaidParkingStatus,
@@ -168,8 +169,10 @@ async def test_ws_get_status_current_window(hass: HomeAssistant) -> None:
     )
     data = CoordinatorData(
         permit_id="permit",
-        permit_remaining_balance=0,
-        permit_balance_unit=None,
+        balances=(
+            Balance(kind="time", amount=90, unit="MINUTE"),
+            Balance(kind="money", amount=12.5, unit="EURO"),
+        ),
         paid_hours=(window,),
         reservations=(),
         favorites=(),
@@ -197,6 +200,12 @@ async def test_ws_get_status_current_window(hass: HomeAssistant) -> None:
     assert response["window_kind"] == "current"
     assert response["window_start"] == dt_util.as_utc(window.start).isoformat()
     assert response["window_end"] == dt_util.as_utc(window.end).isoformat()
+    assert response["balances"] == [
+        {"amount": 90, "unit": "MINUTE", "kind": "time"},
+        {"amount": 12.5, "unit": "EURO", "kind": "money"},
+    ]
+    assert "remaining_balance" not in response
+    assert "balance_unit" not in response
 
 
 async def test_ws_get_status_next_window_override(hass: HomeAssistant) -> None:
@@ -212,8 +221,7 @@ async def test_ws_get_status_next_window_override(hass: HomeAssistant) -> None:
     now = datetime(2025, 1, 6, 10, 0, tzinfo=UTC)
     data = CoordinatorData(
         permit_id="permit",
-        permit_remaining_balance=0,
-        permit_balance_unit=None,
+        balances=(),
         paid_hours=(),
         reservations=(),
         favorites=(),
@@ -299,8 +307,7 @@ async def test_ws_list_reservations_reads_coordinator_data(
     )
     data = CoordinatorData(
         permit_id="permit",
-        permit_remaining_balance=0,
-        permit_balance_unit=None,
+        balances=(),
         paid_hours=(),
         reservations=(running, upcoming, ended),
         favorites=(Favorite(favorite_id="fav1", license_plate="AB12CD", name="Mom"),),

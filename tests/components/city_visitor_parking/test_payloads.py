@@ -6,6 +6,7 @@ from datetime import UTC, datetime, timedelta
 
 from custom_components.city_visitor_parking.const import STATE_FREE, STATE_PAID
 from custom_components.city_visitor_parking.models import (
+    Balance,
     CoordinatorData,
     PaidParkingStatus,
     ParkingArea,
@@ -22,10 +23,11 @@ PAID_PARKING_STATUS_RESPONSE_KEYS = {
     "window_kind",
     "window_start",
     "window_end",
-    "remaining_balance",
-    "balance_unit",
+    "balances",
+    "parking_areas",
 }
 EXPECTED_REMAINING_MINUTES = 15
+EXPECTED_MONEY_BALANCE = 7.5
 
 
 def test_build_status_payload_includes_parking_area_status_response_contract() -> None:
@@ -37,8 +39,10 @@ def test_build_status_payload_includes_parking_area_status_response_contract() -
     )
     data = CoordinatorData(
         permit_id="permit-1",
-        permit_remaining_balance=-12,
-        permit_balance_unit="minutes",
+        balances=(
+            Balance(kind="time", amount=EXPECTED_REMAINING_MINUTES, unit="MINUTE"),
+            Balance(kind="money", amount=EXPECTED_MONEY_BALANCE, unit="EURO"),
+        ),
         paid_hours=(current_window,),
         reservations=(),
         favorites=(),
@@ -58,8 +62,11 @@ def test_build_status_payload_includes_parking_area_status_response_contract() -
     assert payload["window_kind"] == "current"
     assert payload["window_start"] == current_window.start.isoformat()
     assert payload["window_end"] == current_window.end.isoformat()
-    assert payload["remaining_balance"] == 0.0
-    assert payload["balance_unit"] == "minutes"
+    # Every balance in permit order, with its kind so the card needs no unit map.
+    assert payload["balances"] == [
+        {"amount": EXPECTED_REMAINING_MINUTES, "unit": "MINUTE", "kind": "time"},
+        {"amount": EXPECTED_MONEY_BALANCE, "unit": "EURO", "kind": "money"},
+    ]
 
 
 def test_build_status_payload_uses_null_window_fields_when_no_window_applies() -> None:
@@ -68,8 +75,7 @@ def test_build_status_payload_uses_null_window_fields_when_no_window_applies() -
     next_change = now + timedelta(hours=2)
     data = CoordinatorData(
         permit_id="permit-1",
-        permit_remaining_balance=15,
-        permit_balance_unit=None,
+        balances=(),
         paid_hours=(),
         reservations=(),
         favorites=(),
@@ -87,8 +93,7 @@ def test_build_status_payload_uses_null_window_fields_when_no_window_applies() -
     assert payload["window_kind"] is None
     assert payload["window_start"] is None
     assert payload["window_end"] is None
-    assert payload["remaining_balance"] == EXPECTED_REMAINING_MINUTES
-    assert payload["balance_unit"] is None
+    assert payload["balances"] == []
 
 
 def test_build_status_payload_reports_each_parking_area_with_its_own_window() -> None:
@@ -104,8 +109,7 @@ def test_build_status_payload_reports_each_parking_area_with_its_own_window() ->
     )
     data = CoordinatorData(
         permit_id="permit-1",
-        permit_remaining_balance=15,
-        permit_balance_unit=None,
+        balances=(Balance(kind="time", amount=15, unit=None),),
         paid_hours=(current,),
         reservations=(),
         favorites=(),
