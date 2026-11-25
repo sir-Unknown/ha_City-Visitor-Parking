@@ -3,8 +3,7 @@
 # handled separately by dedicated PR-safe workflows; this workflow only updates
 # release drafts. The draft is populated using the rules in
 # .github/release-drafter.yml (categories, version bump strategy, etc.). When a
-# release is ready, the draft is manually published which triggers the
-# release.yml workflow to build and upload the release asset.
+# release is ready, run release.yml to attach the asset before publishing the draft.
 #
 # Only stable releases are drafted here. Pre-releases are tagged by hand on the
 # head of a feature branch and created with `gh release create --prerelease`;
@@ -13,7 +12,7 @@
 # Responsibility split:
 #   - pr-labeling.yml sets and validates PR labels.
 #   - This workflow turns merged PR metadata into draft releases.
-#   - release.yml builds and uploads assets only after a release is published.
+#   - release.yml builds and uploads assets before a draft is published.
 name: Release Drafter
 
 # yamllint disable-line rule:truthy

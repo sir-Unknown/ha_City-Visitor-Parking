@@ -7,7 +7,7 @@
 # Responsibility split:
 #   - This workflow sets and validates PR labels.
 #   - release-drafter.yml consumes those labels for release notes only.
-#   - release.yml builds assets only for published releases.
+#   - release.yml builds assets for release drafts before publication.
 name: PR labeling
 
 # yamllint disable-line rule:truthy
