@@ -82,6 +82,12 @@ Release automation and release notes MUST stay aligned with:
 - `.github/workflows/release-drafter.yml`
 - `.github/workflows/release.yml`
 
+### Build before publishing
+
+For both stable releases and pre-releases, create or select a draft for an existing tag. After `Validate` succeeds, run the `Release` workflow from `main` with that tag. Approve the `release` environment in the Actions run under **Review deployments**. Publish only when `build-release` succeeds and `city_visitor_parking.zip` is attached to the draft. This keeps the release out of HACS until it can be installed. Required reviewers are configured in the repository settings.
+
+If nothing changed under `custom_components/` since the last stable release, the workflow skips packaging. Do not publish that draft as an installable release.
+
 ### Pre-releases
 
 Stable releases (`vX.Y.Z`) are built from `main` and pin the latest stable `pycityvisitorparking` release. A pre-release is a test build of one branch: a feature branch, or a temporary test branch from `main` that is never merged. There is no long-lived `beta` branch. `pyCityVisitorParking` uses the same model (see its `docs/RELEASING.md`).
@@ -94,9 +100,7 @@ Stable releases (`vX.Y.Z`) are built from `main` and pin the latest stable `pyci
 - `release.yml` builds with the requirement pinned in `manifest.json` on the tagged commit. A `**PyPI:**` or `**Commit:**` line in the release body overrides it; leave both out unless a different library build is needed.
 - Merge the pull request only after the pre-release was tested and approved. A pull request that pins a library pre-release cannot merge: the `Release policy` check fails until the branch pins the latest stable release.
 - Two features that must be tested together go on a temporary integration branch from `main` that merges both; delete it after testing.
-- `release.yml` only builds a zip when `custom_components/` changed since the last stable release. A branch that changes only CI or docs yields a pre-release without an installable asset.
 - Create releases as drafts and publish only when the maintainer asks for it.
-- Publishing a release, stable or pre-release, starts `release.yml`, whose `build-release` job waits for a maintainer to approve the `release` environment (Actions run, "Review deployments"). Only then is the zip built and uploaded. The environment's required reviewers are set in the repository settings, not in the workflow.
 - If `main` already holds changes that must not ship yet, release a patch from a branch off the last stable tag (for example `git switch -c fix/some-fix v0.1.42`): cherry-pick the fix, tag the patch version on that branch, wait for `Validate` on the tag, and create the release by hand from it.
 
 Steps, for example for branch `fix/some-change`:
@@ -107,6 +111,8 @@ git push origin v0.1.43-some-change.1
 gh run list --workflow Validate --branch v0.1.43-some-change.1   # wait for success
 gh release create v0.1.43-some-change.1 --verify-tag --prerelease --draft \
   --target fix/some-change --title v0.1.43-some-change.1 --notes-file notes.md
+gh workflow run release.yml --ref main -f tag=v0.1.43-some-change.1
+# Approve the deployment; wait for build-release to succeed and check the zip.
 gh release edit v0.1.43-some-change.1 --draft=false               # publish when asked
 ```
 
